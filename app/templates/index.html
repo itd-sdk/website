@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+
+{% block head %}
+<link rel="stylesheet" href="static/css/index.css">
+{% endblock %}
+
+{% block content %}
+<div id="landing">
+    <img id="banner" src="static/images/banner-transparent.png">
+    <!-- <div id="landing-description">Код для ИТД</div> -->
+    <div id="landing-buttons">
+        <button id="view-projects" onclick="location.href='/#projects';"><img src="static/icons/arrow.svg" class="arrow-bottom">Посмотреть проекты</button>
+        <button id="view-docs" class="primary" onclick="location.href='/docs';"><img src="static/icons/arrow.svg" class="arrow-right">Документация</button>
+    </div>
+</div>
+<video src="static/videos/vizualizer.mp4" id="landing-vizualizer" autoplay muted loop></video>
+<div id="content">
+    <h2 id="projects">Проекты</h2>
+    <div class="projects">
+        {% for project in projects %}
+        {% include 'components/project.html' %}
+        {% endfor %}
+    </div>
+
+    <h2>Аналоги</h2>
+    <div id="analogs-description">Если вам чем-то не понравился <b>itd-sdk</b> <i>(можете описать предложения в issue или в личке тг)</i>, можете также попробовать аналоги.</div>
+    <div class="projects">
+        {% for project in analogs %}
+        {% include 'components/project.html' %}
+        {% endfor %}
+    </div>
+
+    <h2>История</h2>
+    <div id="history">
+        <div id="history-line">
+            <div class="history-event">
+                <div class="history-event-circle"></div>
+                <div class="history-event-content">
+                    <span class="history-event-date">[29.01.2026]</span>
+                    <span class="history-event-label">Первый запуск - первый релиз 0.1.0.</span>
+                </div>
+            </div>
+            <div class="history-event">
+                <div class="history-event-circle"></div>
+                <div class="history-event-content">
+                    <span class="history-event-date">[31.01.2026]</span>
+                    <span class="history-event-label">Запущены боты, который лайкали и подписывались на всех в ленте. Продвигали <a href="https://xn--d1ah4a.com/hashtag/%D1%81%D0%B0%D0%BC%D1%8B%D0%B9%D0%B4%D0%BB%D0%B8%D0%BD%D0%BD%D1%8B%D0%B9%D1%85%D1%8D%D1%88%D1%82%D1%8D%D0%B3">#самыйдлинныйхэштэг</a> и <a href="https://xn--d1ah4a.com/hashtag/%D1%82%D0%B5%D1%81%D1%82%D0%B0%D0%BF%D0%B8">#тестапи</a>.</span>
+                </div>
+            </div>
+            <div class="history-event">
+                <div class="history-event-circle"></div>
+                <div class="history-event-content">
+                    <span class="history-event-date">[07.02.2026]</span>
+                    <span class="history-event-label">Первое крупное обновление 1.0.0. Добавлены pydantic модели вместо JSON и ошибки.</span>
+                </div>
+            </div>
+            <div class="history-event">
+                <div class="history-event-circle"></div>
+                <div class="history-event-content">
+                    <span class="history-event-date">[12.02.2026]</span>
+                    <span class="history-event-label">Все аккаунты ботов были заблокированы.</span>
+                </div>
+            </div>
+            <div class="history-event">
+                <div class="history-event-circle"></div>
+                <div class="history-event-content">
+                    <span class="history-event-date">[13.02.2026]</span>
+                    <span class="history-event-label">Основной аккаут разработчика @_itd_sdk (ранее - @itd_sdk) был заблокирован (предположительно за создание тг бота для накрутки в итд). Разработка sdk приостановлена.</span>
+                </div>
+            </div>
+            <div class="history-event">
+                <div class="history-event-circle"></div>
+                <div class="history-event-content">
+                    <span class="history-event-date">[01.03.2026]</span>
+                    <span class="history-event-label">Разработчик вернулся в ИТД (с новым аккаунтом). Разработка продолжена.</span>
+                </div>
+            </div>
+            <div class="history-event">
+                <div class="history-event-circle"></div>
+                <div class="history-event-content">
+                    <span class="history-event-date">[25?.04.2026]</span>
+                    <span class="history-event-label">Второе крупное обновление 2.0.0. Добавлены отдельный классы для вызовов, логгер, авто рейт-лимит, конфиг.</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

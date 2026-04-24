@@ -1,0 +1,162 @@
+#landing {
+  height: 100vh;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 50px; /* типа немношка криво */
+  background-image:
+    linear-gradient(125deg, #1E1C1A 60%, #1e1c1ad3 70%, transparent),
+    url('/static/images/code.png');
+    /* linear-gradient(125deg, #1E1C1A 80%, #1e1c1ad3 90%, transparent), */
+    /* url('/static/images/grid.png'); */
+}
+
+#landing-buttons {
+  gap: 15px;
+  display: flex;
+}
+#landing-vizualizer {
+  position: absolute;
+  top: 70vh;
+  left: 0;
+  mask-image: linear-gradient(to right, #000, transparent 50%);
+  height: 30vh;
+}
+
+.arrow-bottom {
+  rotate: 90deg;
+  margin-right: 3px;
+}
+/* .arrow-right {
+  rotate: 0deg;
+} */
+
+.projects {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  /* grid-template-columns: repeat(5, calc(90vw / 5)); */
+  gap: 15px 15px;
+}
+
+.project {
+  background-color: #2C2A27;
+  border: #FBEADB 1px solid;
+  padding: 15px;
+  border-radius: 16px;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+}
+.project-main {
+  background: linear-gradient(to bottom right, #2C2A27 60%, #5f3523);
+}
+.project-main div div.project-title {
+  color: #FF9A3E;
+}
+.project-itdpy div div.project-title {
+  /* https://stackoverflow.com/questions/8384751/css-text-gradient */
+  background: linear-gradient(-20deg, #256bdf 70%, #22bf67);
+  color: transparent;
+  background-clip: text;
+}
+
+.project-data {
+  display: flex;
+  flex-direction: column;
+}
+.project-title {
+  font-weight: bold;
+}
+.project-fork {
+  margin-left: 5px;
+  font-size: 14px;
+  font-weight: normal;
+}
+.project-description {
+  color: #aaa;
+  font-size: 15px;
+}
+.project-stats {
+  margin-top: auto;
+  display: flex;
+  flex-direction: row;
+  gap: 5px;
+}
+.project-stats div {
+  align-items: center;
+  display: flex;
+  gap: 3px;
+}
+.project-updated-at {
+  color: #888;
+  font-size: 13px;
+}
+.project-links {
+  display: flex;
+  flex-direction: row;
+  gap: 5px;
+}
+
+#analogs-description {
+  margin-top: -15px;
+  margin-bottom: 8px;
+}
+
+
+/* https://codepen.io/maccc/pen/WNYvqPE */
+#history {
+  display: flex;
+}
+
+#history-line {
+  position: relative;
+  height: 100%;
+  padding: 10px 0;
+}
+
+.history-event {
+  position: relative;
+  height: 60px;
+}
+
+.history-event-circle {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 15px;
+  height: 15px;
+  background-color: #FBEADB;
+  border: 3px solid #fd7f08;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.history-event-circle::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  height: 60px;
+  width: 3px;
+  background-color: #C98F65;
+  transform: translateX(-50%);
+}
+
+.history-event-content {
+  position: absolute;
+  left: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+.history-event-date {
+  color: #ccc;
+  margin-right: 15px;
+}
+.history-event-label {
+  white-space: nowrap;
+}
+
+.history-event:last-child .history-event-circle::after {
+  display: none;
+}

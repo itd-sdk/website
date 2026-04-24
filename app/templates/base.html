@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <title>ИТД SDK</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+
+        <link rel="stylesheet" href="{{ url_for('static', path='/css/style.css') }}">
+        <link href='https://fonts.googleapis.com/css2?family=Jost:wght@400;500;700&display=swap' rel='stylesheet'>
+
+        <!-- <script src="{{ url_for('static', path='/js/base.js') }}"></script> -->
+        {% block head %}{% endblock %}
+    </head>
+    <body>
+        {% block header %}
+        <!--
+        <div id="header">
+            <img id="header-logo" onclick="window.location.href='/'" src="static/images/logo.png">
+            <!- <div id="header-tabs">
+                <a href="/" class="header-tab">6</a>
+                <a href="/" class="header-tab">7</a>
+                <a href="/" class="header-tab">сикс се!</a> ->
+            </div>
+        </div>-->
+        {% endblock %}
+
+        {% block content %}{% endblock %}
+
+        {% block footer %}
+        <div id="footer">
+            <img id="footer-logo" onclick="window.location.href='/'" src="static/images/logo-vertical.png">
+            <!-- <div id="footer-section">
+                <a class="footer-section-value" href="/">1</a>
+                <a class="footer-section-value" href="/">2</a>
+                <a class="footer-section-value" href="/">3</a>
+            </div> -->
+            <div id="footer-contact">
+                <div id="footer-contact-title">Контакты</div>
+                <div id="footer-contact-values">
+                    <a href="https://github.com/itd-sdk">
+                        <div class="footer-contact-value">
+                            <img src="static/icons/github.svg">
+                            <span>GitHub</span>
+                        </div>
+                    </a>
+                    <a href="https://t.me/desicars">
+                        <div class="footer-contact-value">
+                            <img src="static/icons/telegram.svg">
+                            <span>Telegram</span>
+                        </div>
+                    </a>
+                    <a href="https://итд.com/@itd_sdk">
+                        <div class="footer-contact-value">
+                            <img src="static/icons/itd.svg">
+                            <span>ИТД</span>
+                        </div>
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% endblock %}
+    </body>
+</html>

@@ -1,0 +1,30 @@
+<div class="project{% if project.name == 'itd-sdk' %} project-main{% endif %}{% if project.name == 'ITDpy' %} project-itdpy{% endif %}">
+    <div class="project-data">
+        <div class="project-title">
+            {{ project.name }}
+            {% if project.fork %}
+            <span class="project-fork"><a href="{{ project.parent.html_url }}">[ФОРК {{ project.parent.name }}]</a></span>
+            {% endif %}
+        </div>
+        <div class="project-description">{{ project.description }}</div>
+        <div class="project-stats">
+            <div>
+                <img src="static/icons/star.svg" alt="star">{{ project.stargazers_count }}
+            </div>
+            <div>
+                <img src="static/icons/fork.svg" alt="fork">{{ project.forks_count }}
+            </div>
+            <div class="project-updated-at">Обновлен {{ project.updated_at.strftime('%d.%m.%y') }}</div>
+        </div>
+    </div>
+    <div class="project-links">
+        <div class="project-link">
+            <a href="{{ project.html_url }}"><img src="static/icons/github.svg" alt="github"></a>
+        </div>
+        {% if project.homepage %}
+        <div class="project-link">
+            <a href="{{ project.homepage }}"><img src="static/icons/open-in-new.svg" alt="open in new"></a>
+        </div>
+        {% endif %}
+    </div>
+</div>
