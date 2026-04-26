@@ -23,6 +23,7 @@ function nodeRadius(d) {
     let transform = d3.zoomIdentity;
     let nodes, edges, quadtree;
     let hovered_node = null;
+    let hovered_edge = null;
     let selected_node = null;
     let selected_neighbour_ids = null;
     let selected_edges = null;
@@ -102,6 +103,16 @@ function nodeRadius(d) {
             ctx.stroke();
         }
 
+        // Hovered edge highlight
+        if (hovered_edge && hovered_edge.source.x != null) {
+            ctx.beginPath();
+            ctx.strokeStyle = 'rgba(251, 230, 219, 0.7)';
+            ctx.lineWidth = 1.5 / transform.k;
+            ctx.moveTo(hovered_edge.source.x, hovered_edge.source.y);
+            ctx.lineTo(hovered_edge.target.x, hovered_edge.target.y);
+            ctx.stroke();
+        }
+
         // Nodes
         for (const n of nodes) {
             if (n.x == null) continue;
@@ -144,9 +155,26 @@ function nodeRadius(d) {
             .addAll(nodes.filter(n => n.x != null));
     }
 
-    function find_node(mx, my) {
+    function find_node(mx, my, radius = 14) {
         const [wx, wy] = transform.invert([mx, my]);
-        return quadtree.find(wx, wy, 14 / transform.k);
+        return quadtree.find(wx, wy, radius / transform.k);
+    }
+
+    function find_edge(mx, my) {
+        const [wx, wy] = transform.invert([mx, my]);
+        const threshold = 4 / transform.k;
+        let best = null, bestDist = threshold;
+        for (const e of edges) {
+            const s = e.source, t = e.target;
+            if (s.x == null) continue;
+            const dx = t.x - s.x, dy = t.y - s.y;
+            const len2 = dx * dx + dy * dy;
+            if (len2 === 0) continue;
+            const tt = Math.max(0, Math.min(1, ((wx - s.x) * dx + (wy - s.y) * dy) / len2));
+            const dist = Math.hypot(wx - (s.x + tt * dx), wy - (s.y + tt * dy));
+            if (dist < bestDist) { bestDist = dist; best = e; }
+        }
+        return best;
     }
 
     function fit_view() {
@@ -164,22 +192,35 @@ function nodeRadius(d) {
         );
     }
 
-    function show_tooltip(node, clientX, clientY) {
-        tooltip.hidden = false;
+    function position_tooltip(clientX, clientY) {
         const rect = canvas.getBoundingClientRect();
         let tx = clientX - rect.left + 14;
         let ty = clientY - rect.top - 10;
         if (tx + 250 > canvas.clientWidth) tx = clientX - rect.left - 256;
         tooltip.style.left = tx + 'px';
         tooltip.style.top = ty + 'px';
+    }
 
+    function show_tooltip(node, clientX, clientY) {
+        tooltip.hidden = false;
+        position_tooltip(clientX, clientY);
         tooltip.innerHTML =
-            `<div class="tt-name">${node.avatar} ${node.display_name}${node.verified ? ' <span class="tt-verified">✓</span>' : ''}</div>` +
+            `<div class="tt-name">${node.avatar} ${node.display_name}${node.verified ? '<img src="/static/icons/verified.svg">' : ''}</div>` +
             `<div class="tt-username">@${node.username}</div>` +
             `<div class="tt-stats">` +
             `<span>${(node.followers || 0).toLocaleString('ru-RU')} подписчиков</span>` +
             `<span>${(node.following || 0).toLocaleString('ru-RU')} подписок</span>` +
             `</div>`;
+    }
+
+    function show_edge_tooltip(edge, clientX, clientY) {
+        tooltip.hidden = false;
+        position_tooltip(clientX, clientY);
+        const s = edge.source, t = edge.target;
+        const rel = edge.mutual
+            ? `<b>@${s.username}</b> <=> <b>@${t.username}</b>`
+            : `<b>@${s.username}</b> => <b>@${t.username}</b>`;
+        tooltip.innerHTML = `<div class="tt-stats edge" style="color:#FBEADB">${rel}</div>`;
     }
 
     // Fetch
@@ -248,15 +289,21 @@ function nodeRadius(d) {
     // Hover / tooltip
     canvas.addEventListener('mousemove', e => {
         const rect = canvas.getBoundingClientRect();
-        const node = find_node(e.clientX - rect.left, e.clientY - rect.top);
+        const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+        // Hover: use tight radius (~= visual node size) so edges behind nodes are reachable
+        const node = find_node(mx, my, 6);
+        const edge = null //node ? null : find_edge(mx, my);
 
-        if (node !== hovered_node) {
+        if (node !== hovered_node || edge !== hovered_edge) {
             hovered_node = node;
+            hovered_edge = edge;
             render();
         }
 
         if (node) {
             show_tooltip(node, e.clientX, e.clientY);
+        } else if (edge) {
+            show_edge_tooltip(edge, e.clientX, e.clientY);
         } else {
             tooltip.hidden = true;
         }
@@ -265,6 +312,7 @@ function nodeRadius(d) {
     canvas.addEventListener('mouseleave', () => {
         tooltip.hidden = true;
         hovered_node = null;
+        hovered_edge = null;
         render();
     });
 

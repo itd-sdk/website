@@ -16,17 +16,24 @@ def api_get_users(
 
 
 @router.get('/graph')
-def api_get_users_graph(
-    db: Session = Depends(get_db)
-):
-    users = db.query(User).all()#.where(User.following_users != []).all()
+def api_get_users_graph(db: Session = Depends(get_db)):
+    users = db.query(User).all()
     user_ids = {str(user.user_id): user.id for user in users}
 
-    edges = []
+    pairs: set[tuple[int, int]] = set()
     for user in users:
-        for target in user.following_users:
-            if str(target) in user_ids:
-                edges.append({'source': int(user.id), 'target': int(user_ids[str(target)])})
+        for target in user.following_users + user.followed_by_users:
+            target_id = user_ids.get(str(target))
+            if target_id is not None:
+                pairs.add((user.id, target_id))
+
+    seen: set[frozenset] = set()
+    edges = []
+    for source, target in pairs:
+        pair = frozenset([source, target])
+        if pair not in seen:
+            seen.add(pair)
+            edges.append({'source': source, 'target': target, 'mutual': (target, source) in pairs})
 
     return {'nodes': users, 'edges': edges}
 
