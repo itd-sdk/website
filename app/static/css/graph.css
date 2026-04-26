@@ -1,0 +1,200 @@
+#graph-wrap {
+  width: 100vw;
+  height: 100vh;
+  position: relative;
+  overflow: hidden;
+  background: #1E1C1A;
+}
+
+#graph-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  cursor: grab;
+}
+
+#graph-canvas.dragging {
+  cursor: grabbing;
+}
+
+#graph-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #1E1C1A;
+  z-index: 10;
+  gap: 14px;
+  transition: opacity 0.4s ease;
+  font-size: 15px;
+  color: #888;
+}
+
+#graph-loading.fade {
+  opacity: 0;
+  pointer-events: none;
+}
+
+#graph-progress-bar {
+  width: 180px;
+  height: 2px;
+  background: #3E3B37;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+#graph-progress-fill {
+  height: 100%;
+  background: #ed6a2d;
+  border-radius: 2px;
+  width: 0%;
+  transition: width 0.2s ease;
+}
+
+#graph-tooltip {
+  position: absolute;
+  background: #242220;
+  border: 1px solid #3E3B37;
+  border-radius: 8px;
+  padding: 10px 14px;
+  pointer-events: none;
+  z-index: 20;
+  max-width: 230px;
+  font-size: 14px;
+}
+
+.tt-name {
+  font-weight: 500;
+  color: #FBEADB;
+}
+
+.tt-username {
+  color: #666;
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.tt-verified {
+  color: #ed6a2d;
+}
+
+.tt-stats {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 12px;
+  color: #888;
+}
+
+#graph-stats {
+  position: absolute;
+  bottom: 18px;
+  right: 18px;
+  background: rgba(26, 24, 22, 0.85);
+  border: 1px solid #2e2c2a;
+  border-radius: 8px;
+  padding: 7px 13px;
+  font-size: 12px;
+  color: #555;
+  pointer-events: none;
+}
+
+#graph-back {
+  position: absolute;
+  top: 18px;
+  left: 18px;
+  font-size: 14px;
+  color: #666;
+  text-decoration: none;
+  transition: color 0.2s ease;
+  z-index: 5;
+}
+
+#graph-back:hover {
+  color: #FBEADB !important;
+}
+
+#graph-search {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  z-index: 5;
+  width: 220px;
+}
+
+#graph-search-input {
+  width: 100%;
+  background: rgba(26, 24, 22, 0.9);
+  border: 1px solid #3E3B37;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: #FBEADB;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.2s ease;
+}
+
+#graph-search-input::placeholder {
+  color: #555;
+}
+
+#graph-search-input:focus {
+  border-color: #666;
+}
+
+#graph-search-results {
+  margin-top: 4px;
+  background: #242220;
+  border: 1px solid #3E3B37;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.search-result {
+  padding: 8px 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  transition: background 0.15s ease;
+}
+
+.search-result:hover {
+  background: #2e2c2a;
+}
+
+.search-result-avatar {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.search-result-name {
+  color: #FBEADB;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.search-result-username {
+  color: #555;
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.search-result-not-found {
+  padding: 8px 12px;
+  font-size: 13px;
+  color: #555;
+}
+
+.search-result-no-node {
+  opacity: 0.45;
+  cursor: default;
+}

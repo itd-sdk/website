@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block head %}
+<link rel="stylesheet" href="/static/css/graph.css">
+{% endblock %}
+
+{% block header %}{% endblock %}
+
+{% block content %}
+<div id="graph-wrap">
+    <div id="graph-loading">
+        <span id="graph-loading-text">Загрузка данных...</span>
+        <div id="graph-progress-bar"><div id="graph-progress-fill"></div></div>
+    </div>
+    <canvas id="graph-canvas"></canvas>
+    <div id="graph-tooltip" hidden></div>
+    <div id="graph-stats"></div>
+    <a id="graph-back" href="/">← Назад</a>
+
+    <div id="graph-search">
+        <input id="graph-search-input" type="text" placeholder="Поиск по username..." autocomplete="off">
+        <div id="graph-search-results" hidden></div>
+    </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+<script src="/static/js/graph.js"></script>
+{% endblock %}
+
+{% block footer %}{% endblock %}
