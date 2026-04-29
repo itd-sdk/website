@@ -1,5 +1,6 @@
 from pathlib import Path
 from os import getenv
+from datetime import datetime
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
@@ -19,6 +20,7 @@ create_db(getenv('DATABASE_URL', ''))
 
 app.state.projects = get_projects()
 app.state.analogs = get_analogs()
+app.state.graph_updated_at = datetime(1990, 1, 1)
 
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 app.include_router(router)

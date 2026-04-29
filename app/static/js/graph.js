@@ -19,6 +19,8 @@ function nodeRadius(d) {
     const progress = get_el('graph-progress-fill');
     const tooltip = get_el('graph-tooltip');
     const stats = get_el('graph-stats');
+    const search_input = get_el('graph-search-input');
+    const search_results = get_el('graph-search-results');
 
     let transform = d3.zoomIdentity;
     let nodes, edges, quadtree;
@@ -28,6 +30,7 @@ function nodeRadius(d) {
     let selected_neighbour_ids = null;
     let selected_edges = null;
     let fit_done = false;
+    let search_timer = null;
 
     function resize() {
         canvas.width = canvas.clientWidth * dpr();
@@ -35,7 +38,7 @@ function nodeRadius(d) {
         render();
     }
 
-    function selectNode(node) {
+    function select_node(node) {
         selected_node = node;
         if (!node) {
             selected_neighbour_ids = null;
@@ -60,7 +63,7 @@ function nodeRadius(d) {
         const w = canvas.width;
         const h = canvas.height;
         const d = dpr();
-        const hasSelection = selected_node != null;
+        const has_selection = selected_node != null;
 
         ctx.clearRect(0, 0, w, h);
         ctx.save();
@@ -69,10 +72,10 @@ function nodeRadius(d) {
 
         const lw = 0.6 / transform.k;
 
-        if (hasSelection) {
+        if (has_selection) {
             // Dim edges
             ctx.beginPath();
-            ctx.strokeStyle = 'rgba(100,90,80,0.06)';
+            ctx.strokeStyle = 'rgba(185, 135, 103, 0.06)';
             ctx.lineWidth = lw;
             for (const e of edges) {
                 if (selected_edges.has(e) || e.source.x == null) continue;
@@ -117,15 +120,15 @@ function nodeRadius(d) {
         for (const n of nodes) {
             if (n.x == null) continue;
             const r = nodeRadius(n);
-            const isSelected = n === selected_node;
-            const isDimmed = hasSelection && !selected_neighbour_ids.has(n.id);
+            const is_selected = n === selected_node;
+            const is_dimmed = has_selection && !selected_neighbour_ids.has(n.id);
 
             ctx.beginPath();
             ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
 
-            if (isSelected) {
+            if (is_selected) {
                 ctx.fillStyle = '#FF854D';
-            } else if (isDimmed) {
+            } else if (is_dimmed) {
                 ctx.fillStyle = 'rgba(74,71,68,0.2)';
             } else if (n === hovered_node) {
                 ctx.fillStyle = '#FF854D';
@@ -136,7 +139,7 @@ function nodeRadius(d) {
             }
             ctx.fill();
 
-            if (isSelected) {
+            if (is_selected) {
                 ctx.beginPath();
                 ctx.arc(n.x, n.y, r + 2.5 / transform.k, 0, Math.PI * 2);
                 ctx.strokeStyle = '#FF854D';
@@ -227,7 +230,13 @@ function nodeRadius(d) {
     loading_text.textContent = 'Загрузка данных...';
     progress.style.width = '10%';
 
-    const data = await fetch('/api/users/graph').then(r => r.json());
+    const res = await fetch('/api/users/graph');
+    if (!res.ok) {
+        alert('Ошибка при получении пользователей');
+        return;
+    }
+    const data = await res.json();
+
     nodes = data.nodes;
     edges = data.edges;
 
@@ -280,7 +289,7 @@ function nodeRadius(d) {
         .on('click.select', e => {
             const rect = canvas.getBoundingClientRect();
             const node = find_node(e.clientX - rect.left, e.clientY - rect.top);
-            selectNode(node === selected_node ? null : (node || null));
+            select_node(node === selected_node ? null : (node || null));
         });
 
     canvas.addEventListener('mousedown', () => canvas.classList.add('dragging'));
@@ -291,7 +300,7 @@ function nodeRadius(d) {
         const rect = canvas.getBoundingClientRect();
         const mx = e.clientX - rect.left, my = e.clientY - rect.top;
         // Hover: use tight radius (~= visual node size) so edges behind nodes are reachable
-        const node = find_node(mx, my, 6);
+        const node = find_node(mx, my);
         const edge = null //node ? null : find_edge(mx, my);
 
         if (node !== hovered_node || edge !== hovered_edge) {
@@ -317,10 +326,6 @@ function nodeRadius(d) {
     });
 
     // Search
-    const search_input = get_el('graph-search-input');
-    const search_results = get_el('graph-search-results');
-    let search_timer = null;
-
     function pan_to_node(node) {
         const cw = canvas.clientWidth, ch = canvas.clientHeight;
         d3.select(canvas).transition().duration(500).call(
@@ -353,7 +358,7 @@ function nodeRadius(d) {
                 const id = parseInt(el.dataset.id);
                 const node = nodes.find(n => n.id === id);
                 if (node) {
-                    selectNode(node);
+                    select_node(node);
                     pan_to_node(node);
                 }
                 search_input.value = '';
@@ -367,8 +372,12 @@ function nodeRadius(d) {
         const q = search_input.value.trim();
         if (!q) { search_results.hidden = true; return; }
         search_timer = setTimeout(async () => {
-            const data = await fetch(`/api/users/search?query=${encodeURIComponent(q)}`).then(r => r.json());
-            show_search_results(data.results || []);
+            const data = await fetch(`/api/users/search?query=${encodeURIComponent(q)}`);
+            if (!data.ok) {
+                alert('Ошибка при получении результатов поиска.');
+                return;
+            }
+            show_search_results(data.json().results || []);
         }, 250);
     });
 

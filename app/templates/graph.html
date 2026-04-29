@@ -9,15 +9,17 @@
 {% block content %}
 <div id="graph-wrap">
     <div id="graph-loading">
-        <span id="graph-loading-text">Загрузка данных...</span>
-        <div id="graph-progress-bar"><div id="graph-progress-fill"></div></div>
+        <div id="graph-loading-container">
+            <span id="graph-loading-text">Загрузка библиотек...</span>
+            <div id="graph-progress-bar"><div id="graph-progress-fill"></div></div>
+        </div>
     </div>
     <canvas id="graph-canvas"></canvas>
     <div id="graph-tooltip" hidden></div>
-    <div id="graph-stats"></div>
-    <a id="graph-back" href="/">← Назад</a>
+    <div id="graph-stats" hidden></div>
+    <a id="graph-logo" href="/"><img src="/static/images/logo-vertical.png" alt="logo"></a>
 
-    <div id="graph-search">
+    <div id="graph-search" hidden>
         <input id="graph-search-input" type="text" placeholder="Поиск по username..." autocomplete="off">
         <div id="graph-search-results" hidden></div>
     </div>
