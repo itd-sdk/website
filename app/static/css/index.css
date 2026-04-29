@@ -33,7 +33,10 @@
 } */
 
 #graph {
-  background-color: #2C2A27;
+  background:
+    linear-gradient(to right, #2C2A27, #2C2A2700),
+    url('/static/images/graph.png');
+  background-size: cover;
   border: #FBEADB 1px solid;
   padding: 15px;
   border-radius: 16px;
@@ -69,8 +72,23 @@
   line-height: 1;
 }
 #graph-progress-count-name {
-  color: #777;
+  color: #ddd;
 }
+
+#graph-actions {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 15px;
+}
+#graph-actions button {
+  display: inline;
+}
+#graph-other {
+  color: #555;
+  font-size: 13px;
+}
+
 
 .projects {
   display: grid;

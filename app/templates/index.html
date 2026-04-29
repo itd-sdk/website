@@ -18,7 +18,7 @@
 <div id="content">
     <div id="graph" hidden>
         <h3>Граф пользователей ИТД</h3>
-        <div id="graph-description">Большой граф почти всех актинвых пользователей ИТД прямо на сайте. Пользователи парстяся скриптом автоматически (примерно 300 в час). Цель - набрать 100 000 пользователей.</div>
+        <div id="graph-description">Большой граф почти всех актинвых пользователей ИТД прямо на сайте. Запуск произойдет при сборе информации о 100 000 пользователей (щас <span id="graph-descriription-current">null</span>).</div>
         <div id="graph-progress">
             <div id="graph-progress-bar"></div>
             <div id="graph-progress-count">
@@ -26,7 +26,10 @@
                 <div id="graph-progress-count-name">Готово</div>
             </div>
         </div>
-        <button disabled>Тут типо будет кнопка чтобы перейти в граф</button>
+        <div id="graph-actions">
+            <button disabled>Тут типо будет кнопка чтобы перейти в граф</button>
+            <div id="graph-other">Пользователи парсятся скриптом (чаще всего скрипт работает днем и вечером). Статус на сайте обновляется раз в час.</div>
+        </div>
     </div>
     <h2 id="projects">Проекты</h2>
     <div class="projects">
