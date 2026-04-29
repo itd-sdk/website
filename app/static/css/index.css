@@ -32,70 +32,51 @@
   rotate: 0deg;
 } */
 
-.projects {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  /* grid-template-columns: repeat(5, calc(90vw / 5)); */
-  gap: 15px 15px;
-}
-
-.project {
+#graph {
   background-color: #2C2A27;
   border: #FBEADB 1px solid;
   padding: 15px;
   border-radius: 16px;
   display: flex;
-  flex-direction: row;
-  justify-content: space-between;
-}
-.project-main {
-  background: linear-gradient(to bottom right, #2C2A27 60%, #5f3523);
-}
-.project-main div div.project-title {
-  color: #FF9A3E;
-}
-.project-itdpy div div.project-title {
-  /* https://stackoverflow.com/questions/8384751/css-text-gradient */
-  background: linear-gradient(-20deg, #256bdf 70%, #22bf67);
-  color: transparent;
-  background-clip: text;
-}
-
-.project-data {
-  display: flex;
   flex-direction: column;
 }
-.project-title {
-  font-weight: bold;
+
+#graph-description {
+  color: #999;
 }
-.project-fork {
-  margin-left: 5px;
-  font-size: 14px;
-  font-weight: normal;
-}
-.project-description {
-  color: #aaa;
-  font-size: 15px;
-}
-.project-stats {
-  margin-top: auto;
+
+#graph-progress {
   display: flex;
   flex-direction: row;
-  gap: 5px;
-}
-.project-stats div {
   align-items: center;
-  display: flex;
-  gap: 3px;
+  gap: 15px;
 }
-.project-updated-at {
-  color: #888;
-  font-size: 13px;
+#graph-progress-bar {
+  width: 100%;
+  height: 15px;
+  border-radius: 5px;
+  background: linear-gradient(to right, #fd7f08 67%, #1E1C1A 68%);
 }
-.project-links {
+
+#graph-progress-count {
   display: flex;
-  flex-direction: row;
-  gap: 5px;
+  flex-direction: column;
+  align-items: center;
+}
+#graph-progress-count-value {
+  font-size: 35px;
+  font-weight: 700;
+  line-height: 1;
+}
+#graph-progress-count-name {
+  color: #777;
+}
+
+.projects {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  /* grid-template-columns: repeat(5, calc(90vw / 5)); */
+  gap: 15px 15px;
 }
 
 #analogs-description {

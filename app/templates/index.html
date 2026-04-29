@@ -2,6 +2,7 @@
 
 {% block head %}
 <link rel="stylesheet" href="static/css/index.css">
+<script src="/static/js/index.js"></script>
 {% endblock %}
 
 {% block content %}
@@ -15,6 +16,18 @@
 </div>
 <video src="static/videos/vizualizer.mp4" id="landing-vizualizer" autoplay muted loop></video>
 <div id="content">
+    <div id="graph" hidden>
+        <h3>Граф пользователей ИТД</h3>
+        <div id="graph-description">Большой граф почти всех актинвых пользователей ИТД прямо на сайте. Пользователи парстяся скриптом автоматически (примерно 300 в час). Цель - набрать 100 000 пользователей.</div>
+        <div id="graph-progress">
+            <div id="graph-progress-bar"></div>
+            <div id="graph-progress-count">
+                <div id="graph-progress-count-value">null%</div>
+                <div id="graph-progress-count-name">Готово</div>
+            </div>
+        </div>
+        <button disabled>Тут типо будет кнопка чтобы перейти в граф</button>
+    </div>
     <h2 id="projects">Проекты</h2>
     <div class="projects">
         {% for project in projects %}

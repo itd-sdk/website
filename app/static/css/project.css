@@ -1,0 +1,59 @@
+
+.project {
+  background-color: #2C2A27;
+  border: #FBEADB 1px solid;
+  padding: 15px;
+  border-radius: 16px;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+}
+.project-main {
+  background: linear-gradient(to bottom right, #2C2A27 60%, #5f3523);
+}
+.project-main div div.project-title {
+  color: #FF9A3E;
+}
+.project-itdpy div div.project-title {
+  /* https://stackoverflow.com/questions/8384751/css-text-gradient */
+  background: linear-gradient(-20deg, #256bdf 70%, #22bf67);
+  color: transparent;
+  background-clip: text;
+}
+
+.project-data {
+  display: flex;
+  flex-direction: column;
+}
+.project-title {
+  font-weight: bold;
+}
+.project-fork {
+  margin-left: 5px;
+  font-size: 14px;
+  font-weight: normal;
+}
+.project-description {
+  color: #aaa;
+  font-size: 15px;
+}
+.project-stats {
+  margin-top: auto;
+  display: flex;
+  flex-direction: row;
+  gap: 5px;
+}
+.project-stats div {
+  align-items: center;
+  display: flex;
+  gap: 3px;
+}
+.project-updated-at {
+  color: #888;
+  font-size: 13px;
+}
+.project-links {
+  display: flex;
+  flex-direction: row;
+  gap: 5px;
+}
