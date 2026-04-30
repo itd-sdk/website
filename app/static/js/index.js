@@ -20,8 +20,8 @@ async function fetch_users_count() {
 document.addEventListener('DOMContentLoaded', async () => {
   const count = await fetch_users_count();
 
-  get_el('graph-progress-bar').style.background = `linear-gradient(to right, #fd7f08 ${count / 1000}%, #1E1C1A ${count / 1000}%)`;
-  get_el('graph-progress-count-value').textContent = `${Math.round(count / 1000)}%`;
+  get_el('graph-progress-bar').style.background = `linear-gradient(to right, #fd7f08 ${count / 500}%, #1E1C1A ${count / 500}%)`;
+  get_el('graph-progress-count-value').textContent = `${Math.round(count / 500)}%`;
   get_el('graph-descriription-current').textContent = count;
   get_el('graph').hidden = false;
 });
