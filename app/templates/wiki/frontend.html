@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block head %}
+<link rel="stylesheet" href="/static/css/wiki.css">
+{% endblock %}
+
+{% block content %}
+<h2>ITD-frontend</h2>
+<div id="content">
+    <div id="content-text">
+        <p>Авто-парсер исходников ИТД. Разработан частично вместе с <a href="https://итд.com/@itdStatus">ИТД статусом</a>, для того чтобы смотреть изменения в новых обновлениях. Всю историю обновлений можно посмотреть в <a href="https://github.com/itd-sdk/itd-frontend/activity">комитах</a>. Скрипт автоматически проверяет код ИТД на обновление каждые 2 часа (за исключением ночи), и когда что-то изменилось, обновляет декопилированную версию на гитхабе. Декомпиляция работает через <a href="https://www.npmjs.com/package/@wakaru/cli">wakaru cli</a>. Также помимо JS кода сохраняется CSS и вытаскиваются SVG.</p>
+    </div>
+    <div id="infoblock">
+        <img src="/static/images/project-logos/frontend.png" alt="logo" width="260px">
+        <table>
+            <tr>
+                <td>Статус</td>
+                <td class="warning">Часто включен</td>
+            </tr>
+            <tr>
+                <td>Исходный код</td>
+                <td class="center-icon"><img src="/static/icons/github.svg" alt="gh"><a href="https://github.com/itd-sdk/itd-frontend">GitHub</a></td>
+            </tr>
+        </table>
+    </div>
+</div>
+{% endblock %}

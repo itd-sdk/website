@@ -96,6 +96,13 @@ a:active, a:active * {
   color: #bc4d19 !important;
 }
 
+blockquote {
+  color: #ddd;
+  padding: 16px;
+  margin: 16px;
+  border-left: solid 3px #FF854D;
+}
+
 
 hr {
   width: 95%;
@@ -106,6 +113,15 @@ hr {
 
 textarea {
   resize: none;
+}
+
+
+td:not(:last-child) {
+  padding-right: 8px;
+  border-right: #aaa solid 1px;
+}
+td:not(:first-child) {
+  padding-left: 8px;
 }
 
 
@@ -199,18 +215,25 @@ input[type="radio"]:checked::before {
 }
 
 
-tr {
-  display: flex;
-  justify-content: space-between;
-
-  border-bottom: 1px solid #666;
-  padding: 10px;
-  margin-bottom: 10px;
+img {
+  user-select: none;
 }
 
 
-img {
-  user-select: none;
+.success {
+  color: #88B369;
+}
+.warning {
+  color: #E3B341;
+}
+.error {
+  color: #E05340;
+}
+
+.center-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 }
 
 

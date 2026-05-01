@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block head %}
+<link rel="stylesheet" href="/static/css/wiki.css">
+{% endblock %}
+
+{% block content %}
+<h2>ITD-pingbot</h2>
+<div id="content">
+    <div id="content-text">
+        <p>Бот для упоминаний в постах. Для использования нужно добавить <a href="https://итд.com/hashtag/пингбот">#пингбот</a> в пост, и бот автоматически считает все упоминания (что начинается с @). После чего всем упомянутым пользователям отправится пост на стенку с ссылкой на пост.</p>
+        <p>Бот стал не особо популярным, из-за чего пока не переносится на сервер (а значит работает только днем и вечером).</p>
+        <p>Также бот пишет посты на стенки от лица самого аккаунта разработчика (потому что других нету).</p>
+    </div>
+    <div id="infoblock">
+        <img src="/static/images/project-logos/pingbot.png" alt="logo" width="260px">
+        <table>
+            <tr>
+                <td>Статус</td>
+                <td class="success">Работает</td>
+            </tr>
+            <tr>
+                <td>Исходный код</td>
+                <td class="center-icon"><img src="/static/icons/github.svg" alt="gh"><a href="https://github.com/itd-sdk/pingbot">GitHub</a></td>
+            </tr>
+        </table>
+    </div>
+</div>
+{% endblock %}
