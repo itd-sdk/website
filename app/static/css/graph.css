@@ -104,17 +104,26 @@
   flex-direction: row;
 }
 
-#graph-stats {
+#graph-other {
   position: absolute;
   bottom: 18px;
   right: 18px;
+  display: flex;
+  flex-direction: column;
   background: rgba(26, 24, 22, 0.85);
   border: 1px solid #2e2c2a;
   border-radius: 8px;
   padding: 7px 13px;
+}
+#graph-edges-container {
+  display: flex;
+  flex-direction: row;
+  gap: 5px;
+  align-items: center;
+}
+#graph-stats {
   font-size: 12px;
   color: #555;
-  pointer-events: none;
 }
 
 #graph-logo {
@@ -192,6 +201,10 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  display: inline-flex; /* for verified users */
+  flex-direction: row;
+  align-items: center;
+  gap: 5px;
 }
 
 .search-result-username {
@@ -202,13 +215,8 @@
   text-overflow: ellipsis;
 }
 
-.search-result-not-found {
+.search-result-text {
   padding: 8px 12px;
   font-size: 13px;
   color: #555;
-}
-
-.search-result-no-node {
-  opacity: 0.45;
-  cursor: default;
 }

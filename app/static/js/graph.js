@@ -2,11 +2,12 @@ function get_el(el) {
     return document.getElementById(el);
 }
 
+// ai begin ---
 function dpr() {
     return window.devicePixelRatio || 1;
 }
 
-function nodeRadius(d) {
+function node_radius(d) {
     return Math.max(2, Math.min(6, 1.5 + Math.log10(1 + (d.followers || 0)) * 0.9));
 }
 
@@ -18,7 +19,6 @@ function nodeRadius(d) {
     const loading_text = get_el('graph-loading-text');
     const progress = get_el('graph-progress-fill');
     const tooltip = get_el('graph-tooltip');
-    const stats = get_el('graph-stats');
     const search_input = get_el('graph-search-input');
     const search_results = get_el('graph-search-results');
 
@@ -31,6 +31,7 @@ function nodeRadius(d) {
     let selected_edges = null;
     let fit_done = false;
     let search_timer = null;
+    let show_edges = false; // non-ai
 
     function resize() {
         canvas.width = canvas.clientWidth * dpr();
@@ -72,7 +73,20 @@ function nodeRadius(d) {
 
         const lw = 0.6 / transform.k;
 
-        if (has_selection) {
+        if (has_selection) { // non-ai
+            // Dim edges
+            if (show_edges) {
+                ctx.beginPath();
+                ctx.strokeStyle = 'rgba(185, 135, 103, 0.06)';
+                ctx.lineWidth = lw;
+                for (const e of edges) {
+                    if (selected_edges.has(e) || e.source.x == null) continue;
+                    ctx.moveTo(e.source.x, e.source.y);
+                    ctx.lineTo(e.target.x, e.target.y);
+                }
+                ctx.stroke();
+            }
+
             // Highlighted edges
             ctx.beginPath();
             ctx.strokeStyle = 'rgba(237,106,45,0.75)';
@@ -83,7 +97,7 @@ function nodeRadius(d) {
                 ctx.lineTo(e.target.x, e.target.y);
             }
             ctx.stroke();
-        } else {
+          } else if (show_edges) { // non-ai
             ctx.beginPath();
             ctx.strokeStyle = 'rgba(100,90,80,0.18)';
             ctx.lineWidth = lw;
@@ -96,19 +110,19 @@ function nodeRadius(d) {
         }
 
         // Hovered edge highlight
-        if (hovered_edge && hovered_edge.source.x != null) {
-            ctx.beginPath();
-            ctx.strokeStyle = 'rgba(251, 230, 219, 0.7)';
-            ctx.lineWidth = 1.5 / transform.k;
-            ctx.moveTo(hovered_edge.source.x, hovered_edge.source.y);
-            ctx.lineTo(hovered_edge.target.x, hovered_edge.target.y);
-            ctx.stroke();
-        }
+        // if (hovered_edge && hovered_edge.source.x != null) {
+        //     ctx.beginPath();
+        //     ctx.strokeStyle = 'rgba(251, 230, 219, 0.7)';
+        //     ctx.lineWidth = 1.5 / transform.k;
+        //     ctx.moveTo(hovered_edge.source.x, hovered_edge.source.y);
+        //     ctx.lineTo(hovered_edge.target.x, hovered_edge.target.y);
+        //     ctx.stroke();
+        // }
 
         // Nodes
         for (const n of nodes) {
             if (n.x == null) continue;
-            const r = nodeRadius(n);
+            const r = node_radius(n);
             const is_selected = n === selected_node;
             const is_dimmed = has_selection && !selected_neighbour_ids.has(n.id);
 
@@ -152,22 +166,22 @@ function nodeRadius(d) {
         return quadtree.find(wx, wy, radius / transform.k);
     }
 
-    function find_edge(mx, my) {
-        const [wx, wy] = transform.invert([mx, my]);
-        const threshold = 4 / transform.k;
-        let best = null, bestDist = threshold;
-        for (const e of edges) {
-            const s = e.source, t = e.target;
-            if (s.x == null) continue;
-            const dx = t.x - s.x, dy = t.y - s.y;
-            const len2 = dx * dx + dy * dy;
-            if (len2 === 0) continue;
-            const tt = Math.max(0, Math.min(1, ((wx - s.x) * dx + (wy - s.y) * dy) / len2));
-            const dist = Math.hypot(wx - (s.x + tt * dx), wy - (s.y + tt * dy));
-            if (dist < bestDist) { bestDist = dist; best = e; }
-        }
-        return best;
-    }
+    // function find_edge(mx, my) {
+    //     const [wx, wy] = transform.invert([mx, my]);
+    //     const threshold = 4 / transform.k;
+    //     let best = null, bestDist = threshold;
+    //     for (const e of edges) {
+    //         const s = e.source, t = e.target;
+    //         if (s.x == null) continue;
+    //         const dx = t.x - s.x, dy = t.y - s.y;
+    //         const len2 = dx * dx + dy * dy;
+    //         if (len2 === 0) continue;
+    //         const tt = Math.max(0, Math.min(1, ((wx - s.x) * dx + (wy - s.y) * dy) / len2));
+    //         const dist = Math.hypot(wx - (s.x + tt * dx), wy - (s.y + tt * dy));
+    //         if (dist < bestDist) { bestDist = dist; best = e; }
+    //     }
+    //     return best;
+    // }
 
     function fit_view() {
         const valid_nodes = nodes.filter(n => n.x != null);
@@ -220,16 +234,18 @@ function nodeRadius(d) {
     progress.style.width = '10%';
 
     const res = await fetch('/api/users/graph');
+    // -- ai end
     if (!res.ok) {
         alert('Ошибка при получении пользователей');
         return;
     }
     const data = await res.json();
+    // ai begin --
 
     nodes = data.nodes;
     edges = data.edges;
 
-    stats.textContent = `${nodes.length} узлов | ${edges.length} связей`;
+    get_el('graph-stats').textContent = `${nodes.length} узлов | ${edges.length} связей`;
     loading_text.textContent = 'Построение графа...';
     progress.style.width = '20%';
 
@@ -238,7 +254,7 @@ function nodeRadius(d) {
     const simulation = d3.forceSimulation(nodes)
         .force('link', d3.forceLink(edges).id(d => d.id).distance(100).strength(0.3))
         .force('charge', d3.forceManyBody().strength(-70).distanceMax(350))
-        .force('collide', d3.forceCollide().radius(d => nodeRadius(d) + 1.5).strength(1))
+        .force('collide', d3.forceCollide().radius(d => node_radius(d) + 1.5).strength(1))
         .force('center', d3.forceCenter(0, 0).strength(0.05))
         .velocityDecay(0.45)
         .alphaDecay(0.05)
@@ -264,7 +280,7 @@ function nodeRadius(d) {
                 setTimeout(() => { loading.hidden = true; }, 450);
             }, 150);
             get_el('graph-search').hidden = false;
-            stats.hidden = false;
+            get_el('graph-other').hidden = false; // non-ai
         });
 
     const zoom = d3.zoom()
@@ -326,25 +342,26 @@ function nodeRadius(d) {
     }
 
     function show_search_results(results) {
+        search_results.hidden = false; // non-ai
+
         if (!results.length) {
-            search_results.hidden = false;
-            search_results.innerHTML = '<div class="search-result-not-found">Ничего не найдено</div>';
+            search_results.innerHTML = '<div class="search-result-text">Ничего не найдено</div>';
             return;
         }
 
-        search_results.hidden = false;
         search_results.innerHTML = results.map(u => {
-            const in_graph = nodes.some(n => n.id === u.id);
-            return `<div class="search-result${in_graph ? '' : ' search-result-no-node'}" data-id="${u.id}">
-                <span class="search-result-avatar">${u.avatar || '?'}</span>
-                <div>
-                    <div class="search-result-name">${u.display_name}${u.verified ? '<img src="/static/icons/verified.svg">' : ''}</div>
-                    <div class="search-result-username">@${u.username}${in_graph ? '' : ' · не в графе'}</div>
-                </div>
-            </div>`;
+            if (nodes.some(n => n.id === u.id)) { // non-ai
+                return `<div class="search-result" data-id="${u.id}">
+                    <span class="search-result-avatar">${u.avatar || '?'}</span>
+                    <div>
+                        <div class="search-result-name">${u.display_name}${u.verified ? '<img src="/static/icons/verified.svg">' : ''}</div>
+                        <div class="search-result-username">@${u.username}</div>
+                    </div>
+                </div>`;
+            }
         }).join('');
 
-        search_results.querySelectorAll('.search-result:not(.search-result-no-node)').forEach(el => {
+        search_results.childNodes.forEach(el => {
             el.addEventListener('click', () => {
                 const id = parseInt(el.dataset.id);
                 const node = nodes.find(n => n.id === id);
@@ -360,9 +377,16 @@ function nodeRadius(d) {
 
     search_input.addEventListener('input', () => {
         clearTimeout(search_timer);
+
         const q = search_input.value.trim();
-        if (!q) { search_results.hidden = true; return; }
+        if (!q) {
+            search_results.hidden = true;
+            return;
+        }
+
         search_timer = setTimeout(async () => {
+            search_results.hidden = false;
+            search_results.innerHTML = '<div class="search-result-text">Заугрзка...</div>'; // non-ai
             const data = await fetch(`/api/users/search?query=${encodeURIComponent(q)}`);
             if (!data.ok) {
                 alert('Ошибка при получении результатов поиска.');
@@ -379,15 +403,23 @@ function nodeRadius(d) {
         }
     });
 
-    document.addEventListener('click', e => {
-        if (!get_el('graph-search').contains(e.target)) {
-            search_results.hidden = true;
-        }
+    // --- ai end
+    get_el('graph-edges').addEventListener('click', () => {
+        show_edges = !show_edges;
+        render();
     });
+
     document.addEventListener('keydown', (e) => {
       if (e.key == 'Escape' && selected_node != null) {
         select_node(null);
       }
+    });
+    // ai begin ---
+
+    document.addEventListener('click', e => {
+        if (!get_el('graph-search').contains(e.target)) {
+            search_results.hidden = true;
+        }
     });
 
     window.addEventListener('resize', resize);
