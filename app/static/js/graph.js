@@ -73,17 +73,6 @@ function nodeRadius(d) {
         const lw = 0.6 / transform.k;
 
         if (has_selection) {
-            // Dim edges
-            ctx.beginPath();
-            ctx.strokeStyle = 'rgba(185, 135, 103, 0.06)';
-            ctx.lineWidth = lw;
-            for (const e of edges) {
-                if (selected_edges.has(e) || e.source.x == null) continue;
-                ctx.moveTo(e.source.x, e.source.y);
-                ctx.lineTo(e.target.x, e.target.y);
-            }
-            ctx.stroke();
-
             // Highlighted edges
             ctx.beginPath();
             ctx.strokeStyle = 'rgba(237,106,45,0.75)';
@@ -247,9 +236,9 @@ function nodeRadius(d) {
     const alpha_min = 0.001;
 
     const simulation = d3.forceSimulation(nodes)
-        .force('link', d3.forceLink(edges).id(d => d.id).distance(35).strength(0.35))
-        .force('charge', d3.forceManyBody().strength(-25).distanceMax(180))
-        .force('collide', d3.forceCollide().radius(d => nodeRadius(d) + 1.5).strength(0.7))
+        .force('link', d3.forceLink(edges).id(d => d.id).distance(100).strength(0.3))
+        .force('charge', d3.forceManyBody().strength(-70).distanceMax(350))
+        .force('collide', d3.forceCollide().radius(d => nodeRadius(d) + 1.5).strength(1))
         .force('center', d3.forceCenter(0, 0).strength(0.05))
         .velocityDecay(0.45)
         .alphaDecay(0.05)
@@ -274,6 +263,8 @@ function nodeRadius(d) {
                 loading.classList.add('fade');
                 setTimeout(() => { loading.hidden = true; }, 450);
             }, 150);
+            get_el('graph-search').hidden = false;
+            stats.hidden = false;
         });
 
     const zoom = d3.zoom()
@@ -347,7 +338,7 @@ function nodeRadius(d) {
             return `<div class="search-result${in_graph ? '' : ' search-result-no-node'}" data-id="${u.id}">
                 <span class="search-result-avatar">${u.avatar || '?'}</span>
                 <div>
-                    <div class="search-result-name">${u.display_name}${u.verified ? ' <span style="color:#ed6a2d">✓</span>' : ''}</div>
+                    <div class="search-result-name">${u.display_name}${u.verified ? '<img src="/static/icons/verified.svg">' : ''}</div>
                     <div class="search-result-username">@${u.username}${in_graph ? '' : ' · не в графе'}</div>
                 </div>
             </div>`;
@@ -377,7 +368,7 @@ function nodeRadius(d) {
                 alert('Ошибка при получении результатов поиска.');
                 return;
             }
-            show_search_results(data.json().results || []);
+            show_search_results((await data.json()).results || []);
         }, 250);
     });
 
@@ -392,6 +383,11 @@ function nodeRadius(d) {
         if (!get_el('graph-search').contains(e.target)) {
             search_results.hidden = true;
         }
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key == 'Escape' && selected_node != null) {
+        select_node(null);
+      }
     });
 
     window.addEventListener('resize', resize);
