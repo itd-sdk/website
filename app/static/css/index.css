@@ -28,9 +28,6 @@
   rotate: 90deg;
   margin-right: 3px;
 }
-/* .arrow-right {
-  rotate: 0deg;
-} */
 
 #graph {
   background:
@@ -81,9 +78,9 @@
   align-items: center;
   gap: 15px;
 }
-#graph-actions button {
+/* #graph-actions button {
   display: inline;
-}
+} */
 #graph-other {
   color: #555;
   font-size: 13px;
