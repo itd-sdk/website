@@ -1,7 +1,9 @@
+from json import dumps
 from datetime import datetime, timedelta
 from uuid import UUID # i swear we need this
 
 from fastapi import APIRouter, Depends, Request
+from fastapi.responses import Response
 from sqlalchemy import or_
 
 from app.services.db import get_db, Session
@@ -37,10 +39,24 @@ def api_get_users_graph(request: Request, db: Session = Depends(get_db)):
                 if target_id is not None and (target_id, user.id) not in edges:
                     edges.add((user.id, target_id))
 
-        request.app.state.graph = {'nodes': users, 'edges': [{'source': source, 'target': target} for source, target in edges]}
+        nodes = [
+            {
+                'id': u.id,
+                'username': u.username,
+                'display_name': u.display_name,
+                'followers': u.followers,
+                'following': u.following,
+                'verified': u.verified,
+                'avatar': u.avatar
+            } for u in users
+        ]
+
+        request.app.state.graph = dumps(
+            {'nodes': nodes, 'edges': [{'source': s, 'target': t} for s, t in edges]}
+        )
         request.app.state.graph_updated_at = datetime.now()
 
-    return request.app.state.graph
+    return Response(content=request.app.state.graph, media_type='application/json')
 
 
 @router.get('/search')
