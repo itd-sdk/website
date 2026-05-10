@@ -543,7 +543,6 @@ dependencies = [
     { name = "fastapi", extra = ["standard"] },
     { name = "psycopg2-binary" },
     { name = "pygithub" },
-    { name = "python-dotenv" },
     { name = "sqlalchemy" },
 ]
 
@@ -552,7 +551,6 @@ requires-dist = [
     { name = "fastapi", extras = ["standard"], specifier = ">=0.136.0" },
     { name = "psycopg2-binary", specifier = ">=2.9.12" },
     { name = "pygithub", specifier = ">=2.9.1" },
-    { name = "python-dotenv", specifier = ">=1.2.2" },
     { name = "sqlalchemy", specifier = ">=2.0.49" },
 ]
 

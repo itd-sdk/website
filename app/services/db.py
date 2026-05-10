@@ -7,9 +7,9 @@ from typing import Generator
 Base = declarative_base()
 SessionLocal = None
 
-def create_db(url: str) -> None:
+def create_db() -> None:
     global SessionLocal
-    engine = create_engine(url, pool_pre_ping=True, pool_recycle=300, pool_size=20, max_overflow=0)
+    engine = create_engine('sqlite:///database.db', connect_args={'check_same_thread': False})
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     Base.metadata.create_all(bind=engine)
 

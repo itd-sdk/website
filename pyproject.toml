@@ -8,6 +8,12 @@ dependencies = [
     "fastapi[standard]>=0.136.0",
     "psycopg2-binary>=2.9.12",
     "pygithub>=2.9.1",
-    "python-dotenv>=1.2.2",
     "sqlalchemy>=2.0.49",
 ]
+
+[tool.commitizen]
+name = "cz_conventional_commits"
+tag_format = "$version"
+version_scheme = "semver2"
+version_provider = "uv"
+major_version_zero = true

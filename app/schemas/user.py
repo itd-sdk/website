@@ -5,7 +5,7 @@ from sqlalchemy import func, Column, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import ARRAY
 
-from app.services.neon import Base
+from app.services.db import Base
 
 
 class User(Base):

@@ -5,18 +5,16 @@ from datetime import datetime
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from dotenv import load_dotenv
 
 from app.routers import router
 from app.routers.api import router as api_router
 from app.services.github_service import get_analogs, get_projects
-from app.services.neon import create_db
+from app.services.db import create_db
 
 BASE_DIR = Path(__file__).resolve().parent / "app"
-load_dotenv()
 
 app = FastAPI(docs_url=None, redoc_url=None)
-create_db(getenv('DATABASE_URL', ''))
+create_db()
 
 app.state.projects = get_projects()
 app.state.analogs = get_analogs()

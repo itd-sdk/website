@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy import text
 
-from app.services.neon import get_db, Session
+from app.services.db import get_db, Session
 from app.schemas.user import User
 
 router = APIRouter(prefix='/users')
