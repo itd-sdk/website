@@ -253,35 +253,47 @@ function node_radius(d) {
 
     const simulation = d3.forceSimulation(nodes)
         .force('link', d3.forceLink(edges).id(d => d.id).distance(100).strength(0.3))
-        .force('charge', d3.forceManyBody().strength(-70).distanceMax(350))
-        .force('collide', d3.forceCollide().radius(d => node_radius(d) + 1.5).strength(1))
-        .force('center', d3.forceCenter(0, 0).strength(0.05))
+        .force('charge', d3.forceManyBody().strength(-100).distanceMax(500).theta(0.75)) // increase theta to speed up
+        // .force('collide', d3.forceCollide().radius(d => node_radius(d) + 1.5).strength(1))
+        .force('center', d3.forceCenter(0, 0).strength(0.04))
         .velocityDecay(0.45)
-        .alphaDecay(0.05)
+        .alphaDecay(0.15)
         .alphaMin(alpha_min)
-        .on('tick', () => {
-            const alpha = simulation.alpha();
-            progress.style.width = (20 + Math.round((1 - (alpha - alpha_min) / (1 - alpha_min)) * 75)) + '%';
+        .stop();
 
-            if (!fit_done && alpha < 0.25) {
-                fit_done = true;
-                fit_view();
-            }
+    const total_ticks = Math.ceil(
+        Math.log(alpha_min / simulation.alpha()) / Math.log(1 - simulation.alphaDecay())
+    );
+    let tick = 0;
 
-            rebuild_quadtree();
-            render();
-        })
-        .on('end', () => {
+    function run_batch() {
+        for (let i = 0; i < 10 && simulation.alpha() > alpha_min; i++) {
+            simulation.tick();
+            tick++;
+        }
+
+        progress.style.width = (20 + Math.round(tick / total_ticks * 75)) + '%';
+
+        if (!fit_done && tick / total_ticks > 0.4) {
+            fit_done = true;
+            fit_view();
+        }
+
+        rebuild_quadtree();
+        render();
+
+        if (simulation.alpha() > alpha_min) {
+            requestAnimationFrame(run_batch);
+        } else {
             progress.style.width = '100%';
-            rebuild_quadtree();
-            render();
             setTimeout(() => {
                 loading.classList.add('fade');
                 setTimeout(() => { loading.hidden = true; }, 450);
             }, 150);
             get_el('graph-search').hidden = false;
             get_el('graph-other').hidden = false; // non-ai
-        });
+        }
+    }
 
     const zoom = d3.zoom()
         .scaleExtent([0.02, 12])
@@ -289,6 +301,8 @@ function node_radius(d) {
             transform = e.transform;
             render();
         });
+
+    requestAnimationFrame(run_batch);
 
     d3.select(canvas)
         .call(zoom)
