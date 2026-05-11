@@ -1,5 +1,5 @@
 from time import sleep
-from subprocess import Popen
+from subprocess import Popen, PIPE
 
 
 
@@ -14,14 +14,7 @@ def login(username: str, password: str) -> str | None:
         from pyautogui import click, typewrite, hotkey
         from pyperclip import paste
 
-        firefox = Popen(['firefox'])
-        sleep(5)
-
-        hotkey('ctrl', 'shift', 'p')
-        sleep(5)
-
-        typewrite('https://xn--d1ah4a.com/')
-        hotkey('enter')
+        firefox = Popen(['firefox', '--private-window', 'https://xn--d1ah4a.com/'], stdout=PIPE, stderr=PIPE)
         sleep(5)
 
         # login
@@ -47,11 +40,11 @@ def login(username: str, password: str) -> str | None:
         click(769, 103)
         sleep(0.5)
 
-        click(589, 372, clicks=2)
-        sleep(0.2)
+        click(406, 306, clicks=2)
+        sleep(0.5)
 
         hotkey('ctrl', 'c')
-        sleep(0.1)
+        sleep(0.3)
 
         firefox.kill()
         token = paste()
