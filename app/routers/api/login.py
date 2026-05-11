@@ -7,7 +7,8 @@ from fastapi.responses import JSONResponse
 from app.services.login import login
 
 router = APIRouter(prefix='/login')
-l = getLogger('api.login')
+l = getLogger()
+l.setLevel('DEBUG')
 
 @router.get('/')
 def api_get_login(request: Request, email: str, password: str):

@@ -2,7 +2,7 @@ from time import sleep
 from subprocess import Popen, PIPE
 from logging import getLogger
 
-l = getLogger('services.login')
+l = getLogger()
 l.setLevel('DEBUG')
 
 def login(email: str, password: str) -> str | None:
@@ -57,7 +57,7 @@ def login(email: str, password: str) -> str | None:
         firefox.kill()
         token = paste()
         if len(token) != 64:
-            l.error('invlid token', token)
+            l.error('invlid token %s', token)
         else:
             return token
     except Exception as e:
