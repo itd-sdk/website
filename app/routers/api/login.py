@@ -1,4 +1,5 @@
 from time import sleep
+from logging import getLogger
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -6,17 +7,19 @@ from fastapi.responses import JSONResponse
 from app.services.login import login
 
 router = APIRouter(prefix='/login')
+l = getLogger('api.login')
 
 @router.get('/')
-def api_post_login(request: Request, username: str, password: str):
+def api_get_login(request: Request, email: str, password: str):
+    l.info('receive login')
     while request.app.state.is_loginning:
         sleep(0.1)
 
-    print('start')
     request.app.state.is_loginning = True
-    sleep(5)
-    token = login(username, password)
+    l.info('start login')
+    token = login(email, password)
     request.app.state.is_loginning = False
     if token:
-        return {'refresh_token': 'token'}
+        l.info('finish login')
+        return {'refresh_token': token}
     return JSONResponse({'detail': 'failed to login (internal server error, invalid credentials, servers down, etc)'}, 400)
