@@ -1,14 +1,13 @@
 from time import sleep
-from logging import getLogger
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from app.services.login import login
+from app.logger import get_logger
 
 router = APIRouter(prefix='/login')
-l = getLogger()
-l.setLevel('DEBUG')
+l = get_logger('api.login')
 
 @router.get('/')
 def api_get_login(request: Request, email: str, password: str):

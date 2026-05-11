@@ -11,12 +11,14 @@ from app.routers import router
 from app.routers.api import router as api_router
 from app.services.github_service import get_analogs, get_projects
 from app.services.db import create_db
+from app.logger import setup_logging
 
 BASE_DIR = Path(__file__).resolve().parent / "app"
 
 app = FastAPI(docs_url=None, redoc_url=None)
 templates = Jinja2Templates(directory="app/templates/")
 create_db()
+setup_logging('DEBUG')
 
 app.state.projects = get_projects()
 app.state.analogs = get_analogs()

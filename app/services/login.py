@@ -1,9 +1,8 @@
 from time import sleep
 from subprocess import Popen, PIPE
-from logging import getLogger
+from app.logger import get_logger
 
-l = getLogger()
-l.setLevel('DEBUG')
+l = get_logger('services.login')
 
 def login(email: str, password: str) -> str | None:
     # start browser
