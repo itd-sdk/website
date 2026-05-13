@@ -101,5 +101,12 @@
         </div>
     </div>
     <i id="history-etc">...</i>
+    <div id="star-history"> <!-- TODO: custom theme -->
+        <picture>
+            <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=itd-sdk/itd-sdk%2Cgam5510/itdpy%2Cepsilonrationes/aioitd%2Cirratium/itdirr&type=date&theme=dark&legend=top-left" />
+            <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=itd-sdk/itd-sdk%2Cgam5510/itdpy%2Cepsilonrationes/aioitd%2Cirratium/itdirr&type=date&legend=top-left" />
+            <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=itd-sdk/itd-sdk%2Cgam5510/itdpy%2Cepsilonrationes/aioitd%2Cirratium/itdirr&type=date&legend=top-left" />
+        </picture>
+    </div>
 </div>
 {% endblock %}
