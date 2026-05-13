@@ -8,7 +8,7 @@ from pyperclip import paste
 l = get_logger('services.login')
 
 def wait_for_image(path: str, timeout: int = 30):
-    path = f'login_screens/{path}'
+    path = f'app/services/login_screens/{path}'
     start = time()
     while True:
         sleep(0.2)
