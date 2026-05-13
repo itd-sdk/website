@@ -150,9 +150,21 @@
   margin-right: 15px;
 }
 .history-event-label {
-  white-space: nowrap;
+  display: block;
+  min-width: 90vw;
 }
 
 .history-event:last-child .history-event-circle::after {
-  display: none;
+  mask-image: linear-gradient(to bottom, #000, transparent 20%);
+}
+
+#history-etc {
+  color: #888;
+  font-style: oblique 20deg;
+}
+
+@media(max-width: 700px) {
+  .history-event-circle::after, .history-event {
+    height: 120px;
+  }
 }
