@@ -32,8 +32,9 @@ def login(email: str, password: str) -> str | None:
 
     # click(856, 813)
     # sleep(2)
+    start = time()
     try:
-        for i in range(5):
+        for i in range(1, 6):
             Popen(['firefox', '--private-window', 'https://xn--d1ah4a.com/'], stdout=PIPE, stderr=PIPE)
             if wait_for_image('home.png') is not None:
                 break
@@ -90,4 +91,5 @@ def login(email: str, password: str) -> str | None:
     except Exception as e:
         l.error('error %s %s', e.__class__.__name__, e)
     finally:
+        l.info('spent %ss', round(time() - start))
         sp_run(['pkill', '-SIGTERM', '-f', 'firefox'])
