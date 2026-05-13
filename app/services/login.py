@@ -49,7 +49,7 @@ def login(email: str, password: str) -> str | None:
 
         l.debug('click captcha')
         click(638, 440)
-        wait_for_image('logout.png')
+        assert wait_for_image('logout.png')
 
         l.debug('open devtools')
         hotkey('f12')
@@ -67,7 +67,6 @@ def login(email: str, password: str) -> str | None:
             hotkey('ctrl', 'c')
             sleep(0.3)
 
-            hotkey('ctrl', 'shift', 'q')
             token = paste()
             if len(token) != 64:
                 l.error('invlid token %s', token)
@@ -75,4 +74,5 @@ def login(email: str, password: str) -> str | None:
                 return token
     except Exception as e:
         l.error('error %s %s', e.__class__.__name__, e)
-        return None
+    finally:
+        hotkey('ctrl', 'q')
