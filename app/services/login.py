@@ -13,7 +13,7 @@ def wait_for_image(path: str, timeout: int = 30):
     while True:
         sleep(0.2)
         if time() - start > timeout:
-            l.warning(f'{path} not found after timeout')
+            l.warning('%s not found after timeout', path)
             break
         try:
             return locate_on_screen(path, grayscale=True)
@@ -74,5 +74,5 @@ def login(email: str, password: str) -> str | None:
             else:
                 return token
     except Exception as e:
-        l.error('error', e.__class__.__name__, e)
+        l.error('error %s %s', e.__class__.__name__, e)
         return None
