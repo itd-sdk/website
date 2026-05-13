@@ -7,11 +7,10 @@ from pyperclip import paste
 
 l = get_logger('services.login')
 
-def wait_for_image(path: str, timeout: int = 60):
+def wait_for_image(path: str, timeout: int = 15):
     path = f'app/services/login_screens/{path}'
     start = time()
     while True:
-        sleep(1)
         if time() - start > timeout:
             l.warning('%s not found after timeout', path)
             break
@@ -23,6 +22,8 @@ def wait_for_image(path: str, timeout: int = 60):
                 return result
         except ImageNotFoundException:
             l.debug('error locate')
+        sleep(3)
+
 
 def login(email: str, password: str) -> str | None:
     # start browser
@@ -32,9 +33,14 @@ def login(email: str, password: str) -> str | None:
     # click(856, 813)
     # sleep(2)
     try:
-
-        Popen(['firefox', '--private-window', 'https://xn--d1ah4a.com/'], stdout=PIPE, stderr=PIPE)
-        assert wait_for_image('home.png')
+        for i in range(5):
+            Popen(['firefox', '--private-window', 'https://xn--d1ah4a.com/'], stdout=PIPE, stderr=PIPE)
+            if wait_for_image('home.png') is not None:
+                break
+            l.warning('failed to connect attempt=%s', i)
+        else:
+            l.error('failed to connect')
+            return None
 
         # login
         l.debug('enter email')
@@ -84,4 +90,4 @@ def login(email: str, password: str) -> str | None:
     except Exception as e:
         l.error('error %s %s', e.__class__.__name__, e)
     finally:
-        sp_run(['pkill', '-SIGTERM', '-f', 'firefox'], capture_output=True)
+        sp_run(['pkill', '-SIGTERM', '-f', 'firefox'])
