@@ -7,7 +7,7 @@ from pyperclip import paste
 
 l = get_logger('services.login')
 
-def wait_for_image(path: str, timeout: int = 15):
+def wait_for_image(path: str, timeout: int = 10):
     path = f'app/services/login_screens/{path}'
     start = time()
     while True:
@@ -34,7 +34,7 @@ def login(email: str, password: str) -> str | None:
     # sleep(2)
     start = time()
     try:
-        for i in range(1, 6):
+        for i in range(1, 4):
             Popen(['firefox', '--private-window', 'https://xn--d1ah4a.com/'], stdout=PIPE, stderr=PIPE)
             if wait_for_image('home.png') is not None:
                 break
