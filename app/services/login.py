@@ -54,7 +54,7 @@ def get_turnstile() -> str | None:
         sleep(0.3)
 
         l.debug('inject script')
-        typewrite('window.fetch = (input, init) => {console.log(init.body)}\n')
+        typewrite('window.fetch=(_,a)=>{console.log(a.body)}\n')
         sleep(0.5)
 
         l.debug('enter email')
@@ -64,7 +64,7 @@ def get_turnstile() -> str | None:
 
         l.debug('enter password')
         click(520, 494)
-        typewrite('67 burmalda')
+        typewrite('67-burmalda')
         sleep(0.1)
 
         l.debug('click login button')
@@ -74,7 +74,7 @@ def get_turnstile() -> str | None:
         l.debug('click captcha')
         click(480, 440)
 
-        assert wait_for_image('home.png')
+        assert wait_for_image('error.png')
 
         l.debug('copy turnstile')
         click(1288, 422, clicks=3)
