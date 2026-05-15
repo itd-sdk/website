@@ -53,4 +53,3 @@ def get_favicon():
 
 
 run(app, host='127.0.0.1', port=8997, log_level='warning')
-

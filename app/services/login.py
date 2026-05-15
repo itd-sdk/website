@@ -54,7 +54,7 @@ def get_turnstile() -> str | None:
         sleep(0.3)
 
         l.debug('inject script')
-        typewrite('window.fetch = (input, init) => {console.log(init.body.turnstileToken)}')
+        typewrite('window.fetch = (input, init) => {console.log(init.body.turnstileToken)}\n')
         sleep(0.5)
 
         l.debug('enter email')
@@ -64,11 +64,11 @@ def get_turnstile() -> str | None:
 
         l.debug('enter password')
         click(530, 530)
-        typewrite('123')
+        typewrite('6-7')
         sleep(0.1)
 
         l.debug('click login button')
-        click(603, 659)
+        click(590, 630)
 
         wait_for_image('captcha.png')
         l.debug('click captcha')
