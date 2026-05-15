@@ -54,17 +54,17 @@ def get_turnstile() -> str | None:
         sleep(0.3)
 
         l.debug('inject script')
-        typewrite('window.fetch = (input, init) => {console.log(init.body.turnstileToken)}\n')
+        typewrite('window.fetch = (input, init) => {console.log(init.body)}\n')
         sleep(0.5)
 
         l.debug('enter email')
-        click(530, 425)
+        click(483, 382)
         typewrite('itd_sdk_login@gmail.com')
         sleep(0.1)
 
         l.debug('enter password')
-        click(530, 530)
-        typewrite('6-7')
+        click(520, 494)
+        typewrite('67 бурмалда')
         sleep(0.1)
 
         l.debug('click login button')
