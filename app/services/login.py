@@ -9,10 +9,11 @@ from pyperclip import paste
 
 l = get_logger('services.login')
 
-def wait_for_image(path: str, timeout: int = 10):
+def wait_for_image(path: str, timeout: int = 8):
     path = f'app/services/login_screens/{path}'
     start = time()
     while True:
+        sleep(3)
         if time() - start > timeout:
             l.warning('%s not found after timeout', path)
             break
@@ -24,7 +25,6 @@ def wait_for_image(path: str, timeout: int = 10):
                 return result
         except ImageNotFoundException:
             l.debug('error locate')
-        sleep(3)
 
 
 def get_turnstile() -> str | None:
@@ -64,7 +64,7 @@ def get_turnstile() -> str | None:
 
         l.debug('enter password')
         click(520, 494)
-        typewrite('67 бурмалда')
+        typewrite('67 burmalda')
         sleep(0.1)
 
         l.debug('click login button')
