@@ -4,19 +4,12 @@ from uuid import UUID # i swear we need this
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import Response
-from sqlalchemy import or_
+from sqlalchemy import or_, desc
 
 from app.services.db import get_db, Session
 from app.schemas.user import User
 
 router = APIRouter(prefix='/users')
-
-@router.get('/')
-def api_get_users(
-    db: Session = Depends(get_db),
-    offset: int = 0
-):
-    return db.query(User).order_by(User.followers).offset(offset).limit(100).all()
 
 
 @router.get('/count')

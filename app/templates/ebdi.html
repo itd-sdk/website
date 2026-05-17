@@ -2,7 +2,7 @@
 
 {% block head %}
 <link rel="stylesheet" href="/static/css/ebdi.css">
-<!-- <script src="/static/js/index.js"></script> -->
+<script src="/static/js/ebdi.js"></script>
 {% endblock %}
 
 {% block content %}
@@ -43,8 +43,35 @@
             <div>Парсинг всех комментариев. (пока не начато).</div>
         </div>
     </div>
-    <h3>Помощь</h3>
-    <p>Вы можете пожертвовать свои вычислительные мощности для ускорения парсинга данных с ИТД. (СКОРО)</p>
+    <!-- <h3>Помощь</h3>
+    <p>Вы можете пожертвовать свои вычислительные мощности для ускорения парсинга данных с ИТД. (СКОРО)</p> -->
+    <div id="users">
+        <div class="user">
+            <div class="user-left"></div>
+            <div class="user-right">
+                <div class="user-followers"><b>Подписчики</b></div>
+                <div class="user-following"><b>Подписки</b></div>
+                <div class="user-posts"><b>Посты</b></div>
+                <div class="user-created-at"><b>Дата создания ака</b></div>
+            </div>
+        </div>
+        <div class="user" id="user-template">
+            <div class="user-left">
+                <div class="user-place">1. </div>
+                <div class="user-avatar">✅</div>
+                <div class="user-name">
+                    <a class="user-display-name" target="_blank">Загрузка...<img src="/static/icons/verified.svg"></a>
+                    <div class="user-username">@loading</div>
+                </div>
+            </div>
+            <div class="user-right">
+                <div class="user-followers">123</div>
+                <div class="user-following">7</div>
+                <div class="user-posts">100</div>
+                <div class="user-created-at">17 мая 2026</div>
+            </div>
+        </div>
+    </div>
     <div id="note">Лицензировано под <a href="https://creativecommons.org/licenses/by-nc/4.0/">CC BY-NC 4.0</a></div>
 </div>
 {% endblock %}

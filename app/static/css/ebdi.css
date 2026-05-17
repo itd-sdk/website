@@ -45,6 +45,86 @@
   font-weight: 700;
 }
 
+#users {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.user {
+  background-color: #2C2A27;
+  border-radius: 8px;
+  padding: 8px 16px;
+  width: 80vw;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.user-left {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.user-right {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+
+.user-place {
+  margin-left: 4px;
+  font-weight: bold;
+  flex-grow: 0.2;
+}
+
+.user-avatar {
+  border-radius: 32px;
+  width: 40px;
+  height: 40px;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  background-color: #494037;
+  flex-grow: 1;
+}
+
+.user-name {
+  flex-grow: 3;
+}
+
+.user-display-name {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 18px;
+  color: #fff;
+}
+
+.user-username {
+  color: #777;
+  font-style: oblique 10deg;
+  font-size: 13px;
+}
+
+.user-followers, .user-following, .user-posts {
+  width: 120px;
+  text-align: center;
+}
+.user-created-at {
+  width: 180px;
+  text-align: center;
+}
+
+
+.user-spacer {
+  flex-grow: 15;
+}
+
+
 #note {
   margin-top: 30px;
   color: #bbb;

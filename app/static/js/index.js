@@ -9,7 +9,7 @@ function get_el(id) {
 async function fetch_users_count() {
   const res = await fetch('/api/users/count');
   if (!res.ok) {
-    alert('Ошиба польучения количества пользователей');
+    alert('Ошиба получения количества пользователей');
     return;
   }
   const json = await res.json();
