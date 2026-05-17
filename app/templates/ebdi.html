@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block head %}
+<link rel="stylesheet" href="/static/css/ebdi.css">
+<!-- <script src="/static/js/index.js"></script> -->
+{% endblock %}
+
+{% block content %}
+<div id="landing">
+    <img id="banner" src="/static/images/ebdi.png">
+    <div id="landing-description">Единая База Данных ИТД</div>
+</div>
+
+<div id="content">
+    <p>Открытая база данных с открытым исходным кодом.</p>
+    <div id="objects">
+        <div class="object" style="background: #a9570aca;">
+            <div class="object-top">
+                <div class="object-num">1</div>
+                <div class="object-title">Пользователи ✅</div>
+            </div>
+            <div>Парсинг всех пользователей ИТД. Собрано 60 000+ / 50 000 пользователей через <a href="https://github.com/itd-sdk/scraper">scraper</a>.</div>
+        </div>
+        <div class="object" style="background: linear-gradient(to right, #a9570aca 5%, #2C2A27 7%);">
+            <div class="object-top">
+                <div class="object-num">2</div>
+                <div class="object-title">Вложения</div>
+            </div>
+            <div>Сохранение всех вложений. Уже собрано 1300+ / 20000 картинок через <a href="https://github.com/itd-sdk/itdposts">itdposts</a>.</div>
+        </div>
+        <div class="object">
+            <div class="object-top">
+                <div class="object-num">3</div>
+                <div class="object-title">Посты</div>
+            </div>
+            <div>Парсинг всех постов со стен пользователей. (пока не начато).</div>
+        </div>
+        <div class="object">
+            <div class="object-top">
+                <div class="object-num">4</div>
+                <div class="object-title">Комментарии</div>
+            </div>
+            <div>Парсинг всех комментариев. (пока не начато).</div>
+        </div>
+    </div>
+    <h3>Помощь</h3>
+    <p>Вы можете пожертвовать свои вычислительные мощности для ускорения парсинга данных с ИТД. (СКОРО)</p>
+    <div id="note">Лицензировано под <a href="https://creativecommons.org/licenses/by-nc/4.0/">CC BY-NC 4.0</a></div>
+</div>
+{% endblock %}

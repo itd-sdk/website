@@ -1,9 +1,8 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import func, Column, Uuid
+from sqlalchemy import func
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy.types import ARRAY
 
 from app.services.db import Base
 
@@ -13,9 +12,10 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     user_id: Mapped[UUID] = mapped_column(unique=True)
-    found_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
+    found_at: Mapped[datetime] = mapped_column(server_default=func.now())
     created_at: Mapped[datetime] = mapped_column(nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())
     username: Mapped[str] = mapped_column(unique=True)
     display_name: Mapped[str]
     followers: Mapped[int]
