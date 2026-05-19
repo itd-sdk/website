@@ -4,6 +4,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, field_validator
 from sqlalchemy import desc
 
 from app.services.db import get_db, Session
@@ -11,6 +12,33 @@ from app.schemas.app import App
 from app.schemas.user import User
 
 router = APIRouter(prefix='/ebdi')
+
+
+class UserBody(BaseModel):
+    created_at: datetime
+    username: str
+    display_name: str
+    followers: list[UUID]
+    following: list[UUID]
+    followers_count: int
+    following_count: int
+    posts_count: int
+    verified: bool
+    avatar: str
+
+
+class UserResponse(UserBody):
+    id: int
+    user_id: UUID
+    found_at: datetime
+    has_itdp: bool
+
+    @field_validator('followers', 'following', mode='before')
+    @classmethod
+    def parse_uuid_list(cls, v):
+        if isinstance(v, str):
+            return eval(v)
+        return v
 
 
 class UserOrder(str, Enum):
@@ -22,7 +50,7 @@ class UserOrder(str, Enum):
     updated_at = 'updated_at'
 
 
-@router.get('/users')
+@router.get('/users', response_model=list[UserResponse])
 def api_get_ebdi_users(
     offset: int = 0,
     order: UserOrder = UserOrder.followers,
@@ -30,29 +58,12 @@ def api_get_ebdi_users(
     db: Session = Depends(get_db)
 ):
     col = getattr(User, order.value)
-    return [{
-        'id': user.id,
-        'user_id': user.user_id,
-        'found_at': user.found_at,
-        'created_at': user.created_at,
-        'username': user.username,
-        'display_name': user.display_name,
-        'followers': eval(user.followed_by_users),
-        'following': eval(user.following_users),
-        'followers_count': user.followers,
-        'following_count': user.following,
-        'posts_count': user.posts,
-        'verified': user.verified,
-        'avatar': user.avatar,
-        'has_itdp': user.has_itdp
-    } for user in db.query(User).order_by(desc(col) if descending else col).offset(offset).limit(100).all()]
+    return [UserResponse.model_validate(user, from_attributes=True) for user in db.query(User).order_by(desc(col) if descending else col).offset(offset).limit(100).all()]
 
 
 @router.post('/users')
 def api_post_ebdi(
-    app_token: str, id: UUID, created_at: datetime, username: str, display_name: str,
-    followers: list[UUID], following: list[UUID], followers_count: int, following_count: int,
-    posts_count: int, verified: bool, avatar: str, db: Session = Depends(get_db)
+    app_token: str, id: UUID, body: UserBody, db: Session = Depends(get_db)
 ):
     app = db.query(App).where(App.token == app_token).first()
     if app is None:
@@ -63,16 +74,16 @@ def api_post_ebdi(
 
     user = User(
         user_id=id,
-        created_at=created_at,
-        username=username,
-        display_name=display_name,
-        followed_by_users=str(followers),
-        following_users=str(following),
-        followers=followers_count,
-        following=following_count,
-        posts=posts_count,
-        verified=verified,
-        avatar=avatar
+        created_at=body.created_at,
+        username=body.username,
+        display_name=body.display_name,
+        followed_by_users=str(body.followers),
+        following_users=str(body.following),
+        followers=body.followers_count,
+        following=body.following_count,
+        posts=body.posts_count,
+        verified=body.verified,
+        avatar=body.avatar
     )
     db.add(user)
     db.commit()
@@ -82,9 +93,7 @@ def api_post_ebdi(
 
 @router.put('/users/{id}')
 def api_put_ebdi_users(
-    app_token: str, id: UUID, created_at: datetime, username: str, display_name: str,
-    followers: list[UUID], following: list[UUID], followers_count: int, following_count: int,
-    posts_count: int, verified: bool, avatar: str, db: Session = Depends(get_db)
+    app_token: str, id: UUID, body: UserBody, db: Session = Depends(get_db)
 ):
     app = db.query(App).where(App.token == app_token).first()
     if app is None:
@@ -94,16 +103,16 @@ def api_put_ebdi_users(
     if user is None:
         return JSONResponse({'detail': 'user not found'}, 404)
 
-    user.created_at = created_at
-    user.username = username
-    user.display_name = display_name
-    user.followed_by_users = str(followers)
-    user.following_users = str(following)
-    user.followers = followers_count
-    user.following = following_count
-    user.posts = posts_count
-    user.verified = verified
-    user.avatar = avatar
+    user.created_at = body.created_at
+    user.username = body.username
+    user.display_name = body.display_name
+    user.followed_by_users = str(body.followers)
+    user.following_users = str(body.following)
+    user.followers = body.followers_count
+    user.following = body.following_count
+    user.posts = body.posts_count
+    user.verified = body.verified
+    user.avatar = body.avatar
 
     db.commit()
     db.refresh(user)
