@@ -80,8 +80,8 @@ def api_post_ebdi(
     return user
 
 
-@router.put('/users')
-def api_put_ebdi(
+@router.put('/users/{id}')
+def api_put_ebdi_users(
     app_token: str, id: UUID, created_at: datetime, username: str, display_name: str,
     followers: list[UUID], following: list[UUID], followers_count: int, following_count: int,
     posts_count: int, verified: bool, avatar: str, db: Session = Depends(get_db)
@@ -110,6 +110,20 @@ def api_put_ebdi(
     return user
 
 
+@router.delete('/users/{id}')
+def api_delete_ebdi_users(app_token: str, id: UUID, db: Session = Depends(get_db)):
+    app = db.query(App).where(App.token == app_token).first()
+    if app is None:
+        return JSONResponse({'detail': 'invalid app token'}, 401)
+
+    user = db.query(User).where(User.user_id == id).first()
+    if user is None:
+        return JSONResponse({'detail': 'user not found'}, 404)
+
+    user.exists = False
+    db.commit()
+
+
 @router.get('/task')
 def api_get_task(app_token: str, db: Session = Depends(get_db)):
     app = db.query(App).where(App.token == app_token).first()
@@ -129,7 +143,7 @@ def api_get_task(app_token: str, db: Session = Depends(get_db)):
             app.task_assigned_start = start
             app.task_assigned_end = start + 100
             db.commit()
-            users = db.query(User).where(User.updated_at < stale_cutoff).offset(start).limit(100).all()
+            users = db.query(User).where(User.updated_at < stale_cutoff).order_by(User.followers.desc()).offset(start).limit(100).all()
 
             return {'task': 'update', 'start': start, 'end': start + 100, 'users': [u.user_id for u in users]}
 

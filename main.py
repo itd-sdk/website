@@ -4,7 +4,7 @@ from datetime import datetime
 
 from fastapi import FastAPI, Request, Response
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from uvicorn import run
 
@@ -30,8 +30,9 @@ app.state.is_loginning = False
 
 @app.exception_handler(404)
 def handle_404(request: Request, _):
-    if not request.url.path.startswith('api'):
-        return templates.TemplateResponse(request, '404.html', status_code=404)
+    if request.url.path.startswith('/api'):
+        return JSONResponse({'detail': 'not found'}, status_code=404)
+    return templates.TemplateResponse(request, '404.html', status_code=404)
 
 
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
