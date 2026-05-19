@@ -88,10 +88,11 @@ def api_post_ebdi(
     db.add(user)
     db.commit()
     db.refresh(user)
+    app.added += 1
     return user
 
 
-@router.put('/users/{id}')
+@router.put('/users/{id}', status_code=204)
 def api_put_ebdi_users(
     app_token: str, id: UUID, body: UserBody, db: Session = Depends(get_db)
 ):
@@ -115,11 +116,10 @@ def api_put_ebdi_users(
     user.avatar = body.avatar
 
     db.commit()
-    db.refresh(user)
-    return user
+    app.refreshed += 1
 
 
-@router.delete('/users/{id}')
+@router.delete('/users/{id}', status_code=204)
 def api_delete_ebdi_users(app_token: str, id: UUID, db: Session = Depends(get_db)):
     app = db.query(App).where(App.token == app_token).first()
     if app is None:
@@ -131,6 +131,7 @@ def api_delete_ebdi_users(app_token: str, id: UUID, db: Session = Depends(get_db
 
     user.exists = False
     db.commit()
+    app.refreshed += 1
 
 
 @router.get('/task')
