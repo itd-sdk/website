@@ -129,6 +129,7 @@ async def api_websocket_ebdi_users(
                 user.posts = updated.posts_count
                 user.verified = updated.verified
                 user.avatar = updated.avatar
+                app.refreshed += 1
 
             db.commit()
             tasks.remove(task)
