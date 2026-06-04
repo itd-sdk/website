@@ -37,9 +37,11 @@ def get_targets():
 
 
 def remove_expired_tasks():
-    for task in tasks:
-        if task.started_at + timedelta(minutes=15) > datetime.now():
-            tasks.remove(task)
+    now = datetime.now()
+    expired = [t for t in tasks if now - t.started_at > timedelta(minutes=15)]
+    for t in expired:
+        l.warning("expire task for %s", t.app.name)
+        tasks.remove(t)
 
 
 class UserBody(BaseModel):
@@ -83,6 +85,8 @@ async def api_websocket_ebdi_users(
     websocket: WebSocket, app_token: str, db: Session = Depends(get_db)
 ):
     l.info("init connection")
+    remove_expired_tasks()
+
     app = db.query(App).where(App.token == app_token).first()
     if app is None:
         l.info("decline reason=invalid token")
@@ -94,6 +98,7 @@ async def api_websocket_ebdi_users(
         return
 
     await websocket.accept()
+    task: Task | None = None
     try:
         users = db.query(User).order_by(User.updated_at)
         while True:
@@ -127,8 +132,12 @@ async def api_websocket_ebdi_users(
 
             db.commit()
             tasks.remove(task)
+            task = None
     except WebSocketDisconnect:
         l.info("close connection %s", app.name)
+    finally:
+        if task is not None:
+            tasks.remove(task)
 
 
 @router.get("/users", response_model=list[UserResponse])
