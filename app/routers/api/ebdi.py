@@ -5,7 +5,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, WebSocket
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, field_validator
 from sqlalchemy import desc
 from starlette.websockets import WebSocketDisconnect
 
@@ -48,11 +48,11 @@ class UserBody(BaseModel):
     created_at: datetime
     username: str
     display_name: str
-    followers: list[UUID] = Field(validation_alias="followed_by_users")
-    following: list[UUID] = Field(validation_alias="following_users")
-    followers_count: int = Field(validation_alias="followers")
-    following_count: int = Field(validation_alias="following")
-    posts_count: int = Field(validation_alias="posts")
+    followers: list[UUID]
+    following: list[UUID]
+    followers_count: int
+    following_count: int
+    posts_count: int
     verified: bool
     avatar: str
 
@@ -72,8 +72,8 @@ class UserResponse(UserBody):
 
 
 class UserOrder(Enum):
-    followers = "followers"
-    following = "following"
+    followers = "followers_count"
+    following = "following_count"
     posts = "posts"
     created_at = "created_at"
     found_at = "found_at"
@@ -122,10 +122,10 @@ async def api_websocket_ebdi_users(
                 user.created_at = updated.created_at
                 user.username = updated.username
                 user.display_name = updated.display_name
-                user.followed_by_users = str(updated.followers)
-                user.following_users = str(updated.following)
-                user.followers = updated.followers_count
-                user.following = updated.following_count
+                user.followers = updated.followers
+                user.following = updated.following
+                user.followers_count = updated.followers_count
+                user.following_count = updated.following_count
                 user.posts = updated.posts_count
                 user.verified = updated.verified
                 user.avatar = updated.avatar
@@ -175,11 +175,11 @@ def api_post_ebdi(
         created_at=body.created_at,
         username=body.username,
         display_name=body.display_name,
-        followed_by_users=str(body.followers),
-        following_users=str(body.following),
-        followers=body.followers_count,
-        following=body.following_count,
-        posts=body.posts_count,
+        followers=body.followers,
+        following=body.following,
+        followers_count=body.followers_count,
+        following_count=body.following_count,
+        posts_count=body.posts_count,
         verified=body.verified,
         avatar=body.avatar
     )

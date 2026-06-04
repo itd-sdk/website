@@ -2,6 +2,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -18,6 +19,8 @@ BASE_DIR = Path(__file__).resolve().parent / "app"
 
 app = FastAPI(docs_url=None, redoc_url=None)
 templates = Jinja2Templates(directory="app/templates/")
+
+load_dotenv()
 create_db()
 setup_logging("DEBUG")
 l = get_logger()
