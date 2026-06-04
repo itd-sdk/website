@@ -1,8 +1,8 @@
 from fastapi import APIRouter
 
-from app.routers.api import users, login, ebdi
+from app.routers.api import ebdi, turnstile, users
 
-router = APIRouter(prefix='/api')
+router = APIRouter(prefix="/api")
 router.include_router(users.router)
-router.include_router(login.router)
+router.include_router(turnstile.router)
 router.include_router(ebdi.router)

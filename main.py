@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Callable
@@ -14,10 +15,21 @@ from app.routers import router
 from app.routers.api import router as api_router
 from app.services.db import create_db
 from app.services.github_service import get_analogs, get_projects
+from app.services.turnstile import start_browser, stop_browser
 
 BASE_DIR = Path(__file__).resolve().parent / "app"
 
-app = FastAPI(docs_url=None, redoc_url=None)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    l.info("start server")
+    await start_browser()
+    yield
+    l.info("stop server")
+    await stop_browser()
+
+
+app = FastAPI(docs_url=None, redoc_url=None, lifespan=lifespan)
 templates = Jinja2Templates(directory="app/templates/")
 
 load_dotenv()
