@@ -1,30 +1,34 @@
+from subprocess import PIPE, Popen
+from subprocess import run as sp_run
 from time import sleep, time
-from subprocess import Popen, PIPE, run as sp_run
-from app.logger import get_logger
 
 from itd import ITDClient
 from itd.api.auth import sign_in
-from pyautogui import click, typewrite, hotkey, locateOnScreen as locate_on_screen, ImageNotFoundException
+from pyautogui import ImageNotFoundException, click, hotkey, typewrite
+from pyautogui import locateOnScreen as locate_on_screen
 from pyperclip import paste
 
-l = get_logger('services.login')
+from app.logger import get_logger
+
+l = get_logger("services.login")
+
 
 def wait_for_image(path: str, timeout: int = 8):
-    path = f'app/services/login_screens/{path}'
+    path = f"app/services/login_screens/{path}"
     start = time()
     while True:
         sleep(3)
         if time() - start > timeout:
-            l.warning('%s not found after timeout', path)
+            l.warning("%s not found after timeout", path)
             break
         try:
-            l.debug('start locate')
+            l.debug("start locate")
             result = locate_on_screen(path, grayscale=True)
-            l.debug('end locate')
+            l.debug("end locate")
             if result is not None:
                 return result
         except ImageNotFoundException:
-            l.debug('error locate')
+            l.debug("error locate")
 
 
 def get_turnstile() -> str | None:
@@ -37,59 +41,63 @@ def get_turnstile() -> str | None:
     start = time()
     try:
         for i in range(1, 4):
-            Popen(['firefox', '--private-window', 'https://xn--d1ah4a.com/'], stdout=PIPE, stderr=PIPE)
-            if wait_for_image('home.png') is not None:
+            Popen(
+                ["firefox", "--private-window", "https://xn--d1ah4a.com/"],
+                stdout=PIPE,
+                stderr=PIPE
+            )
+            if wait_for_image("home.png") is not None:
                 break
-            l.warning('failed to connect attempt=%s', i)
+            l.warning("failed to connect attempt=%s", i)
         else:
-            l.error('failed to connect')
+            l.error("failed to connect")
             return None
 
-        l.debug('open devtools')
-        hotkey('f12')
+        l.debug("open devtools")
+        hotkey("f12")
         sleep(0.3)
 
-        l.debug('open console')
-        hotkey('ctrl', 'shift', 'k')
+        l.debug("open console")
+        hotkey("ctrl", "shift", "k")
         sleep(0.3)
 
-        l.debug('inject script')
-        typewrite('window.fetch=(_,a)=>{console.log(a.body)}\n')
+        l.debug("inject script")
+        typewrite("window.fetch=(_,a)=>{console.log(a.body)}\n")
         sleep(0.5)
 
-        l.debug('enter email')
+        l.debug("enter email")
         click(483, 382)
-        typewrite('itd_sdk_login@gmail.com')
+        typewrite("itd_sdk_login@gmail.com")
         sleep(0.1)
 
-        l.debug('enter password')
+        l.debug("enter password")
         click(520, 494)
-        typewrite('67-burmalda')
+        typewrite("67-burmalda")
         sleep(0.1)
 
-        l.debug('click login button')
+        l.debug("click login button")
         click(590, 630)
 
-        wait_for_image('captcha.png')
-        l.debug('click captcha')
+        wait_for_image("captcha.png")
+        l.debug("click captcha")
         click(480, 440)
 
-        assert wait_for_image('error.png')
+        assert wait_for_image("error.png")
 
-        l.debug('copy turnstile')
+        l.debug("copy turnstile")
         click(1288, 422, clicks=3)
-        hotkey('ctrl', 'c')
+        hotkey("ctrl", "c")
 
-        return eval(paste())['turnstileToken']
+        return eval(paste())["turnstileToken"]
     except Exception as e:
-        l.error('error %s %s', e.__class__.__name__, e)
+        l.error("error %s %s", e.__class__.__name__, e)
     finally:
-        l.info('spent %ss', round(time() - start))
-        sp_run(['pkill', '-SIGTERM', '-f', 'firefox'])
+        l.info("spent %ss", round(time() - start))
+        sp_run(["pkill", "-SIGTERM", "-f", "firefox"])
 
 
 def login(email: str, password: str):
     turnstile = get_turnstile()
     if turnstile is None:
         return
-    return sign_in(ITDClient(), email, password, turnstile).cookies.get('refresh_token')
+    return sign_in(ITDClient(), email, password, turnstile).cookies.get("refresh_token")
