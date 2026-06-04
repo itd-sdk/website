@@ -12,6 +12,8 @@ l = get_logger("api.login")
 
 @router.get("/")
 def api_get_login(request: Request, email: str, password: str):
+    if login is None:
+        return JSONResponse({"detail": "login disabled by service"}, 500)
     l.info("receive login")
     while request.app.state.is_loginning:
         sleep(0.1)
