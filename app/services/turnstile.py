@@ -1,6 +1,7 @@
-from asyncio import run, sleep
+# original by @itdStatus
+
+from asyncio import sleep
 from typing import cast
-from uuid import uuid4
 
 from camoufox.async_api import AsyncCamoufox
 from fastapi.responses import JSONResponse

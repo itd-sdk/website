@@ -63,13 +63,6 @@ class UserResponse(UserBody):
     found_at: datetime
     has_itdp: bool
 
-    @field_validator("followers", "following", mode="before")
-    @classmethod
-    def parse_uuid_list(cls, v):
-        if isinstance(v, str):
-            return eval(v)
-        return v
-
 
 class UserOrder(Enum):
     followers = "followers_count"
@@ -112,23 +105,29 @@ async def api_websocket_ebdi_users(
             tasks.append(task)
 
             for user in task.targets:
-                l.info("send %s to %s", user.user_id, app.name)
+                l.debug("[%s] > %s", app.name, user.user_id)
                 await websocket.send_json({"type": "user", "id": str(user.user_id)})
-                updated = UserBody.model_validate(
-                    await websocket.receive_json(), by_alias=False, by_name=True
-                )
-                l.info("received %s from %s", updated.username, app.name)
 
-                user.created_at = updated.created_at
-                user.username = updated.username
-                user.display_name = updated.display_name
-                user.followers = updated.followers
-                user.following = updated.following
-                user.followers_count = updated.followers_count
-                user.following_count = updated.following_count
-                user.posts = updated.posts_count
-                user.verified = updated.verified
-                user.avatar = updated.avatar
+                data = await websocket.receive_json()
+                if not data.get("exists"):
+                    l.debug("[%s] < not exists", app.name)
+                    user.exists = False
+                else:
+                    updated = UserBody.model_validate(
+                        data, by_alias=False, by_name=True
+                    )
+                    l.debug("[%s] < %s", app.name, updated.username)
+
+                    user.created_at = updated.created_at
+                    user.username = updated.username
+                    user.display_name = updated.display_name
+                    user.followers = updated.followers
+                    user.following = updated.following
+                    user.followers_count = updated.followers_count
+                    user.following_count = updated.following_count
+                    user.posts = updated.posts_count
+                    user.verified = updated.verified
+                    user.avatar = updated.avatar
                 app.refreshed += 1
 
             db.commit()
