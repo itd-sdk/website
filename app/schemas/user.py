@@ -19,7 +19,7 @@ class User(Base):
     )
 
     created_at: Mapped[datetime] = mapped_column(nullable=True)
-    username: Mapped[str] = mapped_column(unique=True)
+    username: Mapped[str]
     display_name: Mapped[str]
     followers_count: Mapped[int]
     following_count: Mapped[int]
