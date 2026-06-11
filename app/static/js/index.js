@@ -21,7 +21,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const count = await fetch_users_count();
     get_el("graph-description-current").textContent = count;
     get_el("graph").hidden = false;
-    if (Math.floor(Math.random() * 101) > 5) {
+    if (Math.floor(Math.random() * 101) < 5) {
         console.info("пасхалка добавлена :)");
         get_el("ebdi-description").textContent =
             "Ебливая База Данных ИТД - топ пользователей, вложения, (скоро посты и комментарии).";
