@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block head %}
+<link rel="stylesheet" href="/static/css/ebdi-epepuy.css">
+{% endblock %}
+
+{% block content %}
+<div id="description">
+    <div>3681 рисунков ЕПЭПЮ. (~3000 собрано <a href="https://итд.com/@lilpikmis">@lilpikmis</a>)</div>
+    <div>Для новой дозы обнови страницу</div>
+    <button onclick="location.href='/ebdi/epepuy/raw';">Случайная картинка</button>
+</div>
+<div id="content">
+    {% for image in images %}
+    <image src="{{ image }}">
+    {% endfor %}
+</div>
+{% endblock %}
