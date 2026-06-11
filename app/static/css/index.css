@@ -1,179 +1,194 @@
 #landing {
-  height: 100vh;
-  align-items: center;
-  justify-content: center;
-  display: flex;
-  flex-direction: column;
-  margin-bottom: 50px; /* типа немношка криво */
-  background-image:
-    linear-gradient(125deg, #1E1C1A 60%, #1e1c1ad3 70%, transparent),
-    url('/static/images/code.png');
+    height: 100vh;
+    align-items: center;
+    justify-content: center;
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 50px; /* типа немношка криво */
+    background:
+        linear-gradient(125deg, #1e1c1a66 50%, #1e1c1acc 70%),
+        url("/static/images/code2.png");
+    background-position: center;
+    background-size: 50vw auto;
+    background-repeat: no-repeat;
+
     /* linear-gradient(125deg, #1E1C1A 80%, #1e1c1ad3 90%, transparent), */
     /* url('/static/images/grid.png'); */
 }
 
 #landing-buttons {
-  gap: 15px;
-  display: flex;
+    gap: 15px;
+    display: flex;
 }
-#landing-vizualizer {
-  position: absolute;
-  top: 70vh;
-  left: 0;
-  mask-image: linear-gradient(to right, #000, transparent 50%);
-  height: 30vh;
-}
+/*#landing-vizualizer {
+    position: absolute;
+    top: 70vh;
+    left: 0;
+    mask-image: linear-gradient(to right, #000, transparent 50%);
+    height: 30vh;
+}*/
 
 .arrow-bottom {
-  rotate: 90deg;
-  margin-right: 3px;
+    rotate: 90deg;
+    margin-right: 3px;
 }
 
 #graph {
-  background:
-    linear-gradient(to right, #2C2A27, #2C2A2700),
-    url('/static/images/graph.png');
-  background-size: cover;
-  border: #FBEADB 1px solid;
-  padding: 15px;
-  border-radius: 16px;
-  display: flex;
-  flex-direction: column;
+    background:
+        linear-gradient(to right, #2c2a27, #2c2a2700),
+        url("/static/images/graph.png");
+    background-size: cover;
+    border: #fbeadb 1px solid;
+    padding: 15px;
+    border-radius: 16px;
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    margin-left: 16px;
+    margin-right: 16px;
 }
 
 #graph-description {
-  color: #999;
+    color: #999;
 }
 
-#graph-progress {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 15px;
-}
-#graph-progress-bar {
-  width: 100%;
-  height: 15px;
-  border-radius: 5px;
-  background: linear-gradient(to right, #fd7f08 67%, #1E1C1A 68%);
-}
-
-#graph-progress-count {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-#graph-progress-count-value {
-  font-size: 35px;
-  font-weight: 700;
-  line-height: 1;
-}
-#graph-progress-count-name {
-  color: #ddd;
-}
-
-#graph-actions {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 15px;
-}
-/* #graph-actions button {
-  display: inline;
-} */
 #graph-other {
-  color: #555;
-  font-size: 13px;
+    color: #666;
+}
+#graph button {
+    height: min-content;
+    align-self: center;
 }
 
+#ebdi {
+    margin-top: 30px;
+    background: #2c2a27;
+    padding: 20px;
+    margin-left: -20px;
+    margin-right: -20px;
+    height: 40vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: end;
+    position: relative;
+    padding-right: 100px;
+}
+#ebdi * {
+    z-index: 2;
+}
+#ebdi button {
+    margin-top: auto;
+}
+#ebdi::after {
+    content: "";
+    background: url("/static/images/ebdi-users.png") no-repeat left center;
+    background-size: contain;
+    position: absolute;
+    left: 10px;
+    bottom: -40px;
+    width: 70%;
+    height: 130%;
+}
+
+@media (max-width: 600px) {
+    #ebdi {
+        background: transparent;
+    }
+    #ebdi::after {
+        bottom: -80px;
+        left: -15px;
+        height: 140%;
+        width: 140%;
+        opacity: 0.7;
+    }
+}
 
 .projects {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  /* grid-template-columns: repeat(5, calc(90vw / 5)); */
-  gap: 15px 15px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    /* grid-template-columns: repeat(5, calc(90vw / 5)); */
+    gap: 15px 15px;
 }
 
 #analogs-description {
-  margin-top: -15px;
-  margin-bottom: 8px;
+    margin-top: -15px;
+    margin-bottom: 8px;
 }
-
 
 /* https://codepen.io/maccc/pen/WNYvqPE */
 #history {
-  display: flex;
+    display: flex;
 }
 
 #history-line {
-  position: relative;
-  height: 100%;
-  padding: 10px 0;
+    position: relative;
+    height: 100%;
+    padding: 10px 0;
 }
 
 .history-event {
-  position: relative;
-  height: 60px;
+    position: relative;
+    height: 60px;
 }
 
 .history-event-circle {
-  position: absolute;
-  top: 50%;
-  left: 0;
-  width: 15px;
-  height: 15px;
-  background-color: #FBEADB;
-  border: 3px solid #fd7f08;
-  border-radius: 50%;
-  transform: translate(-50%, -50%);
+    position: absolute;
+    top: 50%;
+    left: 0;
+    width: 15px;
+    height: 15px;
+    background-color: #fbeadb;
+    border: 3px solid #fd7f08;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
 }
 
 .history-event-circle::after {
-  content: "";
-  position: absolute;
-  top: 100%;
-  left: 50%;
-  height: 60px;
-  width: 3px;
-  background-color: #C98F65;
-  transform: translateX(-50%);
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    height: 60px;
+    width: 3px;
+    background-color: #c98f65;
+    transform: translateX(-50%);
 }
 
 .history-event-content {
-  position: absolute;
-  left: 20px;
-  top: 50%;
-  transform: translateY(-50%);
+    position: absolute;
+    left: 20px;
+    top: 50%;
+    transform: translateY(-50%);
 }
 .history-event-date {
-  color: #ccc;
-  margin-right: 15px;
+    color: #ccc;
+    margin-right: 15px;
 }
 .history-event-label {
-  display: block;
-  min-width: 90vw;
+    display: block;
+    min-width: 90vw;
 }
 
 .history-event:last-child .history-event-circle::after {
-  mask-image: linear-gradient(to bottom, #000, transparent 20%);
+    mask-image: linear-gradient(to bottom, #000, transparent 20%);
 }
 
 #history-etc {
-  color: #888;
-  font-style: oblique 20deg;
+    color: #888;
+    font-style: oblique 20deg;
 }
 
-
-@media(max-width: 700px) {
-  .history-event-circle::after, .history-event {
-    height: 120px;
-  }
+@media (max-width: 700px) {
+    .history-event-circle::after,
+    .history-event {
+        height: 120px;
+    }
 }
-
 
 #star-history {
-  margin-top: 50px;
-  margin-left: auto;
-  margin-right: auto;
-  width: min-content;
+    margin-top: 50px;
+    margin-left: auto;
+    margin-right: auto;
+    width: min-content;
 }

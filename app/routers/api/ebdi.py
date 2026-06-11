@@ -3,16 +3,15 @@ from datetime import datetime, timedelta
 from enum import Enum
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, WebSocket
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel, field_validator
-from sqlalchemy import desc
-from starlette.websockets import WebSocketDisconnect
-
 from app.logger import get_logger
 from app.schemas.app import App
 from app.schemas.user import User
 from app.services.db import Session, get_db
+from fastapi import APIRouter, Depends, WebSocket
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
+from sqlalchemy import desc
+from starlette.websockets import WebSocketDisconnect
 
 router = APIRouter(prefix="/ebdi")
 l = get_logger("ebdi")
