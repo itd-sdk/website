@@ -3,15 +3,15 @@ from datetime import datetime, timedelta
 from enum import Enum
 from uuid import UUID
 
-from app.logger import get_logger
-from app.schemas.app import App
-from app.schemas.user import User
-from app.services.db import Session, get_db
 from fastapi import APIRouter, Depends, WebSocket
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy import desc
 from starlette.websockets import WebSocketDisconnect
+
+from app.logger import get_logger
+from app.schemas import App, User
+from app.services.db import Session, get_db
 
 router = APIRouter(prefix="/ebdi")
 l = get_logger("ebdi")
@@ -66,7 +66,7 @@ class UserResponse(UserBody):
 class UserOrder(Enum):
     followers = "followers_count"
     following = "following_count"
-    posts = "posts"
+    posts_count = "posts_count"
     created_at = "created_at"
     found_at = "found_at"
     updated_at = "updated_at"
@@ -92,9 +92,15 @@ async def api_websocket_ebdi_users(
     await websocket.accept()
     task: Task | None = None
     try:
-        users = db.query(User).order_by(User.updated_at)
         while True:
-            task = Task(app, users.where(User.id.not_in(get_targets())).limit(20).all())
+            task = Task(
+                app,
+                db.query(User)
+                .order_by(User.updated_at)
+                .where(User.id.not_in(get_targets()))
+                .limit(20)
+                .all()
+            )
             l.info("create task for %s", app.name)
             if not task.targets:
                 l.warning("no targets")
@@ -104,29 +110,20 @@ async def api_websocket_ebdi_users(
             tasks.append(task)
 
             for user in task.targets:
-                l.debug("[%s] > %s", app.name, user.user_id)
+                l.debug("\[%s] > %s", app.name, user.user_id)
                 await websocket.send_json({"type": "user", "id": str(user.user_id)})
 
                 data = await websocket.receive_json()
-                if not data.get("exists"):
-                    l.debug("[%s] < not exists", app.name)
+                if not data.get("exists", True):
+                    l.debug("\[%s] < not exists", app.name)
                     user.exists = False
+                    user.updated_at = datetime.now()
                 else:
-                    updated = UserBody.model_validate(
-                        data, by_alias=False, by_name=True
-                    )
-                    l.debug("[%s] < %s", app.name, updated.username)
-
-                    user.created_at = updated.created_at
-                    user.username = updated.username
-                    user.display_name = updated.display_name
-                    user.followers = updated.followers
-                    user.following = updated.following
-                    user.followers_count = updated.followers_count
-                    user.following_count = updated.following_count
-                    user.posts = updated.posts_count
-                    user.verified = updated.verified
-                    user.avatar = updated.avatar
+                    updated = UserBody.model_validate(data)
+                    l.debug("\[%s] < %s", app.name, updated.username)
+                    for i in updated.model_fields_set:
+                        setattr(user, i, getattr(updated, i))
+                    user.updated_at = datetime.now()
                 app.refreshed += 1
 
             db.commit()
