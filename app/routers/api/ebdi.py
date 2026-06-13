@@ -44,7 +44,7 @@ def remove_expired_tasks():
 
 
 class UserBody(BaseModel):
-    created_at: datetime
+    created_at: datetime | None = None
     username: str
     display_name: str
     followers: list[UUID]
