@@ -4,8 +4,7 @@
 
 from pathlib import Path
 
-import numpy as np
-from PIL import Image, ImageOps
+from PIL import Image
 
 # Access all PNG files in directory
 images = [file for file in Path("epepuy").iterdir() if file.name.endswith(".jpg")][:255]

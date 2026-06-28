@@ -30,3 +30,5 @@ class User(Base):
     followers: Mapped[list[UUID]] = mapped_column(ARRAY(PG_UUID(as_uuid=True)))
     avatar: Mapped[str] = mapped_column(default="?")
     exists: Mapped[bool] = mapped_column(default=True)
+    bio: Mapped[str] = mapped_column(nullable=True)
+    banner: Mapped[str] = mapped_column(nullable=True)

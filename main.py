@@ -69,4 +69,4 @@ def get_favicon():
     return FileResponse(BASE_DIR / "static" / "favicon.ico")
 
 
-run(app, host="127.0.0.1", port=8997, log_level="warning")
+run(app, host="127.0.0.1", port=8997, log_level="warning", ws_ping_timeout=60)

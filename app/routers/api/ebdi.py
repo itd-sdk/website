@@ -1,3 +1,4 @@
+from asyncio import wait_for
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
@@ -8,6 +9,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy import desc
 from starlette.websockets import WebSocketDisconnect
+from websockets.exceptions import ConnectionClosedError
 
 from app.logger import get_logger
 from app.schemas import App, User
@@ -54,6 +56,8 @@ class UserBody(BaseModel):
     posts_count: int
     verified: bool
     avatar: str
+    bio: str | None = None
+    banner: str | None = None
 
 
 class UserResponse(UserBody):
@@ -61,6 +65,23 @@ class UserResponse(UserBody):
     user_id: UUID
     found_at: datetime
     has_itdp: bool
+
+
+class WSRequestType(Enum):
+    task = "task"
+    update = "update"
+
+
+class WSTargetType(Enum):
+    user = "user"
+
+
+class WSRequest(BaseModel):
+    type: WSRequestType
+    target_type: WSTargetType | None = None
+    target: UserBody | None = None
+    target_exists: bool | None = None
+    target_id: UUID | None = None
 
 
 class UserOrder(Enum):
@@ -72,8 +93,8 @@ class UserOrder(Enum):
     updated_at = "updated_at"
 
 
-@router.websocket("/users")
-async def api_websocket_ebdi_users(
+@router.websocket("/")
+async def api_websocket_ebdi(
     websocket: WebSocket, app_token: str, db: Session = Depends(get_db)
 ):
     l.info("init connection")
@@ -82,55 +103,97 @@ async def api_websocket_ebdi_users(
     app = db.query(App).where(App.token == app_token).first()
     if app is None:
         l.info("decline reason=invalid token")
-        await websocket.close(1008, "invalid app token")
+        await websocket.close(3003, "invalid app token")
         return
     if app.name in [task.app.name for task in tasks]:
         l.info("decline reason=already exists")
-        await websocket.close(1007, "task already exists")
+        await websocket.close(4000, "task already exists")
         return
 
     await websocket.accept()
     task: Task | None = None
     try:
         while True:
-            task = Task(
-                app,
-                db.query(User)
-                .order_by(User.updated_at)
-                .where(User.id.not_in(get_targets()))
-                .limit(20)
-                .all()
-            )
-            l.info("create task for %s", app.name)
-            if not task.targets:
-                l.warning("no targets")
-                await websocket.send_json({"message": "done"})
+            try:
+                request = WSRequest.model_validate(
+                    await wait_for(websocket.receive_json(), 60)
+                )
+            except TimeoutError:
+                l.error("(%s) timeout", app.name)
+                await websocket.close(3008, "timeout")
                 return
 
-            tasks.append(task)
+            if request.type == WSRequestType.task:
+                if task is not None:
+                    tasks.remove(task)
 
-            for user in task.targets:
-                l.debug("\[%s] > %s", app.name, user.user_id)
-                await websocket.send_json({"type": "user", "id": str(user.user_id)})
+                task = Task(
+                    app,
+                    db.query(User)
+                    .order_by(User.updated_at)
+                    .where(User.id.not_in(get_targets()))
+                    .limit(20)
+                    .all()
+                )
+                l.debug("(%s) new task", app.name)
+                if not task.targets:
+                    l.warning("(%s) no targets", app.name)
+                    await websocket.send_json({"type": "done"})
+                    return
 
-                data = await websocket.receive_json()
-                if not data.get("exists", True):
-                    l.debug("\[%s] < not exists", app.name)
-                    user.exists = False
-                    user.updated_at = datetime.now()
-                else:
-                    updated = UserBody.model_validate(data)
-                    l.debug("\[%s] < %s", app.name, updated.username)
-                    for i in updated.model_fields_set:
-                        setattr(user, i, getattr(updated, i))
-                    user.updated_at = datetime.now()
-                app.refreshed += 1
+                tasks.append(task)
 
-            db.commit()
-            tasks.remove(task)
-            task = None
-    except WebSocketDisconnect:
-        l.info("close connection %s", app.name)
+                await websocket.send_json(
+                    {
+                        "type": "task",
+                        "target_type": WSTargetType.user.value,
+                        "targets": [str(target.user_id) for target in task.targets]
+                    }
+                )
+
+            if request.type == WSRequestType.update:
+                assert request.target_type
+
+                if task is None:
+                    l.error("(%s) no task", app.name)
+                    await websocket.send_json({"type": "error", "detail": "no task"})
+                    continue
+
+                if request.target_type == WSTargetType.user:
+                    assert request.target_id
+                    user = next(
+                        (
+                            user
+                            for user in task.targets
+                            if user.user_id == request.target_id
+                        ),
+                        None
+                    )
+                    if user is None:
+                        l.error("(%s) user not in task targets", app.name)
+                        await websocket.send_json(
+                            {"type": "error", "detail": "user not in task targets"}
+                        )
+                        continue
+
+                    if request.target_exists:
+                        assert request.target
+                        l.debug("(%s) < %s", app.name, request.target.username)
+                        for i in request.target.model_fields_set:
+                            setattr(user, i, getattr(request.target, i))
+                        user.updated_at = datetime.now()
+
+                    else:
+                        l.debug("(%s) < not exists", app.name)
+                        user.exists = False
+                        user.updated_at = datetime.now()
+
+                    await websocket.send_json({"type": "updated"})
+                    app.refreshed += 1
+                    db.commit()
+
+    except (WebSocketDisconnect, ConnectionClosedError):
+        l.warning("(%s) disconnect", app.name)
     finally:
         if task is not None:
             tasks.remove(task)
