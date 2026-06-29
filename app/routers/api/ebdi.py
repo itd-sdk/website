@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from enum import Enum
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, WebSocket
+from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy import desc
@@ -14,6 +14,7 @@ from websockets.exceptions import ConnectionClosedError
 from app.logger import get_logger
 from app.schemas import App, User
 from app.services.db import Session, get_db
+from app.services.limiter import get_limiter
 
 router = APIRouter(prefix="/ebdi")
 l = get_logger("ebdi")
@@ -27,6 +28,7 @@ class Task:
     started_at: datetime = field(default_factory=lambda: datetime.now())
 
 
+to_refresh: set[User] = set()
 tasks: list[Task] = []
 
 
@@ -127,14 +129,18 @@ async def api_websocket_ebdi(
                 if task is not None:
                     tasks.remove(task)
 
-                task = Task(
-                    app,
-                    db.query(User)
-                    .order_by(User.updated_at)
-                    .where(User.id.not_in(get_targets()))
-                    .limit(20)
-                    .all()
-                )
+                if to_refresh:
+                    task = Task(app, list(to_refresh))
+                    to_refresh.clear()
+                else:
+                    task = Task(
+                        app,
+                        db.query(User)
+                        .order_by(User.updated_at)
+                        .where(User.id.not_in(get_targets()))
+                        .limit(20)
+                        .all()
+                    )
                 l.debug("(%s) new task", app.name)
                 if not task.targets:
                     l.warning("(%s) no targets", app.name)
@@ -199,50 +205,98 @@ async def api_websocket_ebdi(
             tasks.remove(task)
 
 
+def verify_app_token(app_token: str, db: Session = Depends(get_db)):
+    app = db.query(App).where(App.token == app_token).first()
+    if app is None:
+        raise HTTPException(detail="invalid app token", status_code=401)
+    return app
+
+
 @router.get("/users", response_model=list[UserResponse])
+@get_limiter().limit("10/minute")
 def api_get_ebdi_users(
+    request: Request,
     offset: int = 0,
     order: UserOrder = UserOrder.followers,
     descending: bool = True,
+    clan: str | None = None,
+    verified: bool | None = None,
+    has_itdp: bool | None = None,
+    has_checkmark: bool | None = None,
+    min_followers: int | None = None,
     db: Session = Depends(get_db)
 ):
     col = getattr(User, order.value)
+    query = db.query(User).order_by(desc(col) if descending else col)
+    if clan:
+        query = query.where(User.avatar == clan)
+    if verified is not None:
+        query = query.where(User.verified == verified)
+    if has_itdp is not None:
+        query = query.where(User.has_itdp == has_itdp)
+    if has_checkmark is not None:
+        query = query.where(User.display_name.contains("✓"))
+    if min_followers is not None:
+        query = query.where(User.followers_count > min_followers)
+
+    if offset:
+        query = query.offset(offset)
+
     return [
         UserResponse.model_validate(user, from_attributes=True)
-        for user in db.query(User)
-        .order_by(desc(col) if descending else col)
-        .offset(offset)
-        .limit(100)
-        .all()
+        for user in query.limit(100).all()
     ]
 
 
-@router.post("/users")
-def api_post_ebdi(
-    app_token: str, id: UUID, body: UserBody, db: Session = Depends(get_db)
+@router.post("/users/{id}/refresh", status_code=204)
+@get_limiter().limit("5/minute")
+def api_post_ebdi_users_refresh(
+    request: Request, id: UUID, db: Session = Depends(get_db)
 ):
-    app = db.query(App).where(App.token == app_token).first()
-    if app is None:
-        return JSONResponse({"detail": "invalid app token"}, 401)
+    l.info("postpone user refresh id=%s", id)
+    user = db.query(User).where(User.user_id == id).first()
+    if not user:
+        l.warning("user not found")
+        return JSONResponse({"detail": "user not found"}, 404)
+    to_refresh.add(user)
 
-    if db.query(User).where(User.user_id == id).first() is not None:
-        return JSONResponse({"detail": "user already exists"}, 409)
 
-    user = User(
-        user_id=id,
-        created_at=body.created_at,
-        username=body.username,
-        display_name=body.display_name,
-        followers=body.followers,
-        following=body.following,
-        followers_count=body.followers_count,
-        following_count=body.following_count,
-        posts_count=body.posts_count,
-        verified=body.verified,
-        avatar=body.avatar
-    )
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-    app.added += 1
-    return user
+# @router.post("/users")
+# def api_post_ebdi(
+#     id: UUID,
+#     body: UserBody,
+#     app: App = Depends(verify_app_token),
+#     db: Session = Depends(get_db)
+# ):
+
+#     if db.query(User).where(User.user_id == id).first() is not None:
+#         return JSONResponse({"detail": "user already exists"}, 409)
+
+#     user = User(
+#         user_id=id,
+#         created_at=body.created_at,
+#         username=body.username,
+#         display_name=body.display_name,
+#         followers=body.followers,
+#         following=body.following,
+#         followers_count=body.followers_count,
+#         following_count=body.following_count,
+#         posts_count=body.posts_count,
+#         verified=body.verified,
+#         avatar=body.avatar
+#     )
+#     db.add(user)
+#     db.commit()
+#     db.refresh(user)
+#     app.added += 1
+#     return user
+
+
+@router.get("/users/search")
+def api_get_ebdi_user_search(query: str, db: Session = Depends(get_db)):
+    return {
+        "results": db.query(User)
+        .where(User.username.ilike(f"%{query}%"))
+        .limit(20)
+        .all()
+    }

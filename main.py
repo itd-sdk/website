@@ -8,13 +8,17 @@ from fastapi import FastAPI, Request, Response
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+from slowapi.util import get_remote_address
 from uvicorn import run
 
 from app.logger import format_request, get_logger, setup_logging
 from app.routers import router
-from app.routers.api import router as api_router
 from app.services.db import create_db
 from app.services.github_service import get_analogs, get_projects
+from app.services.limiter import set_limiter
 from app.services.turnstile import start_browser, stop_browser
 
 BASE_DIR = Path(__file__).resolve().parent / "app"
@@ -31,7 +35,9 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(docs_url=None, redoc_url=None, lifespan=lifespan)
 templates = Jinja2Templates(directory="app/templates/")
+limiter = Limiter(get_remote_address, default_limits=["1/second"])
 
+set_limiter(limiter)
 load_dotenv()
 create_db()
 setup_logging("DEBUG")
@@ -42,6 +48,11 @@ app.state.analogs = get_analogs()
 app.state.users_count_updated_at = datetime(1990, 1, 1)
 app.state.graph_updated_at = datetime(1990, 1, 1)
 app.state.is_loginning = False
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
+
+from app.routers.api import router as api_router
 
 
 @app.exception_handler(404)

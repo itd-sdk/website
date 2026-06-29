@@ -5,6 +5,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from app.logger import get_logger
+from app.services.limiter import get_limiter
 from app.services.turnstile import get_turnstile
 
 router = APIRouter(prefix="/turnstile")
@@ -12,6 +13,7 @@ l = get_logger("api.turnstile")
 
 
 @router.get("/")
+@get_limiter().limit("10/minute")
 async def api_get_token(request: Request, key: str):
     if key != getenv("TURNSTILE_APIKEY"):
         return JSONResponse({"detail": "invalid key"}, 401)
