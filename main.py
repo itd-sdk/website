@@ -49,10 +49,10 @@ app.state.users_count_updated_at = datetime(1990, 1, 1)
 app.state.graph_updated_at = datetime(1990, 1, 1)
 app.state.is_loginning = False
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # ty: ignore
 app.add_middleware(SlowAPIMiddleware)
 
-from app.routers.api import router as api_router
+from app.routers.api import router as api_router  # noqa
 
 
 @app.exception_handler(404)
