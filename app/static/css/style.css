@@ -32,7 +32,7 @@ button {
     background-color: #3e3b37;
     color: #fff;
     border: none;
-    border-radius: 0 16px 0 16px;
+    /*border-radius: 0 16px 0 16px;*/
 
     position: relative;
     isolation: isolate;
@@ -45,7 +45,6 @@ button::after {
     inset: 0;
     z-index: -1;
     background-color: #ec5e1c;
-
     scale: 0 1;
     transform-origin: right;
     transition: scale 240ms;
@@ -58,7 +57,7 @@ button:hover::after {
 
 button.primary {
     background-color: #ed6a2d;
-    border-radius: 16px 16px 0 16px;
+    /*border-radius: 16px 16px 0 16px;*/
     box-shadow: 13px 8px 1px -3px rgba(255, 255, 255, 0.1);
     transition: box-shadow 0.3s;
 }

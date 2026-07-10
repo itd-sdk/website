@@ -35,12 +35,11 @@
 
 #graph {
     background:
-        linear-gradient(to right, #2c2a27, #2c2a2700),
+        linear-gradient(to right, #2c2a2744, #2c2a2744),
         url("/static/images/graph.png");
     background-size: cover;
     border: #fbeadb 1px solid;
     padding: 15px;
-    border-radius: 16px;
     display: flex;
     flex-direction: row;
     justify-content: space-between;
@@ -86,14 +85,20 @@
     background-size: contain;
     position: absolute;
     left: 10px;
-    bottom: -40px;
+    bottom: -50px;
     width: 70%;
-    height: 130%;
+    height: 120%;
 }
 
 @media (max-width: 600px) {
     #ebdi {
         background: transparent;
+        margin-top: 70px;
+        margin-bottom: 80px;
+    }
+    #ebdi div {
+        background: #2c2a27;
+        padding: 16px;
     }
     #ebdi::after {
         bottom: -80px;
