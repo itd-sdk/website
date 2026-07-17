@@ -7,7 +7,8 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from sqlalchemy import desc
+from sqlalchemy import desc, func, or_
+from sqlalchemy.orm import aliased
 from starlette.websockets import WebSocketDisconnect
 from websockets.exceptions import ConnectionClosedError
 
@@ -67,6 +68,15 @@ class UserResponse(UserBody):
     user_id: UUID
     found_at: datetime
     has_itdp: bool
+    exists: bool
+    # позиция в отфильтрованном списке (1-based), из неё фронт считает
+    # офсет батча при прыжке из поиска
+    position: int = 0
+    # место в глобальном топе по выбранной сортировке, без учёта фильтров,
+    # удалённые пропущены (у них None)
+    global_rank: int | None = None
+    # место с учётом фильтров, удалённые пропущены (у них None)
+    filtered_rank: int | None = None
 
 
 class WSRequestType(Enum):
@@ -213,6 +223,78 @@ def verify_app_token(app_token: str, db: Session = Depends(get_db)):
     return app
 
 
+def build_users_query(
+    db: Session,
+    order: UserOrder,
+    descending: bool,
+    clan: str | None,
+    verified: bool | None,
+    has_itdp: bool | None,
+    has_checkmark: bool | None,
+    min_followers: int | None,
+    exists: bool | None
+):
+    col = getattr(User, order.value)
+    # глобальное место считается до фильтров, по всей таблице;
+    # partition by exists — удалённые не занимают места в топе
+    inner = db.query(
+        User,
+        func.row_number()
+        .over(
+            partition_by=User.exists,
+            order_by=(desc(col) if descending else col.asc(), User.id)
+        )
+        .label("global_rank"),
+        func.row_number()
+        .over(order_by=(desc(col) if descending else col.asc(), User.id))
+        .label("global_position")
+    ).subquery()
+    u = aliased(User, inner, adapt_on_names=True)
+    ordered_col = getattr(u, order.value)
+    order_by = (desc(ordered_col) if descending else ordered_col.asc(), u.id)
+
+    # оконные функции во внешнем запросе применяются после WHERE,
+    # поэтому position и filtered_rank учитывают фильтры
+    query = db.query(
+        u,
+        inner.c.global_rank,
+        inner.c.global_position,
+        func.row_number().over(order_by=order_by).label("position"),
+        func.row_number()
+        .over(partition_by=u.exists, order_by=order_by)
+        .label("filtered_rank")
+    )
+    if clan:
+        query = query.where(u.avatar == clan)
+    if verified is not None:
+        query = query.where(u.verified == verified)
+    if has_itdp is not None:
+        query = query.where(u.has_itdp == has_itdp)
+    if has_checkmark is not None:
+        checkmark = u.display_name.contains("✓")
+        query = query.where(checkmark if has_checkmark else ~checkmark)
+    if min_followers is not None:
+        query = query.where(u.followers_count > min_followers)
+    if exists is not None:
+        query = query.where(u.exists == exists)
+    return query.order_by(*order_by), u
+
+
+def serialize_user(row, unfiltered: bool = False) -> UserResponse:
+    user, global_rank, global_position, position, filtered_rank = row
+    response = UserResponse.model_validate(user, from_attributes=True)
+    # оконные функции внешнего запроса считаются после его WHERE, поэтому
+    # при поиске (ilike во внешнем WHERE) position/filtered_rank были бы
+    # номерами внутри выдачи -- берём значения из внутреннего подзапроса
+    response.position = global_position if unfiltered else position
+    response.global_rank = global_rank if user.exists else None
+    if unfiltered:
+        response.filtered_rank = response.global_rank
+    else:
+        response.filtered_rank = filtered_rank if user.exists else None
+    return response
+
+
 @router.get("/users", response_model=list[UserResponse])
 @get_limiter().limit("10/minute")
 def api_get_ebdi_users(
@@ -225,28 +307,21 @@ def api_get_ebdi_users(
     has_itdp: bool | None = None,
     has_checkmark: bool | None = None,
     min_followers: int | None = None,
+    exists: bool | None = None,
     db: Session = Depends(get_db)
 ):
-    col = getattr(User, order.value)
-    query = db.query(User).order_by(desc(col) if descending else col)
-    if clan:
-        query = query.where(User.avatar == clan)
-    if verified is not None:
-        query = query.where(User.verified == verified)
-    if has_itdp is not None:
-        query = query.where(User.has_itdp == has_itdp)
-    if has_checkmark is not None:
-        query = query.where(User.display_name.contains("✓"))
-    if min_followers is not None:
-        query = query.where(User.followers_count > min_followers)
-
-    if offset:
-        query = query.offset(offset)
-
-    return [
-        UserResponse.model_validate(user, from_attributes=True)
-        for user in query.limit(100).all()
-    ]
+    query, _ = build_users_query(
+        db,
+        order,
+        descending,
+        clan,
+        verified,
+        has_itdp,
+        has_checkmark,
+        min_followers,
+        exists
+    )
+    return [serialize_user(row) for row in query.offset(offset).limit(100).all()]
 
 
 @router.post("/users/{id}/refresh", status_code=204)
@@ -294,10 +369,27 @@ def api_post_ebdi_users_refresh(
 
 
 @router.get("/users/search")
-def api_get_ebdi_user_search(query: str, db: Session = Depends(get_db)):
-    return {
-        "results": db.query(User)
-        .where(User.username.ilike(f"%{query}%"))
+def api_get_ebdi_user_search(
+    query: str,
+    order: UserOrder = UserOrder.followers,
+    descending: bool = True,
+    db: Session = Depends(get_db)
+):
+    # поиск всегда идёт по всей базе без фильтров, поэтому position
+    # совпадает с нефильтрованным списком в выбранной сортировке
+    escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    pattern = f"%{escaped}%"
+    users_query, u = build_users_query(
+        db, order, descending, None, None, None, None, None, None
+    )
+    rows = (
+        users_query.where(
+            or_(
+                u.username.ilike(pattern, escape="\\"),
+                u.display_name.ilike(pattern, escape="\\")
+            )
+        )
         .limit(20)
         .all()
-    }
+    )
+    return {"results": [serialize_user(row, unfiltered=True) for row in rows]}

@@ -146,6 +146,26 @@ td:not(:first-child) {
     padding-left: 8px;
 }
 
+b,
+strong {
+    font-weight: 500;
+}
+
+input[type="text"],
+input[type="search"] {
+    background-color: #2c2a27;
+    color: #fff;
+    border: #494037 1px solid;
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 14px;
+}
+input[type="text"]:focus-visible,
+input[type="search"]:focus-visible {
+    outline: none;
+    border: #eb5e1b 1px solid;
+}
+
 input[type="checkbox"] {
     flex-shrink: 0;
     box-sizing: content-box;
