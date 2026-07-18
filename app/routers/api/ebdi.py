@@ -94,6 +94,8 @@ class WSRequest(BaseModel):
     target: UserBody | None = None
     target_exists: bool | None = None
     target_id: UUID | None = None
+    update_followers: bool | None = None
+    update_following: bool | None = None
 
 
 class UserOrder(Enum):
@@ -147,7 +149,7 @@ async def api_websocket_ebdi(
                         app,
                         db.query(User)
                         .order_by(desc(User.followers_count))
-                        .where(User.updated_at < datetime.now() - timedelta(days=3))
+                        .where(User.updated_at < datetime.now() - timedelta(days=7))
                         .where(User.id.not_in(get_targets()))
                         .limit(20)
                         .all()
@@ -164,7 +166,14 @@ async def api_websocket_ebdi(
                     {
                         "type": "task",
                         "target_type": WSTargetType.user.value,
-                        "targets": [str(target.user_id) for target in task.targets]
+                        "targets": [
+                            {
+                                "id": str(target.user_id),
+                                "followers_count": target.followers_count,
+                                "following_count": target.following_count
+                            }
+                            for target in task.targets
+                        ]
                     }
                 )
 
@@ -197,6 +206,10 @@ async def api_websocket_ebdi(
                         assert request.target
                         l.debug("(%s) < %s", app.name, request.target.username)
                         for i in request.target.model_fields_set:
+                            if i == "followers" and not request.update_followers:
+                                continue
+                            if i == "following" and not request.update_following:
+                                continue
                             setattr(user, i, getattr(request.target, i))
                         user.updated_at = datetime.now()
 
