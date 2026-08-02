@@ -239,7 +239,7 @@ emoji-picker {
     background-color: #2c2a27;
     border-radius: 8px;
     padding: 8px 16px;
-    width: 80vw;
+    max-width: 1400px;
     display: flex;
     flex-direction: row;
     align-items: center;
@@ -441,17 +441,6 @@ emoji-picker {
         margin-bottom: 25px;
     }
 
-    #controls {
-        width: 94vw;
-        gap: 10px;
-    }
-
-    #filters {
-        gap: 20px;
-        width: 75%;
-        justify-content: space-between;
-    }
-
     .filter-group label,
     #deleted-toggle {
         font-size: 13px;
@@ -480,16 +469,12 @@ emoji-picker {
     }
 
     .user-display-name {
-        font-size: 15px;
+        font-size: 13px;
         overflow: hidden;
     }
 
     .user-username {
         font-size: 11px;
-    }
-
-    .user-created-at {
-        display: none;
     }
 
     .user-followers,
@@ -500,6 +485,12 @@ emoji-picker {
     }
     .sort-arrow {
         margin-top: 3px;
+    }
+}
+
+@media (max-width: 750px) {
+    .user-created-at {
+        display: none;
     }
 }
 
