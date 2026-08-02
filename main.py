@@ -19,7 +19,6 @@ from app.routers import router
 from app.services.db import create_db
 from app.services.github_service import get_analogs, get_projects
 from app.services.limiter import set_limiter
-from app.services.turnstile import start_browser, stop_browser
 
 BASE_DIR = Path(__file__).resolve().parent / "app"
 
@@ -27,10 +26,7 @@ BASE_DIR = Path(__file__).resolve().parent / "app"
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     l.info("start server")
-    await start_browser()
     yield
-    l.info("stop server")
-    await stop_browser()
 
 
 app = FastAPI(docs_url=None, redoc_url=None, lifespan=lifespan)
