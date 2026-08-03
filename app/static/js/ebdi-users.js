@@ -1,5 +1,5 @@
 const PAGE_SIZE = 100;
-const SEARCH_DELAY = 800;
+const SEARCH_DELAY = 500;
 
 const DEFAULT_STATE = {
     order: "followers_count",
@@ -33,6 +33,10 @@ function get_el(id) {
         console.warn(`element ${id} not found`);
     }
     return element;
+}
+
+function normalize_emoji(value) {
+    return value.replace(/[\uFE0E\uFE0F]/g, "");
 }
 
 function read_url_state() {
@@ -175,21 +179,24 @@ function render_user(user) {
     }
     render_place(node, user);
     node.querySelector(".user-avatar").textContent = user.avatar;
-    node.querySelector(".user-display-name").textContent = user.display_name;
-    node.querySelector(".user-display-name").href =
-        "https://итд.com/@" + user.username;
+    const display_name = node.querySelector(".user-display-name");
+    const name = document.createElement("span");
+    name.textContent = user.display_name;
+    display_name.textContent = "";
+    display_name.appendChild(name);
+    display_name.href = "https://итд.com/@" + user.user_id;
     if (user.verified && user.has_itdp) {
         const icon = document.createElement("img");
         icon.src = "/static/icons/itdp_verified.svg";
-        node.querySelector(".user-display-name").appendChild(icon);
+        display_name.appendChild(icon);
     } else if (user.verified) {
         const icon = document.createElement("img");
         icon.src = "/static/icons/verified.svg";
-        node.querySelector(".user-display-name").appendChild(icon);
+        display_name.appendChild(icon);
     } else if (user.has_itdp) {
         const icon = document.createElement("img");
         icon.src = "/static/icons/itdp.svg";
-        node.querySelector(".user-display-name").appendChild(icon);
+        display_name.appendChild(icon);
     }
     node.querySelector(".user-username").textContent = "@" + user.username;
     node.querySelector(".user-followers").textContent =
@@ -233,7 +240,6 @@ function update_gaps() {
     }
 }
 
-// первый видимый пользователь -- якорь, по которому восстанавливаем скролл
 function get_scroll_anchor() {
     return [...document.querySelectorAll("#users .user")].find(
         (node) => node.getBoundingClientRect().bottom > 0,
@@ -254,7 +260,6 @@ function insert_batch(offset, users) {
     const anchor_top = anchor ? anchor.getBoundingClientRect().top : 0;
     container.insertBefore(batch, next ?? get_el("users-loader"));
     update_gaps();
-    // вставка выше вьюпорта смещает контент -- возвращаем скролл на место
     if (anchor) {
         const delta = anchor.getBoundingClientRect().top - anchor_top;
         if (delta) {
@@ -358,8 +363,6 @@ function init_infinite_scroll() {
     top_observer.observe(get_el("users-sentinel-top"));
 }
 
-// --- поиск ---
-
 let search_timer = null;
 let last_query = "";
 
@@ -401,8 +404,6 @@ function render_candidates(users) {
     candidates.hidden = false;
 }
 
-// поиск идёт по всей базе, фильтры не передаём -- только сортировку,
-// от неё зависит место и офсет батча
 async function fetch_candidates(query) {
     const params = new URLSearchParams({
         query: query,
@@ -502,8 +503,6 @@ async function jump_to_user(user) {
     setTimeout(() => node.classList.remove("user-highlighted"), 2500);
 }
 
-// --- контролы ---
-
 let clan_timer = null;
 
 function init_sort_headers() {
@@ -529,8 +528,8 @@ function init_clan_picker() {
     document
         .querySelector("emoji-picker")
         .addEventListener("emoji-click", (event) => {
-            get_el("clan-input").value = event.detail.unicode;
-            state.clan = event.detail.unicode;
+            get_el("clan-input").value = normalize_emoji(event.detail.unicode);
+            state.clan = normalize_emoji(event.detail.unicode);
             picker_box.hidden = true;
             reload();
         });
@@ -583,6 +582,16 @@ function init_controls() {
     });
 }
 
+// https://css-tricks.com/how-to-detect-when-a-sticky-element-gets-pinned/
+function observe_controls_stick() {
+    const observer = new IntersectionObserver(
+        ([e]) => e.target.classList.toggle("pinned", e.intersectionRatio < 1),
+        { threshold: [1] },
+    );
+
+    observer.observe(get_el("controls-box"));
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
     user_template = get_el("user-template");
     user_template.remove();
@@ -590,5 +599,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     apply_state_to_controls();
     init_controls();
     init_infinite_scroll();
+    observe_controls_stick();
     await load_batch(0);
 });

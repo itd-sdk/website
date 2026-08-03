@@ -27,11 +27,12 @@ BASE_DIR = Path(__file__).resolve().parent / "app"
 async def lifespan(app: FastAPI):
     l.info("start server")
     yield
+    l.info("stop server")
 
 
 app = FastAPI(docs_url=None, redoc_url=None, lifespan=lifespan)
 templates = Jinja2Templates(directory="app/templates/")
-limiter = Limiter(get_remote_address, default_limits=["1/second"])
+limiter = Limiter(get_remote_address, default_limits=["2/second"])
 
 set_limiter(limiter)
 load_dotenv()

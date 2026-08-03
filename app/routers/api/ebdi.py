@@ -149,7 +149,7 @@ async def api_websocket_ebdi(
                         app,
                         db.query(User)
                         .order_by(desc(User.followers_count))
-                        .where(User.updated_at < datetime.now() - timedelta(days=7))
+                        .where(User.updated_at < datetime.now() - timedelta(days=3))
                         .where(User.id.not_in(get_targets()))
                         .limit(20)
                         .all()
@@ -238,7 +238,7 @@ def verify_app_token(app_token: str, db: Session = Depends(get_db)):
 
 def build_users_query(
     db: Session,
-    order: UserOrder,
+    order: UserOrder,  # такая небольшая пасхалка, можно сделать ордер по дате обновления
     descending: bool,
     clan: str | None,
     verified: bool | None,

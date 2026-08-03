@@ -17,37 +17,42 @@
 <div id="content">
     <h2>Пользователи ИТД</h2>
 
-    <div id="controls">
-        <div id="filters">
-            <div class="filter-group">
-                <label><input type="radio" name="verified" value="" checked>Все</label>
-                <label><input type="radio" name="verified" value="true">Верифицированные</label>
-                <label><input type="radio" name="verified" value="false">Неверифицированные</label>
+    <div id="controls-box">
+        <div id="controls">
+            <div id="filters">
+                <div class="filter-group">
+                    <label><input type="radio" name="verified" value="" checked>Все</label>
+                    <label><input type="radio" name="verified" value="true">Верифицированные</label>
+                    <label><input type="radio" name="verified" value="false">Неверифицированные</label>
+                </div>
+                <div class="filter-group">
+                    <label><input type="radio" name="has_itdp" value="" checked>Все</label>
+                    <label><input type="radio" name="has_itdp" value="true">С ИТД+</label>
+                    <label><input type="radio" name="has_itdp" value="false">Без ИТД+</label>
+                </div>
             </div>
-            <div class="filter-group">
-                <label><input type="radio" name="has_itdp" value="" checked>Все</label>
-                <label><input type="radio" name="has_itdp" value="true">С ИТД+</label>
-                <label><input type="radio" name="has_itdp" value="false">Без ИТД+</label>
+            <label id="deleted-toggle">
+                <input type="checkbox" id="deleted-checkbox"><span>Показывать удалённых пользователей</span>
+            </label>
+            <div id="clan-box">
+                <input id="clan-input" placeholder="Клан" maxlength="1" type="text">
+                <button id="clan-picker-button" title="Выбрать эмодзи"><img src="/static/icons/search.svg"></button>
+                <div id="clan-picker" hidden>
+                    <emoji-picker
+                        class="dark"
+                        locale="ru"
+                        emoji-version="17.0"
+                        data-source="https://cdn.jsdelivr.net/npm/emoji-picker-element-data@1/ru/cldr/data.json"
+                    ></emoji-picker>
+                </div>
             </div>
-        </div>
-        <label id="deleted-toggle">
-            <input type="checkbox" id="deleted-checkbox"><span>Показывать удалённых пользователей</span>
-        </label>
-        <div id="clan-box">
-            <input id="clan-input" placeholder="Клан" maxlength="1" type="text">
-            <button id="clan-picker-button" title="Выбрать эмодзи"><img src="/static/icons/search.svg"></button>
-            <div id="clan-picker" hidden>
-                <emoji-picker
-                    class="dark"
-                    locale="ru"
-                    emoji-version="17.0"
-                    data-source="https://cdn.jsdelivr.net/npm/emoji-picker-element-data@1/ru/cldr/data.json"
-                ></emoji-picker>
+            <div id="search-box">
+                <div id="search-input-box">
+                    <img id="search-icon" src="/static/icons/search.svg">
+                    <input id="search-input" type="search" placeholder="Поиск пользователя" autocomplete="off">
+                </div>
+                <div id="search-candidates" hidden></div>
             </div>
-        </div>
-        <div id="search-box">
-            <input id="search-input" type="search" placeholder="Поиск пользователя" autocomplete="off">
-            <div id="search-candidates" hidden></div>
         </div>
     </div>
 
@@ -65,7 +70,7 @@
                     <b>Посты</b><img class="sort-arrow">
                 </div>
                 <div class="user-created-at user-sortable" data-order="created_at">
-                    <b>Дата создания ака</b><img class="sort-arrow">
+                    <b>Дата регистрации</b><img class="sort-arrow">
                 </div>
             </div>
         </div>
@@ -86,7 +91,7 @@
                 <div class="user-created-at">17 мая 2026</div>
             </div>
         </div>
-        <div id="users-empty" hidden>Никого не найдено</div>
+        <div id="users-empty" hidden>Ничего не найдено</div>
         <div id="users-error" hidden>
             <div id="error-text"></div>
             <button id="retry-button">Попробовать снова</button>
