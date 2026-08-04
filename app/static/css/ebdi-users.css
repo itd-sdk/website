@@ -80,6 +80,7 @@ html {
 
 #search-box {
     position: relative;
+    z-index: 1;
 }
 
 #search-candidates {
@@ -184,7 +185,23 @@ html {
     color: #fbeadb;
 }
 
+#clan-button {
+    position: relative;
+    z-index: 40;
+}
+
+#clan-button img {
+    margin-left: 10px;
+    transform: rotate(90deg);
+}
+
+#clan-box:has(#clan-picker:not([hidden])) #clan-button img {
+    transform: rotate(-90deg);
+}
+
 #clan-box {
+    position: relative;
+    z-index: 40;
     display: flex;
     flex-direction: row;
     align-items: center;
@@ -192,30 +209,12 @@ html {
     height: 36px;
 }
 
-#clan-input {
-    width: 80px;
-    box-sizing: border-box;
-    border-radius: 8px 0 0 8px;
-    height: 36px;
-    border-right: none;
-}
-
-#clan-picker-button {
-    border-radius: 0 8px 8px 0;
-    height: 36px;
-}
-#clan-picker-button::after {
-    border-radius: 0 8px 8px 0;
-}
-#clan-picker-button img {
-    width: 20px;
-    transform: rotate(90deg);
-}
-
 #clan-picker {
     position: absolute;
-    top: 170px;
-    z-index: 10;
+    top: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1;
 }
 
 emoji-picker {
@@ -229,6 +228,11 @@ emoji-picker {
     --emoji-font-family: Google Noto Sans;
     width: min(90vw, 330px);
     height: 380px;
+}
+
+#clan-remove {
+    width: 25px;
+    cursor: pointer;
 }
 
 #search-icon {
@@ -554,12 +558,17 @@ emoji-picker {
         margin-top: 3px;
     }
     #controls {
-        position: static;
         flex-direction: column;
         gap: 10px;
     }
+    #controls-box {
+        position: static;
+    }
     .filter-group {
         flex-shrink: 0;
+    }
+    #controls-box.pinned {
+        border-bottom: none;
     }
 }
 

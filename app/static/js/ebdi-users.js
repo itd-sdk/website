@@ -87,7 +87,10 @@ function apply_state_to_controls() {
             input.checked = true;
         }
     }
-    get_el("clan-input").value = state.clan;
+    get_el("clan-text").textContent = `Клан: ${state.clan}`;
+    if (state.clan) {
+        get_el("clan-remove").hidden = false;
+    }
     get_el("deleted-checkbox").checked = state.show_deleted;
     update_sort_headers();
 }
@@ -522,26 +525,23 @@ function init_sort_headers() {
 
 function init_clan_picker() {
     const picker_box = get_el("clan-picker");
-    get_el("clan-picker-button").addEventListener("click", () => {
+    get_el("clan-button").addEventListener("click", () => {
         picker_box.hidden = !picker_box.hidden;
     });
     document
         .querySelector("emoji-picker")
         .addEventListener("emoji-click", (event) => {
-            get_el("clan-input").value = normalize_emoji(event.detail.unicode);
             state.clan = normalize_emoji(event.detail.unicode);
+            get_el("clan-text").textContent = `Клан: ${state.clan}`;
+            get_el("clan-remove").hidden = false;
             picker_box.hidden = true;
             reload();
         });
-    get_el("clan-input").addEventListener("input", (event) => {
-        clearTimeout(clan_timer);
-        clan_timer = setTimeout(() => {
-            const clan = event.target.value.trim();
-            if (clan !== state.clan) {
-                state.clan = clan;
-                reload();
-            }
-        }, 400);
+
+    get_el("clan-remove").addEventListener("click", () => {
+        state.clan = "";
+        get_el("clan-remove").hidden = true;
+        reload();
     });
 }
 
@@ -570,11 +570,14 @@ function init_controls() {
     const search_input = get_el("search-input");
     search_input.addEventListener("input", on_search_input);
     document.addEventListener("click", (event) => {
-        if (!get_el("search-box").contains(event.target)) {
+        // composedPath sees through shadow DOM of emoji-picker
+        const path = event.composedPath();
+        if (!path.includes(get_el("search-box"))) {
             hide_candidates();
         }
         if (
-            !get_el("clan-box").contains(event.target) &&
+            !path.includes(get_el("clan-button")) &&
+            !path.includes(get_el("clan-picker")) &&
             !get_el("clan-picker").hidden
         ) {
             get_el("clan-picker").hidden = true;
