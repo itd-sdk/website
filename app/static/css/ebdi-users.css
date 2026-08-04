@@ -17,6 +17,46 @@ html {
     overflow-x: clip;
 }
 
+h2 {
+    line-height: 0.5;
+}
+
+#feedback {
+    background: linear-gradient(to right, #2c2a2744, #2c2a2744);
+    background-size: cover;
+    border: #fbeadb 1px solid;
+    padding: 15px;
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    max-width: 550px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+#feedback img {
+    width: 50px;
+    margin-right: 5px;
+}
+
+#feedback-title {
+    font-weight: bold;
+}
+
+#feedback-description {
+    color: #999;
+    font-size: 13px;
+}
+
+#feedback button {
+    height: min-content;
+    align-self: center;
+    margin-left: 10px;
+}
+#feedback button img {
+    width: 9px;
+}
+
 #objects {
     display: flex;
     flex-direction: row;

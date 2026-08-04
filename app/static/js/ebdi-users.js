@@ -87,7 +87,7 @@ function apply_state_to_controls() {
             input.checked = true;
         }
     }
-    get_el("clan-text").textContent = `Клан: ${state.clan}`;
+    get_el("clan-text").textContent = `Клан: ${state.clan || "Все"}`;
     if (state.clan) {
         get_el("clan-remove").hidden = false;
     }
@@ -541,6 +541,7 @@ function init_clan_picker() {
     get_el("clan-remove").addEventListener("click", () => {
         state.clan = "";
         get_el("clan-remove").hidden = true;
+        get_el("clan-text").textContent = "Клан: Все";
         reload();
     });
 }
