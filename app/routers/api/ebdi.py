@@ -29,7 +29,6 @@ class Task:
     started_at: datetime = field(default_factory=lambda: datetime.now())
 
 
-to_refresh: set[User] = set()
 tasks: list[Task] = []
 
 
@@ -141,9 +140,6 @@ async def api_websocket_ebdi(
                 if task is not None:
                     tasks.remove(task)
 
-                if to_refresh:
-                    task = Task(app, list(to_refresh))
-                    to_refresh.clear()
                 else:
                     task = Task(
                         app,
@@ -211,6 +207,7 @@ async def api_websocket_ebdi(
                             if i == "following" and not request.update_following:
                                 continue
                             setattr(user, i, getattr(request.target, i))
+                        user.exists = True
                         user.updated_at = datetime.now()
 
                     else:
@@ -248,8 +245,6 @@ def build_users_query(
     exists: bool | None
 ):
     col = getattr(User, order.value)
-    # глобальное место считается до фильтров, по всей таблице;
-    # partition by exists — удалённые не занимают места в топе
     inner = db.query(
         User,
         func.row_number()
@@ -266,8 +261,6 @@ def build_users_query(
     ordered_col = getattr(u, order.value)
     order_by = (desc(ordered_col) if descending else ordered_col.asc(), u.id)
 
-    # оконные функции во внешнем запросе применяются после WHERE,
-    # поэтому position и filtered_rank учитывают фильтры
     query = db.query(
         u,
         inner.c.global_rank,
@@ -296,9 +289,6 @@ def build_users_query(
 def serialize_user(row, unfiltered: bool = False) -> UserResponse:
     user, global_rank, global_position, position, filtered_rank = row
     response = UserResponse.model_validate(user, from_attributes=True)
-    # оконные функции внешнего запроса считаются после его WHERE, поэтому
-    # при поиске (ilike во внешнем WHERE) position/filtered_rank были бы
-    # номерами внутри выдачи -- берём значения из внутреннего подзапроса
     response.position = global_position if unfiltered else position
     response.global_rank = global_rank if user.exists else None
     if unfiltered:
@@ -309,7 +299,7 @@ def serialize_user(row, unfiltered: bool = False) -> UserResponse:
 
 
 @router.get("/users", response_model=list[UserResponse])
-@get_limiter().limit("10/minute")
+@get_limiter().limit("15/minute")
 def api_get_ebdi_users(
     request: Request,
     offset: int = 0,
@@ -347,7 +337,7 @@ def api_post_ebdi_users_refresh(
     if not user:
         l.warning("user not found")
         return JSONResponse({"detail": "user not found"}, 404)
-    to_refresh.add(user)
+    return JSONResponse({"detail": "not implemented"}, 400)
 
 
 # @router.post("/users")
@@ -388,8 +378,7 @@ def api_get_ebdi_user_search(
     descending: bool = True,
     db: Session = Depends(get_db)
 ):
-    # поиск всегда идёт по всей базе без фильтров, поэтому position
-    # совпадает с нефильтрованным списком в выбранной сортировке
+    # поиск всегда идёт по всей базе без фильтров, поэтому position совпадает с нефильтрованным списком в выбранной сортировке
     escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
     pattern = f"%{escaped}%"
     users_query, u = build_users_query(
