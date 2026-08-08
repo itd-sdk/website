@@ -17,8 +17,7 @@ class User(Base):
     updated_at: Mapped[datetime] = mapped_column(
         server_default=func.now(), onupdate=func.now()
     )
-
-    created_at: Mapped[datetime] = mapped_column(nullable=True)
+    created_at: Mapped[datetime | None]
     username: Mapped[str]
     display_name: Mapped[str]
     followers_count: Mapped[int]
@@ -30,5 +29,6 @@ class User(Base):
     followers: Mapped[list[UUID]] = mapped_column(ARRAY(PG_UUID(as_uuid=True)))
     avatar: Mapped[str] = mapped_column(default="?")
     exists: Mapped[bool] = mapped_column(default=True)
-    bio: Mapped[str] = mapped_column(nullable=True)
-    banner: Mapped[str] = mapped_column(nullable=True)
+    bio: Mapped[str | None]
+    banner: Mapped[str | None]
+    last_seen: Mapped[str | None]

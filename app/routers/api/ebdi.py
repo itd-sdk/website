@@ -7,7 +7,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from sqlalchemy import desc, func, or_
+from sqlalchemy import case, desc, func, or_
 from sqlalchemy.orm import aliased
 from starlette.websockets import WebSocketDisconnect
 from websockets.exceptions import ConnectionClosedError
@@ -60,6 +60,7 @@ class UserBody(BaseModel):
     avatar: str
     bio: str | None = None
     banner: str | None = None
+    last_seen: str | None = None
 
 
 class UserResponse(UserBody):
@@ -106,6 +107,40 @@ class UserOrder(Enum):
     updated_at = "updated_at"
 
 
+def refresh_interval():
+    refresh_tiers = [
+        (1000, timedelta(hours=12)),
+        (500, timedelta(days=1)),
+        (100, timedelta(days=3)),
+        (10, timedelta(days=7)),
+        (0, timedelta(days=14))
+    ]
+
+    base = case(
+        *[
+            (User.followers_count >= threshold, int(interval.total_seconds()))
+            for threshold, interval in refresh_tiers
+        ],
+        else_=int(refresh_tiers[-1][1].total_seconds())
+    )
+    multiplier = case(
+        *[
+            (User.last_seen == value, multiplier)
+            for value, multiplier in {
+                "just_now": 1,
+                "recently": 1,
+                "minutes": 1,
+                "hours": 1,
+                "this_week": 2,
+                "this_month": 6,
+                "long_ago": 20
+            }.items()
+        ],
+        else_=1
+    )
+    return func.least(base * multiplier, int(timedelta(days=30).total_seconds()))
+
+
 @router.websocket("/")
 async def api_websocket_ebdi(
     websocket: WebSocket, app_token: str, db: Session = Depends(get_db)
@@ -141,12 +176,16 @@ async def api_websocket_ebdi(
                     tasks.remove(task)
                     task = None
 
+                priority = (
+                    func.extract("epoch", func.now() - User.updated_at)
+                    / refresh_interval()
+                )
                 task = Task(
                     app,
                     db.query(User)
-                    .order_by(desc(User.followers_count))
-                    .where(User.updated_at < datetime.now() - timedelta(days=3))
+                    .where(priority >= 1)
                     .where(User.id.not_in(get_targets()))
+                    .order_by(desc(priority))
                     .limit(20)
                     .all()
                 )
