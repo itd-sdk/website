@@ -139,17 +139,17 @@ async def api_websocket_ebdi(
             if request.type == WSRequestType.task:
                 if task is not None:
                     tasks.remove(task)
+                    task = None
 
-                else:
-                    task = Task(
-                        app,
-                        db.query(User)
-                        .order_by(desc(User.followers_count))
-                        .where(User.updated_at < datetime.now() - timedelta(days=3))
-                        .where(User.id.not_in(get_targets()))
-                        .limit(20)
-                        .all()
-                    )
+                task = Task(
+                    app,
+                    db.query(User)
+                    .order_by(desc(User.followers_count))
+                    .where(User.updated_at < datetime.now() - timedelta(days=3))
+                    .where(User.id.not_in(get_targets()))
+                    .limit(20)
+                    .all()
+                )
                 l.debug("(%s) new task", app.name)
                 if not task.targets:
                     l.warning("(%s) no targets", app.name)
@@ -222,7 +222,7 @@ async def api_websocket_ebdi(
     except (WebSocketDisconnect, ConnectionClosedError):
         l.warning("(%s) disconnect", app.name)
     finally:
-        if task is not None:
+        if task is not None and task in tasks:
             tasks.remove(task)
 
 
