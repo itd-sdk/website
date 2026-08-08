@@ -136,9 +136,12 @@ def refresh_interval():
                 "long_ago": 20
             }.items()
         ],
-        else_=1
+        else_=2
     )
-    return func.least(base * multiplier, int(timedelta(days=30).total_seconds()))
+    return func.least(
+        base * multiplier * case((User.exists.is_(False), 10), else_=1),
+        int(timedelta(days=30).total_seconds())
+    )
 
 
 @router.websocket("/")
