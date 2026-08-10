@@ -84,6 +84,7 @@ class WSRequestType(Enum):
     task = "task"
     update = "update"
     create = "create"
+    known = "known"
 
 
 class WSTargetType(Enum):
@@ -98,6 +99,7 @@ class WSRequest(BaseModel):
     target_id: UUID | None = None
     update_followers: bool | None = None
     update_following: bool | None = None
+    target_ids: list[UUID] | None = None
 
 
 def refresh_interval():
@@ -297,13 +299,25 @@ async def api_websocket_ebdi(
                     app.added += 1
                     db.commit()
 
-                    await websocket.send_json({"type": "created", "added": True})
-
-                await websocket.send_json({"type": "created", "added": False})
+                await websocket.send_json({"type": "created"})
                 # else:
                 #     await websocket.send_json(
                 #         {"type": "error", "detail": "already exists"}
                 #     )
+
+            elif request.type == WSRequestType.known:
+                if request.target_ids is None:
+                    await websocket.send_json(
+                        {"type": "error", "detail": "no target_ids"}
+                    )
+                    continue
+                known = [
+                    str(u.user_id)
+                    for u in db.query(User.user_id).where(
+                        User.user_id.in_(request.target_ids)
+                    )
+                ]
+                await websocket.send_json({"type": "known", "user_ids": known})
 
             else:
                 l.error("(%s) invalid type", app.name)
