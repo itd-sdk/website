@@ -19,7 +19,6 @@ from app.routers import router
 from app.services.db import create_db
 from app.services.github_service import get_analogs, get_projects
 from app.services.limiter import set_limiter
-from app.services.settings import get_settings
 
 BASE_DIR = Path(__file__).resolve().parent / "app"
 

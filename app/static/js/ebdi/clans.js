@@ -25,7 +25,7 @@ function render_clan(clan) {
     node.querySelector(".clan-name").href =
         "/ebdi/users?clan=" + encodeURIComponent(clan.clan);
     node.querySelector(".row-place").textContent = clan.rank + ".";
-    node.querySelector(".row-avatar").textContent = clan.clan;
+    node.querySelector(".row-avatar").textContent = clan.clan + "\uFE0F";
     node.querySelector(".clan-name").textContent =
         clan_names.get(strip_skin_tone(normalize_emoji(clan.clan))) || "-";
     node.querySelector(".clan-count").textContent =

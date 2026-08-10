@@ -87,7 +87,7 @@ function apply_state_to_controls() {
             input.checked = true;
         }
     }
-    get_el("clan-text").textContent = `Клан: ${state.clan || "Все"}`;
+    get_el("clan-text").textContent = `Клан: ${state.clan + "\uFE0F" || "Все"}`;
     if (state.clan) {
         get_el("clan-remove").hidden = false;
     }
@@ -192,7 +192,7 @@ function render_user(user) {
         node.classList.add("row-deleted");
     }
     render_place(node, user);
-    node.querySelector(".row-avatar").textContent = user.avatar;
+    node.querySelector(".row-avatar").textContent = user.avatar + "\uFE0F";
     const display_name = node.querySelector(".user-display-name");
     const name = document.createElement("span");
     name.textContent = user.display_name;
@@ -539,7 +539,7 @@ function init_clan_picker() {
         .querySelector("emoji-picker")
         .addEventListener("emoji-click", (event) => {
             state.clan = normalize_emoji(event.detail.unicode);
-            get_el("clan-text").textContent = `Клан: ${state.clan}`;
+            get_el("clan-text").textContent = `Клан: ${state.clan}\uFE0F`;
             get_el("clan-remove").hidden = false;
             picker_box.hidden = true;
             reload();
