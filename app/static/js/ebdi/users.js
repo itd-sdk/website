@@ -133,6 +133,17 @@ function show_error(offset, message) {
     get_el("rows").appendChild(error);
 }
 
+async function fetch_count() {
+    const res = await fetch("/api/ebdi/users/count");
+
+    if (!res.ok) {
+        alert(`Ошибка получения количества пользователей: ${res.stat}`);
+        return;
+    }
+    get_el("total-objects").hidden = false;
+    get_el("total-objects-value").textContent = (await res.json()).count;
+}
+
 async function fetch_users(offset) {
     const params = build_params({ offset: offset });
     try {
@@ -601,4 +612,5 @@ document.addEventListener("DOMContentLoaded", async () => {
     init_infinite_scroll();
     observe_controls_stick();
     await load_batch(0);
+    await fetch_count();
 });

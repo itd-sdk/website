@@ -280,6 +280,16 @@ emoji-picker {
     font-size: 13px;
 }
 
+#total-objects {
+    text-align: center;
+    font-size: 15px;
+    color: #aaa;
+}
+#total-objects-value {
+    font-size: 18px;
+    color: #fff;
+}
+
 #rows {
     display: flex;
     align-items: center;

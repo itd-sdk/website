@@ -98,6 +98,8 @@ async function load_clans() {
         }
         clans = await res.json();
         render_clans();
+        get_el("total-objects").hidden = false;
+        get_el("total-objects-value").textContent = clans.length;
     } catch (error) {
         console.warn("clans request failed", error);
         show_error("Не удалось связаться с сервером");
