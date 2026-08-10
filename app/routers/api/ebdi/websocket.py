@@ -243,7 +243,7 @@ async def api_websocket_ebdi(
                     }
                 )
 
-            if request.type == WSRequestType.update:
+            elif request.type == WSRequestType.update:
                 assert request.target_type
 
                 if task is None:
@@ -295,7 +295,7 @@ async def api_websocket_ebdi(
                 app.refreshed += 1
                 db.commit()
 
-            if request.type == WSRequestType.create:
+            elif request.type == WSRequestType.create:
                 assert request.target
 
                 if task is None or task.prefix is None:
@@ -323,7 +323,7 @@ async def api_websocket_ebdi(
 
                 await websocket.send_json({"type": "created"})
 
-            if request.type == WSRequestType.searched:
+            elif request.type == WSRequestType.searched:
                 if task is None or task.prefix is None:
                     await websocket.send_json({"type": "error", "detail": "no task"})
                     continue
@@ -338,6 +338,20 @@ async def api_websocket_ebdi(
                 db.commit()
 
                 await websocket.send_json({"type": "searched"})
+
+            elif request.type == WSRequestType.known:
+                assert request.target_ids
+                known = [
+                    str(u.user_id)
+                    for u in db.query(User.user_id).where(
+                        User.user_id.in_(request.target_ids)
+                    )
+                ]
+                await websocket.send_json({"type": "known", "user_ids": known})
+
+            else:
+                l.error("(%s) invalid type", app.name)
+                await websocket.send_json({"type": "error", "detail": "invalid type"})
 
     except (WebSocketDisconnect, ConnectionClosedError):
         l.warning("(%s) disconnect", app.name)
