@@ -46,7 +46,7 @@ def remove_expired_tasks():
         tasks.remove(t)
 
 
-ALPHABET = ascii_letters + digits
+ALPHABET = ascii_letters + digits + "абвгдеёжзиклмнопрстуфхцшщъыьэюя"
 MAX_PREFIX_LENGTH = 4
 SEARCH_LIMIT = 50
 
@@ -106,6 +106,7 @@ class WSRequestType(Enum):
     task = "task"
     update = "update"
     create = "create"
+    known = "known"
 
 
 class WSTargetType(Enum):
@@ -121,6 +122,7 @@ class WSRequest(BaseModel):
     target_id: UUID | None = None
     update_followers: bool | None = None
     update_following: bool | None = None
+    target_ids: list[UUID] | None = None
 
 
 def refresh_interval():
@@ -335,6 +337,16 @@ async def api_websocket_ebdi(
                     await websocket.send_json({"type": "created"})
                     app.added += added
                     db.commit()
+
+            if request.type == WSRequestType.known:
+                assert request.target_ids
+                known = [
+                    str(u.user_id)
+                    for u in db.query(User.user_id).where(
+                        User.user_id.in_(request.target_ids)
+                    )
+                ]
+                await websocket.send_json({"type": "known", "user_ids": known})
 
     except (WebSocketDisconnect, ConnectionClosedError):
         l.warning("(%s) disconnect", app.name)
