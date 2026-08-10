@@ -6,7 +6,7 @@ from string import ascii_lowercase, digits
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, WebSocket
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy import case, desc, func
 from starlette.websockets import WebSocketDisconnect
 from websockets.exceptions import ConnectionClosedError
@@ -78,6 +78,11 @@ class UserBody(BaseModel):
     banner: str | None = None
     last_seen: str | None = None
     user_id: UUID | None = None  # for create
+
+    @field_validator("avatar")
+    @classmethod
+    def normalize_avatar(cls, value: str) -> str:
+        return value.replace("\ufe0e", "").replace("\ufe0f", "")
 
 
 class WSRequestType(Enum):
