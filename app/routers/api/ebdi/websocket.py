@@ -96,10 +96,7 @@ class UserBody(BaseModel):
     bio: str | None = None
     banner: str | None = None
     last_seen: str | None = None
-
-
-class UserCreate(UserBody):
-    user_id: UUID
+    user_id: UUID | None = None  # for create
 
 
 class WSRequestType(Enum):
@@ -107,6 +104,7 @@ class WSRequestType(Enum):
     update = "update"
     create = "create"
     known = "known"
+    searched = "searched"
 
 
 class WSTargetType(Enum):
@@ -115,7 +113,6 @@ class WSTargetType(Enum):
 
 class WSRequest(BaseModel):
     type: WSRequestType
-    targets: list[UserCreate] | None = None
     target_type: WSTargetType | None = None
     target: UserBody | None = None
     target_exists: bool | None = None
@@ -123,6 +120,7 @@ class WSRequest(BaseModel):
     update_followers: bool | None = None
     update_following: bool | None = None
     target_ids: list[UUID] | None = None
+    found_count: int | None = None
 
 
 def refresh_interval():
@@ -253,100 +251,93 @@ async def api_websocket_ebdi(
                     await websocket.send_json({"type": "error", "detail": "no task"})
                     continue
 
-                if request.target_type == WSTargetType.user:
-                    assert request.target_id
-                    user = next(
-                        (
-                            user
-                            for user in task.targets or []
-                            if user.user_id == request.target_id
-                        ),
-                        None
+                if request.target_type != WSTargetType.user:
+                    l.error("(%s) invalid target type", app.name)
+                    await websocket.send_json(
+                        {"type": "error", "detail": "user not in task targets"}
                     )
-                    if user is None:
-                        l.error("(%s) user not in task targets", app.name)
-                        await websocket.send_json(
-                            {"type": "error", "detail": "user not in task targets"}
-                        )
-                        continue
+                    continue
 
-                    if request.target_exists:
-                        assert request.target
-                        l.debug("(%s) < %s", app.name, request.target.username)
-                        for i in request.target.model_fields_set:
-                            if i == "followers" and not request.update_followers:
-                                continue
-                            if i == "following" and not request.update_following:
-                                continue
-                            setattr(user, i, getattr(request.target, i))
-                        user.exists = True
-                        user.updated_at = datetime.now()
+                assert request.target_id
+                user = next(
+                    (
+                        user
+                        for user in task.targets or []
+                        if user.user_id == request.target_id
+                    ),
+                    None
+                )
+                if user is None:
+                    l.error("(%s) user not in task targets", app.name)
+                    await websocket.send_json(
+                        {"type": "error", "detail": "user not in task targets"}
+                    )
+                    continue
 
-                    else:
-                        l.debug("(%s) < not exists", app.name)
-                        user.exists = False
-                        user.updated_at = datetime.now()
+                if request.target_exists:
+                    assert request.target
+                    l.debug("(%s) < %s", app.name, request.target.username)
+                    for i in request.target.model_fields_set:
+                        if i == "followers" and not request.update_followers:
+                            continue
+                        if i == "following" and not request.update_following:
+                            continue
+                        setattr(user, i, getattr(request.target, i))
+                    user.exists = True
+                    user.updated_at = datetime.now()
 
-                    await websocket.send_json({"type": "updated"})
-                    app.refreshed += 1
-                    db.commit()
+                else:
+                    l.debug("(%s) < not exists", app.name)
+                    user.exists = False
+                    user.updated_at = datetime.now()
+
+                await websocket.send_json({"type": "updated"})
+                app.refreshed += 1
+                db.commit()
 
             if request.type == WSRequestType.create:
-                assert request.target_type
+                assert request.target
 
-                if task is None:
-                    l.error("(%s) no task", app.name)
+                if task is None or task.prefix is None:
                     await websocket.send_json({"type": "error", "detail": "no task"})
                     continue
 
-                if request.target_type == WSTargetType.user:
-                    assert request.targets
+                if request.target_type != WSTargetType.user:
+                    l.error("(%s) invalid target type", app.name)
+                    await websocket.send_json(
+                        {"type": "error", "detail": "user not in task targets"}
+                    )
+                    continue
 
-                    known = {
-                        u.user_id
-                        for u in db.query(User.user_id).where(
-                            User.user_id.in_([u.user_id for u in request.targets])
-                        )
-                    }
-                    added = 0
-
-                    for user in request.targets:
-                        if user.user_id in known:
-                            continue
-
-                        l.debug("(%s) < %s", app.name, user.username)
-
-                        db_user = User()
-                        for i in user.model_fields_set:
-                            setattr(db_user, i, getattr(user, i))
-                        db_user.exists = True
-
-                        db.add(db_user)
-                        added += 1
-
-                    prefix = db.get(SearchPrefix, task.prefix)
-                    assert prefix
-                    assert task.prefix
-
-                    prefix.checked_at = datetime.now()
-                    prefix.found_count = len(request.targets)
-                    # search results are capped, a full page means we missed some
-                    if len(request.targets) >= SEARCH_LIMIT:
-                        expand_prefix(db, task.prefix)
-
-                    await websocket.send_json({"type": "created"})
-                    app.added += added
+                user = request.target
+                if db.query(User).where(User.user_id == user.user_id).first() is None:
+                    l.debug("(%s) < %s", app.name, user.username)
+                    db_user = User()
+                    for i in user.model_fields_set:
+                        setattr(db_user, i, getattr(user, i))
+                    db_user.exists = True
+                    db_user.updated_at = datetime.now()
+                    db.add(db_user)
+                    app.added += 1
                     db.commit()
 
-            if request.type == WSRequestType.known:
-                assert request.target_ids
-                known = [
-                    str(u.user_id)
-                    for u in db.query(User.user_id).where(
-                        User.user_id.in_(request.target_ids)
-                    )
-                ]
-                await websocket.send_json({"type": "known", "user_ids": known})
+                await websocket.send_json({"type": "created"})
+
+            if request.type == WSRequestType.searched:
+                if task is None or task.prefix is None:
+                    await websocket.send_json({"type": "error", "detail": "no task"})
+                    continue
+
+                prefix = db.get(SearchPrefix, task.prefix)
+                assert prefix
+                prefix.checked_at = datetime.now()
+                prefix.found_count = request.found_count or 0
+                # search results are capped, a full page means we missed some
+                if (request.found_count or 0) >= SEARCH_LIMIT:
+                    expand_prefix(db, task.prefix)
+                db.commit()
+
+                await websocket.send_json({"type": "searched"})
 
     except (WebSocketDisconnect, ConnectionClosedError):
         l.warning("(%s) disconnect", app.name)
