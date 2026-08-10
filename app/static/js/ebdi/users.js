@@ -63,7 +63,7 @@ function write_url_state() {
 }
 
 function update_sort_headers() {
-    for (const cell of document.querySelectorAll(".user-sortable")) {
+    for (const cell of document.querySelectorAll(".row-sortable")) {
         const active = cell.dataset.order === state.order;
         cell.classList.toggle("sort-active", active);
         const arrow = cell.querySelector(".sort-arrow");
@@ -113,24 +113,24 @@ function build_params(extra = {}) {
 }
 
 function show_loader(show) {
-    const loader = get_el("users-loader");
+    const loader = get_el("list-loader");
     loader.hidden = !show;
     if (show) {
-        get_el("users").appendChild(loader);
+        get_el("rows").appendChild(loader);
     }
 }
 
 function hide_error() {
-    get_el("users-error").hidden = true;
+    get_el("list-error").hidden = true;
     state.failed_offset = null;
 }
 
 function show_error(offset, message) {
     state.failed_offset = offset;
     get_el("error-text").textContent = message;
-    const error = get_el("users-error");
+    const error = get_el("list-error");
     error.hidden = false;
-    get_el("users").appendChild(error);
+    get_el("rows").appendChild(error);
 }
 
 async function fetch_users(offset) {
@@ -157,7 +157,7 @@ async function fetch_users(offset) {
 }
 
 function render_place(node, user) {
-    const place = node.querySelector(".user-place");
+    const place = node.querySelector(".row-place");
     if (user.filtered_rank === null) {
         place.textContent = "—";
         return;
@@ -165,7 +165,7 @@ function render_place(node, user) {
     place.textContent = user.filtered_rank + ".";
     if (user.global_rank !== user.filtered_rank) {
         const global_place = document.createElement("div");
-        global_place.className = "user-global-place";
+        global_place.className = "row-global-place";
         global_place.title = "Место в глобальном топе";
         global_place.textContent = "#" + user.global_rank;
         place.appendChild(global_place);
@@ -178,10 +178,10 @@ function render_user(user) {
     node.dataset.userId = user.user_id;
     node.dataset.position = user.position;
     if (!user.exists) {
-        node.classList.add("user-deleted");
+        node.classList.add("row-deleted");
     }
     render_place(node, user);
-    node.querySelector(".user-avatar").textContent = user.avatar;
+    node.querySelector(".row-avatar").textContent = user.avatar;
     const display_name = node.querySelector(".user-display-name");
     const name = document.createElement("span");
     name.textContent = user.display_name;
@@ -221,11 +221,11 @@ function render_user(user) {
 }
 
 function update_gaps() {
-    const container = get_el("users");
-    for (const gap of container.querySelectorAll(".user-gap")) {
+    const container = get_el("rows");
+    for (const gap of container.querySelectorAll(".row-gap")) {
         gap.remove();
     }
-    const batches = [...container.querySelectorAll(".user-batch")];
+    const batches = [...container.querySelectorAll(".row-batch")];
     for (let i = 1; i < batches.length; i++) {
         const prev_offset = Number(batches[i - 1].dataset.offset);
         const offset = Number(batches[i].dataset.offset);
@@ -233,7 +233,7 @@ function update_gaps() {
             continue;
         }
         const gap = document.createElement("div");
-        gap.className = "user user-gap";
+        gap.className = "row row-gap";
         gap.dataset.offset = prev_offset + PAGE_SIZE;
         const spinner = document.createElement("div");
         spinner.className = "loader-spinner";
@@ -244,24 +244,24 @@ function update_gaps() {
 }
 
 function get_scroll_anchor() {
-    return [...document.querySelectorAll("#users .user")].find(
+    return [...document.querySelectorAll("#rows .row")].find(
         (node) => node.getBoundingClientRect().bottom > 0,
     );
 }
 
 function insert_batch(offset, users) {
-    const container = get_el("users");
+    const container = get_el("rows");
     const batch = document.createElement("div");
-    batch.className = "user-batch";
+    batch.className = "row-batch";
     batch.dataset.offset = offset;
     for (const user of users) {
         batch.appendChild(render_user(user));
     }
-    const batches = [...container.querySelectorAll(".user-batch")];
+    const batches = [...container.querySelectorAll(".row-batch")];
     const next = batches.find((el) => Number(el.dataset.offset) > offset);
     const anchor = get_scroll_anchor();
     const anchor_top = anchor ? anchor.getBoundingClientRect().top : 0;
-    container.insertBefore(batch, next ?? get_el("users-loader"));
+    container.insertBefore(batch, next ?? get_el("list-loader"));
     update_gaps();
     if (anchor) {
         const delta = anchor.getBoundingClientRect().top - anchor_top;
@@ -277,7 +277,7 @@ async function load_batch(offset) {
     }
     state.loading = true;
     hide_error();
-    const gap = document.querySelector(`.user-gap[data-offset="${offset}"]`);
+    const gap = document.querySelector(`.row-gap[data-offset="${offset}"]`);
     if (!gap) {
         show_loader(true);
     }
@@ -297,19 +297,17 @@ async function load_batch(offset) {
     } else {
         update_gaps();
     }
-    get_el("users-empty").hidden = Boolean(
-        document.querySelector(".user-batch"),
-    );
+    get_el("list-empty").hidden = Boolean(document.querySelector(".row-batch"));
 }
 
 function reset_list() {
-    for (const el of document.querySelectorAll(".user-batch, .user-gap")) {
+    for (const el of document.querySelectorAll(".row-batch, .row-gap")) {
         el.remove();
     }
     state.loaded_offsets.clear();
     state.finished = false;
     hide_error();
-    get_el("users-empty").hidden = true;
+    get_el("list-empty").hidden = true;
 }
 
 async function reload() {
@@ -353,7 +351,7 @@ function init_infinite_scroll() {
         }
         await load_batch(max_loaded_offset() + PAGE_SIZE);
     });
-    bottom_observer.observe(get_el("users-sentinel-bottom"));
+    bottom_observer.observe(get_el("sentinel-bottom"));
     const top_observer = new IntersectionObserver(async (entries) => {
         if (!entries.some((entry) => entry.isIntersecting)) {
             return;
@@ -363,7 +361,7 @@ function init_infinite_scroll() {
         }
         await load_batch(min_loaded_offset() - PAGE_SIZE);
     });
-    top_observer.observe(get_el("users-sentinel-top"));
+    top_observer.observe(get_el("sentinel-top"));
 }
 
 let search_timer = null;
@@ -444,7 +442,7 @@ function on_search_input(event) {
 }
 
 function find_user_node(user_id) {
-    return document.querySelector(`.user[data-user-id="${user_id}"]`);
+    return document.querySelector(`.row[data-user-id="${user_id}"]`);
 }
 
 function page_offset(place) {
@@ -502,14 +500,12 @@ async function jump_to_user(user) {
         return;
     }
     node.scrollIntoView({ behavior: "smooth", block: "center" });
-    node.classList.add("user-highlighted");
-    setTimeout(() => node.classList.remove("user-highlighted"), 2500);
+    node.classList.add("row-highlighted");
+    setTimeout(() => node.classList.remove("row-highlighted"), 3000);
 }
 
-let clan_timer = null;
-
 function init_sort_headers() {
-    for (const cell of document.querySelectorAll(".user-sortable")) {
+    for (const cell of document.querySelectorAll(".row-sortable")) {
         cell.addEventListener("click", () => {
             if (cell.dataset.order === state.order) {
                 state.descending = !state.descending;

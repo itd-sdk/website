@@ -318,7 +318,7 @@ img {
 }
 
 #footer {
-    padding: 5% 30px;
+    padding: 30px;
     border-top: solid 1px #292929;
     display: flex;
     flex-direction: row;
@@ -337,46 +337,25 @@ img {
     cursor: pointer;
 }
 
-#footer-section {
+.footer-section {
     display: flex;
     flex-direction: column;
     gap: 10px;
     padding-right: 10%;
 }
 
-#footer-section-title {
+.footer-section-title {
     font-size: 15.2px;
+    font-weight: bold;
 }
 
-#footer-section-values {
+.footer-section-values {
     display: flex;
     flex-direction: column;
     gap: 10px;
 }
 
 .footer-section-value {
-    color: #888888;
-    font-size: 14.3px;
-}
-
-#footer-contact {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    padding-right: 15%;
-}
-
-#footer-contact-title {
-    font-size: 15.2px;
-}
-
-#footer-contact-values {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-
-.footer-contact-value {
     display: flex;
     flex-direction: row;
     align-items: center;

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -13,7 +13,23 @@ templates = Jinja2Templates(directory="app/templates/")
 
 @router.get("/")
 def get_ebdi(request: Request):
+    # return templates.TemplateResponse(request, "ebdi/index.html")
+    return RedirectResponse("/ebdi/users")
+
+
+@router.get("/users")
+def get_ebdi_users(request: Request):
     return templates.TemplateResponse(request, "ebdi/users.html")
+
+
+@router.get("/clans")
+def get_ebdi_clans(request: Request):
+    return templates.TemplateResponse(request, "ebdi/clans.html")
+
+
+@router.get("/graph")
+def get_ebdi_graph(request: Request):
+    return templates.TemplateResponse(request, "ebdi/graph.html")
 
 
 @router.get("/epepuy")

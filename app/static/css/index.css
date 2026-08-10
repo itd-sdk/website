@@ -33,33 +33,39 @@
     margin-right: 3px;
 }
 
+#pages {
+    display: flex;
+    flex-direction: row;
+    gap: 20px;
+}
+
+.page {
+    border: #fbeadb 1px solid;
+    padding: 15px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    aspect-ratio: 1;
+    flex: 0 1 clamp(260px, 24vw, 340px);
+}
+
 #graph {
     background:
         linear-gradient(to right, #2c2a2744, #2c2a2744),
         url("/static/images/graph.png");
     background-size: cover;
-    border: #fbeadb 1px solid;
-    padding: 15px;
-    display: flex;
-    flex-direction: row;
-    justify-content: space-between;
-    margin-left: 16px;
-    margin-right: 16px;
 }
 
-#graph-description {
+.page-description {
     color: #999;
 }
 
-#graph-other {
-    color: #666;
-}
-#graph button {
+.page button {
     height: min-content;
-    align-self: center;
+    align-self: flex-end;
 }
 
-#ebdi {
+/*#ebdi {
     margin-top: 30px;
     background: #2c2a27;
     padding: 20px;
@@ -88,24 +94,14 @@
     bottom: -50px;
     width: 70%;
     height: 120%;
-}
+}*/
 
 @media (max-width: 600px) {
-    #ebdi {
-        background: transparent;
-        margin-top: 70px;
-        margin-bottom: 80px;
+    .page {
+        aspect-ratio: auto;
     }
-    #ebdi div {
-        background: #2c2a27;
-        padding: 16px;
-    }
-    #ebdi::after {
-        bottom: -80px;
-        left: -15px;
-        height: 140%;
-        width: 140%;
-        opacity: 0.7;
+    #pages {
+        flex-direction: column;
     }
 }
 
@@ -196,4 +192,7 @@
     margin-left: auto;
     margin-right: auto;
     width: min-content;
+}
+#star-history a picture img {
+    max-width: 90vw;
 }

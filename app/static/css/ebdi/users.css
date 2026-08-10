@@ -1,0 +1,88 @@
+.row-deleted .user-display-name,
+.row-deleted .row-right {
+    opacity: 0.6;
+}
+
+.user-name {
+    flex-grow: 3;
+    min-width: 0;
+}
+
+.user-display-name {
+    gap: 5px;
+    font-size: 18px;
+    flex-grow: 0;
+    display: flex;
+}
+
+.user-display-name span {
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+    color: #fbeadb;
+    min-width: 0;
+}
+
+.user-username {
+    color: #777;
+    font-style: oblique 10deg;
+    font-size: 13px;
+}
+
+.user-followers,
+.user-following,
+.user-posts {
+    width: 120px;
+    text-align: center;
+}
+
+.user-created-at {
+    width: 180px;
+    text-align: center;
+}
+
+@media (max-width: 1000px) {
+    #filters {
+        gap: 20px;
+    }
+
+    .filter-group {
+        flex-shrink: 0;
+    }
+
+    .filter-group label,
+    #deleted-toggle {
+        font-size: 13px;
+    }
+
+    .user-display-name {
+        font-size: 15px;
+    }
+
+    .user-username {
+        font-size: 11px;
+    }
+
+    .user-created-at {
+        display: none;
+    }
+
+    .user-followers,
+    .user-following,
+    .user-posts {
+        width: 100px;
+        font-size: 13px;
+    }
+}
+
+@media (max-width: 550px) {
+    .user-posts {
+        display: none;
+    }
+}
+
+@media (max-width: 450px) {
+    .user-following {
+        display: none;
+    }
+}

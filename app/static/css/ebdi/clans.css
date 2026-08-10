@@ -1,0 +1,21 @@
+.clan-count {
+    width: 160px;
+    text-align: center;
+}
+
+@media (max-width: 1000px) {
+    .clan-count {
+        width: 110px;
+        font-size: 13px;
+    }
+}
+
+.clan-name {
+    color: #fbeadb;
+    cursor: pointer;
+}
+
+#controls {
+    flex-direction: column;
+    gap: 10px;
+}

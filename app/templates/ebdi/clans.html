@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block head %}
+<link rel="stylesheet" href="/static/css/ebdi/style.css">
+<link rel="stylesheet" href="/static/css/ebdi/clans.css">
+<script src="/static/js/ebdi/clans.js"></script>
+<script type="module" src="https://cdn.jsdelivr.net/npm/emoji-picker-element@1/index.js"></script>
+<meta name="description" content="Единая База Данных ИТД: топ кланов по количеству пользователей">
+{% endblock %}
+
+{% block content %}
+<div id="landing">
+    <img id="banner" src="/static/images/ebdi.png">
+    <div id="landing-description">Единая База Данных ИТД</div>
+</div>
+
+<div id="content">
+    <div id="feedback">
+        <img src="/static/icons/vote.svg">
+        <div id="feedback-content">
+            <div id="feedback-title">Обратная связь</div>
+            <div id="feedback-description">Предложите идеи для ЕБДИ или сообщите о баге.</div>
+        </div>
+        <button onclick="location.href='https://github.com/itd-sdk/website/issues/new'">Перейти <img src="/static/icons/arrow.svg"></button>
+    </div>
+    <nav id="tabs">
+        <a href="/ebdi/users" class="tab">Пользователи</a>
+        <a href="/ebdi/clans" class="tab tab-active">Кланы</a>
+        <!--<a href="/ebdi/posts" class="tab">Посты</a>-->
+        <!--<a href="/ebdi/hashtags" class="tab">Хэштэги</a>-->
+        <!--<a href="/ebdi/stats" class="tab">Статистика</a>-->
+    </nav>
+
+    <h2>Кланы ИТД</h2>
+
+    <div id="controls-box">
+        <div id="controls">
+            <div id="clan-box">
+                <button id="clan-button">
+                    <div id="clan-text">Поиск</div>
+                    <img src="/static/icons/arrow.svg">
+                </button>
+                <div id="clan-picker" hidden>
+                    <emoji-picker
+                        class="dark"
+                        locale="ru"
+                        emoji-version="17.0"
+                        data-source="https://cdn.jsdelivr.net/npm/emoji-picker-element-data@1/ru/cldr/data.json"
+                    ></emoji-picker>
+                </div>
+            </div>
+            <div class="error" id="clan-error" hidden>Не найдено</div>
+
+        </div>
+    </div>
+
+    <div id="rows">
+        <div class="row" id="rows-header">
+            <div class="row-left"></div>
+            <div class="row-right">
+                <div class="clan-count"><b>Пользователи</b></div>
+            </div>
+        </div>
+        <div class="row" id="clan-template">
+            <div class="row-left">
+                <div class="row-place">1.</div>
+                <div class="row-avatar">🙂</div>
+                <a class="clan-name" target="_blank">Загрузка...</a>
+            </div>
+            <div class="row-right">
+                <div class="clan-count">0</div>
+            </div>
+        </div>
+        <div id="list-empty" hidden>Ничего не найдено</div>
+        <div id="list-error" hidden>
+            <div id="error-text"></div>
+            <button id="retry-button">Попробовать снова</button>
+        </div>
+        <div class="row" id="list-loader">
+            <div class="loader-spinner"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}

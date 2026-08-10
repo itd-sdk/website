@@ -1,8 +1,9 @@
 {% extends "base.html" %}
 
 {% block head %}
-<link rel="stylesheet" href="/static/css/ebdi-users.css">
-<script src="/static/js/ebdi-users.js"></script>
+<link rel="stylesheet" href="/static/css/ebdi/style.css">
+<link rel="stylesheet" href="/static/css/ebdi/users.css">
+<script src="/static/js/ebdi/users.js"></script>
 <script type="module" src="https://cdn.jsdelivr.net/npm/emoji-picker-element@1/index.js"></script>
 <meta name="description" content="Единая База Данных ИТД: Ранкинг, топ пользователей, поиск, сортировка">
 <meta name="keywords" content="itd, itd-sdk, итд, итд ранкинг, ебди, итд пользователи, новки, илья новки, nowkie">
@@ -23,6 +24,13 @@
         </div>
         <button onclick="location.href='https://github.com/itd-sdk/website/issues/new'">Перейти <img src="/static/icons/arrow.svg"></button>
     </div>
+    <nav id="tabs">
+        <a href="/ebdi/users" class="tab tab-active">Пользователи</a>
+        <a href="/ebdi/clans" class="tab">Кланы</a>
+        <!--<a href="/ebdi/posts" class="tab">Посты</a>-->
+        <!--<a href="/ebdi/hashtags" class="tab">Хэштэги</a>-->
+        <!--<a href="/ebdi/stats" class="tab">Статистика</a>-->
+    </nav>
 
     <h2>Пользователи ИТД</h2>
 
@@ -68,51 +76,51 @@
         </div>
     </div>
 
-    <div id="users">
-        <div class="user" id="users-header">
-            <div class="user-left"></div>
-            <div class="user-right">
-                <div class="user-followers user-sortable" data-order="followers_count">
+    <div id="rows">
+        <div class="row" id="rows-header">
+            <div class="row-left"></div>
+            <div class="row-right">
+                <div class="user-followers row-sortable" data-order="followers_count">
                     <b>Подписчики</b><img class="sort-arrow">
                 </div>
-                <div class="user-following user-sortable" data-order="following_count">
+                <div class="user-following row-sortable" data-order="following_count">
                     <b>Подписки</b><img class="sort-arrow">
                 </div>
-                <div class="user-posts user-sortable" data-order="posts_count">
+                <div class="user-posts row-sortable" data-order="posts_count">
                     <b>Посты</b><img class="sort-arrow">
                 </div>
-                <div class="user-created-at user-sortable" data-order="created_at">
+                <div class="user-created-at row-sortable" data-order="created_at">
                     <b>Дата регистрации</b><img class="sort-arrow">
                 </div>
             </div>
         </div>
-        <div id="users-sentinel-top"></div>
-        <div class="user" id="user-template">
-            <div class="user-left">
-                <div class="user-place">1.</div>
-                <div class="user-avatar">✅</div>
+        <div id="sentinel-top" class="sentinel"></div>
+        <div class="row" id="user-template">
+            <div class="row-left">
+                <div class="row-place">1.</div>
+                <div class="row-avatar">✅</div>
                 <div class="user-name">
                     <a class="user-display-name" target="_blank">Загрузка...</a>
                     <div class="user-username">@loading</div>
                 </div>
             </div>
-            <div class="user-right">
+            <div class="row-right">
                 <div class="user-followers">123</div>
                 <div class="user-following">67</div>
                 <div class="user-posts">100</div>
                 <div class="user-created-at">17 мая 2026</div>
             </div>
         </div>
-        <div id="users-empty" hidden>Ничего не найдено</div>
-        <div id="users-error" hidden>
-            <div id="error-text"></div>
-            <button id="retry-button">Попробовать снова</button>
+        <div id="list-empty" hidden>Ничего не найдено</div>
+            <div id="list-error" hidden>
+                <div id="error-text"></div>
+                <button id="retry-button">Попробовать снова</button>
+            </div>
+            <div class="row" id="list-loader" hidden>
+                <div class="loader-spinner"></div>
+            </div>
         </div>
-        <div class="user" id="users-loader" hidden>
-            <div class="loader-spinner"></div>
-        </div>
-    </div>
-    <div id="users-sentinel-bottom"></div>
+        <div id="sentinel-bottom" class="sentinel"></div>
     <!--<div id="note">Лицензировано под <a href="https://creativecommons.org/licenses/by-nc/4.0/">CC BY-NC 4.0</a></div>-->
 </div>
 {% endblock %}

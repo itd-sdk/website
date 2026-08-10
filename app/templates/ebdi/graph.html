@@ -1,7 +1,8 @@
 {% extends "base.html" %}
 
 {% block head %}
-<link rel="stylesheet" href="/static/css/graph.css">
+<link rel="stylesheet" href="/static/css/ebdi/graph.css">
+<script type="module" src="/static/js/ebdi/graph.js"></script>
 {% endblock %}
 
 {% block header %}{% endblock %}
@@ -14,24 +15,22 @@
             <div id="graph-progress-bar"><div id="graph-progress-fill"></div></div>
         </div>
     </div>
-    <canvas id="graph-canvas"></canvas>
+    <div id="graph-canvas"></div>
     <div id="graph-tooltip" hidden></div>
     <div id="graph-other" hidden>
         <div id="graph-edges-container">
             <input type="checkbox" id="graph-edges">
             <label for="graph-edges">связи</label>
         </div>
-        <div id="graph-stats"></div>
+        <div id="graph-stats" title="Показываются не все пользователи из базы, а только те, у когго есть хотя бы один подписчик\подписка"></div>
     </div>
     <a id="graph-logo" href="/ebdi"><img src="/static/images/ebdi.png" alt="logo"></a>
 
     <div id="graph-search" hidden>
-        <input id="graph-search-input" type="text" placeholder="Поиск по username..." autocomplete="off">
+        <input id="graph-search-input" type="text" placeholder="Поиск" autocomplete="off">
         <div id="graph-search-results" hidden></div>
     </div>
 </div>
-<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
-<script src="/static/js/graph.js"></script>
 {% endblock %}
 
 {% block footer %}{% endblock %}
