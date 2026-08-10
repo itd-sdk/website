@@ -2,7 +2,7 @@ from asyncio import wait_for
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
-from string import ascii_letters, digits
+from string import ascii_lowercase, digits
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, WebSocket
@@ -46,7 +46,7 @@ def remove_expired_tasks():
         tasks.remove(t)
 
 
-ALPHABET = ascii_letters + digits + "абвгдеёжзиклмнопрстуфхцшщъыьэюя"
+ALPHABET = ascii_lowercase + digits + "абвгдеёжзиклмнопрстуфхцшщъыьэюя"
 MAX_PREFIX_LENGTH = 4
 SEARCH_LIMIT = 50
 
@@ -103,7 +103,6 @@ class WSRequestType(Enum):
     task = "task"
     update = "update"
     create = "create"
-    known = "known"
     searched = "searched"
 
 
@@ -119,7 +118,6 @@ class WSRequest(BaseModel):
     target_id: UUID | None = None
     update_followers: bool | None = None
     update_following: bool | None = None
-    target_ids: list[UUID] | None = None
     found_count: int | None = None
 
 
@@ -321,7 +319,12 @@ async def api_websocket_ebdi(
                     app.added += 1
                     db.commit()
 
-                await websocket.send_json({"type": "created"})
+                    await websocket.send_json({"type": "created", "added": True})
+
+                # else:
+                #     await websocket.send_json(
+                #         {"type": "error", "detail": "already exists"}
+                #     )
 
             elif request.type == WSRequestType.searched:
                 if task is None or task.prefix is None:
@@ -338,16 +341,6 @@ async def api_websocket_ebdi(
                 db.commit()
 
                 await websocket.send_json({"type": "searched"})
-
-            elif request.type == WSRequestType.known:
-                assert request.target_ids
-                known = [
-                    str(u.user_id)
-                    for u in db.query(User.user_id).where(
-                        User.user_id.in_(request.target_ids)
-                    )
-                ]
-                await websocket.send_json({"type": "known", "user_ids": known})
 
             else:
                 l.error("(%s) invalid type", app.name)
