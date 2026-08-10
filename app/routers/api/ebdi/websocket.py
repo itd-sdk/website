@@ -12,8 +12,9 @@ from starlette.websockets import WebSocketDisconnect
 from websockets.exceptions import ConnectionClosedError
 
 from app.logger import get_logger
-from app.schemas import App, SearchPrefix, User
+from app.schemas import App, User
 from app.services.db import Session, get_db
+from app.services.settings import get_settings
 
 router = APIRouter(prefix="/websocket")
 l = get_logger("ebdi.websocket")
@@ -46,40 +47,20 @@ def remove_expired_tasks():
         tasks.remove(t)
 
 
-ALPHABET = ascii_lowercase + digits + "абвгдеёжзиклмнопрстуфхцшщъыьэюя"
-MAX_PREFIX_LENGTH = 4
-SEARCH_LIMIT = 50
+ALPHABET = ascii_lowercase + digits + "абвгдеёжзийклмнопрстуфхцчшщъыьэюя"
 
 
-def seed_prefixes(db: Session):
-    if db.query(SearchPrefix).first() is not None:
-        return
-    db.add_all(SearchPrefix(prefix=a + b) for a in ALPHABET for b in ALPHABET)
-    db.commit()
-
-
-def get_prefixes():
-    return [task.prefix for task in tasks if task.prefix]
-
-
-def next_prefix(db: Session):
-    return (
-        db.query(SearchPrefix)
-        .where(SearchPrefix.prefix.not_in(get_prefixes()))
-        .order_by(SearchPrefix.checked_at.asc().nulls_first(), SearchPrefix.prefix)
-        .first()
-    )
-
-
-def expand_prefix(db: Session, prefix: str):
-    if len(prefix) >= MAX_PREFIX_LENGTH:
-        return
-    children = [prefix + char for char in ALPHABET]
-    known = {
-        p.prefix
-        for p in db.query(SearchPrefix.prefix).where(SearchPrefix.prefix.in_(children))
-    }
-    db.add_all(SearchPrefix(prefix=child) for child in children if child not in known)
+def increment_prefix(prefix: str) -> str:
+    chars = list(prefix)
+    for i in reversed(range(len(chars))):
+        index = ALPHABET.index(chars[i]) + 1
+        if index < len(ALPHABET):
+            chars[i] = ALPHABET[index]
+            return "".join(chars)
+        # carry over: reset this position and bump the one before it
+        chars[i] = ALPHABET[0]
+    # wrapped around, start the cycle over
+    return ALPHABET[0] * len(prefix)
 
 
 class UserBody(BaseModel):
@@ -103,7 +84,6 @@ class WSRequestType(Enum):
     task = "task"
     update = "update"
     create = "create"
-    searched = "searched"
 
 
 class WSTargetType(Enum):
@@ -118,7 +98,6 @@ class WSRequest(BaseModel):
     target_id: UUID | None = None
     update_followers: bool | None = None
     update_following: bool | None = None
-    found_count: int | None = None
 
 
 def refresh_interval():
@@ -209,12 +188,11 @@ async def api_websocket_ebdi(
                 if update_query:
                     task = Task(app, update_query, type="update")
                 else:
-                    prefix = next_prefix(db)
-                    if prefix is None:
-                        l.warning("(%s) no prefixes available", app.name)
-                        await websocket.send_json({"type": "done"})
-                        return
-                    task = Task(app, type="create", prefix=prefix.prefix)
+                    settings = get_settings(db)
+                    prefix = settings.search_cursor
+                    settings.search_cursor = increment_prefix(prefix)
+                    db.commit()
+                    task = Task(app, type="create", prefix=prefix)
 
                 l.debug("(%s) new task", app.name)
                 # if not task.targets:
@@ -321,26 +299,11 @@ async def api_websocket_ebdi(
 
                     await websocket.send_json({"type": "created", "added": True})
 
+                await websocket.send_json({"type": "created", "added": False})
                 # else:
                 #     await websocket.send_json(
                 #         {"type": "error", "detail": "already exists"}
                 #     )
-
-            elif request.type == WSRequestType.searched:
-                if task is None or task.prefix is None:
-                    await websocket.send_json({"type": "error", "detail": "no task"})
-                    continue
-
-                prefix = db.get(SearchPrefix, task.prefix)
-                assert prefix
-                prefix.checked_at = datetime.now()
-                prefix.found_count = request.found_count or 0
-                # search results are capped, a full page means we missed some
-                if (request.found_count or 0) >= SEARCH_LIMIT:
-                    expand_prefix(db, task.prefix)
-                db.commit()
-
-                await websocket.send_json({"type": "searched"})
 
             else:
                 l.error("(%s) invalid type", app.name)
