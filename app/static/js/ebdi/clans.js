@@ -14,6 +14,10 @@ function normalize_emoji(value) {
     return value.replace(/[\uFE0E\uFE0F]/g, "");
 }
 
+function strip_skin_tone(value) {
+    return value.replace(/[\u{1F3FB}-\u{1F3FF}]/gu, "");
+}
+
 function render_clan(clan) {
     const node = clan_template.cloneNode(true);
     node.removeAttribute("id");
@@ -23,7 +27,7 @@ function render_clan(clan) {
     node.querySelector(".row-place").textContent = clan.rank + ".";
     node.querySelector(".row-avatar").textContent = clan.clan;
     node.querySelector(".clan-name").textContent =
-        clan_names.get(normalize_emoji(clan.clan)) || "-";
+        clan_names.get(strip_skin_tone(normalize_emoji(clan.clan))) || "-";
     node.querySelector(".clan-count").textContent =
         new Intl.NumberFormat().format(clan.users_count);
     return node;

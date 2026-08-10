@@ -158,9 +158,9 @@ async def api_websocket_ebdi(
                 task = Task(
                     app,
                     db.query(User)
-                    .where(priority >= 1)
+                    # .where(priority >= 1)
                     .where(User.id.not_in(get_targets()))
-                    .where(User.followers_count >= 3)
+                    .where(User.followers_count >= 1)
                     .order_by(desc(priority))
                     .limit(20)
                     .all()
