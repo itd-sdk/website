@@ -304,7 +304,7 @@ function render_clans_over_time(data) {
             scales: {
                 x: {
                     type: "time",
-                    time: { unit: "year" },
+                    time: { unit: "month" },
                     grid: { color: GRID },
                     ticks: { color: TEXT },
                 },
@@ -318,21 +318,16 @@ function render_clans_over_time(data) {
                     },
                 },
             },
+            tooltip: base_options.plugins.tooltip,
         }),
     });
 }
 
 function render_last_seen(data) {
-    const labels = {
-        today: "Сегодня",
-        week: "На этой неделе",
-        month: "В этом месяце",
-        long_ago: "Давно",
-    };
     new Chart(get_el("chart-last-seen"), {
         type: "doughnut",
         data: {
-            labels: data.map((row) => labels[row.last_seen] || "Скрыто"),
+            labels: data.map((row) => row.last_seen || "Скрыто"),
             datasets: [
                 {
                     data: data.map((row) => row.count),

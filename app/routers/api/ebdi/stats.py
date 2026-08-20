@@ -16,10 +16,6 @@ FOLLOWER_BUCKETS = [0, 1, 2, 10, 50, 100, 500, 1000, 5000]
 RATIO_BUCKETS = [0, 0.1, 0.5, 1, 2, 5, 10]
 
 
-def month(column):
-    return func.date_trunc("month", column)
-
-
 def bucket_case(column, bounds: list):
     # assigns each row the lower bound of its bucket
     return case(
@@ -40,7 +36,7 @@ class Bucket(BaseModel):
 
 
 class ScatterPoint(BaseModel):
-    x: float
+    x: datetime
     y: float
 
 
@@ -64,10 +60,12 @@ class LastSeenShare(BaseModel):
 
 def get_registrations(db: Session) -> list[Registrations]:
     rows = (
-        db.query(month(User.created_at).label("month"), func.count(User.id))
+        db.query(
+            func.date_trunc("week", User.created_at).label("week"), func.count(User.id)
+        )
         .where(User.created_at.isnot(None))
-        .group_by("month")
-        .order_by("month")
+        .group_by("week")
+        .order_by("week")
         .all()
     )
     total = 0
@@ -97,7 +95,7 @@ def get_followers_by_age(db: Session) -> list[ScatterPoint]:
         .where(User.exists.is_(True))
         .where(User.created_at.isnot(None))
         .order_by(desc(User.followers_count))
-        .limit(10000)
+        .limit(5000)
         .all()
     )
     return [
@@ -112,7 +110,7 @@ def get_posts_vs_followers(db: Session) -> list[ScatterPoint]:
         .where(User.exists.is_(True))
         .where(User.posts_count > 0)
         .order_by(desc(User.followers_count))
-        .limit(10000)
+        .limit(5000)
         .all()
     )
     return [ScatterPoint(x=posts, y=followers) for posts, followers in rows]
@@ -135,17 +133,19 @@ def get_clans_over_time(db: Session) -> list[ClanShare]:
 
     rows = (
         db.query(
-            User.avatar, month(User.created_at).label("month"), func.count(User.id)
+            User.avatar,
+            func.date_trunc("week", User.created_at).label("week"),
+            func.count(User.id)
         )
         .where(User.avatar.in_(top))
         .where(User.created_at.isnot(None))
-        .group_by(User.avatar, "month")
-        .order_by("month")
+        .group_by(User.avatar, "week")
+        .order_by("week")
         .all()
     )
     shares: dict[str, list[ScatterPoint]] = {clan: [] for clan in top}
     for clan, value, count in rows:
-        shares[clan].append(ScatterPoint(x=value.timestamp() * 1000, y=count))
+        shares[clan].append(ScatterPoint(x=value, y=count))
     return [ClanShare(clan=clan, points=points) for clan, points in shares.items()]
 
 
@@ -157,28 +157,24 @@ def get_last_seen(db: Session) -> list[LastSeenShare]:
         .order_by(desc(func.count(User.id)))
         .all()
     )
+    rows = {value: count for value, count in rows}
     return [
+        LastSeenShare(last_seen=None, count=rows[None]),
         LastSeenShare(
-            last_seen={
-                "just_now": "today",
-                "recently": "today",
-                "minutes": "today",
-                "hours": "today",
-                "this_week": "week",
-                "this_month": "month",
-                "long_ago": "long_ago",
-                None: None
-            }[value],
-            count=count
-        )
-        for value, count in rows
+            last_seen="На этой неделе",
+            count=rows.get("recently", 0)
+            + rows.get("just_now", 0)
+            + rows.get("this_week", 0)
+        ),
+        LastSeenShare(last_seen="В этом месяце", count=rows.get("this_month", 0)),
+        LastSeenShare(last_seen="Давно", count=rows.get("long_ago", 0))
     ]
 
 
 def get_cohorts(db: Session) -> list[Cohort]:
     rows = (
         db.query(
-            month(User.created_at).label("month"),
+            func.date_trunc("month", User.created_at).label("month"),
             func.count(User.id),
             func.count(User.id).filter(User.verified.is_(True)),
             func.count(User.id).filter(User.has_itdp.is_(True)),
@@ -189,16 +185,26 @@ def get_cohorts(db: Session) -> list[Cohort]:
         .order_by("month")
         .all()
     )
-    return [
-        Cohort(
-            month=value,
-            total=total,
-            verified=verified,
-            has_itdp=has_itdp,
-            deleted=deleted
+    cohorts = []
+    total_users = 0
+    total_verified = 0
+    total_itdp = 0
+    total_deleted = 0
+    for value, total, verified, has_itdp, deleted in rows:
+        total_users += total
+        total_verified += verified
+        total_itdp += has_itdp
+        total_deleted += deleted
+        cohorts.append(
+            Cohort(
+                month=value,
+                total=total_users,
+                verified=total_verified,
+                has_itdp=total_itdp,
+                deleted=total_deleted
+            )
         )
-        for value, total, verified, has_itdp, deleted in rows
-    ]
+    return cohorts
 
 
 def get_follow_ratio(db: Session) -> list[Bucket]:
