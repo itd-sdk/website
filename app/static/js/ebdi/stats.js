@@ -1,12 +1,13 @@
 const COLORS = [
     "#ed6a2d",
     "#fbeadb",
-    "#c94d14",
-    "#8a9a7b",
-    "#6a8caf",
-    "#b07aa1",
-    "#d4a355",
-    "#7a9e9f",
+    // "#565350",
+    "#E05340",
+    "#88B369",
+    "#e3b343",
+    "#4b86f3",
+    "#e067ed",
+    "#65b8c9",
 ];
 
 const GRID = "#3a3532";
@@ -17,6 +18,29 @@ Chart.defaults.font.family = "Jost";
 Chart.defaults.plugins.legend.labels.usePointStyle = true;
 Chart.defaults.plugins.legend.labels.pointStyle = "dash";
 Chart.defaults.plugins.tooltip.usePointStyle = true;
+
+const crosshair = {
+    id: "crosshair",
+    afterDatasetsDraw(chart) {
+        const active = chart.getActiveElements();
+        if (!active.length) {
+            return;
+        }
+        const { ctx, chartArea } = chart;
+        const x = active[0].element.x;
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(x, chartArea.top);
+        ctx.lineTo(x, chartArea.bottom);
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = TEXT;
+        ctx.setLineDash([4, 4]);
+        ctx.stroke();
+        ctx.restore();
+    },
+};
+
+Chart.register(crosshair);
 
 let clan_names = new Map();
 
@@ -55,6 +79,14 @@ function format_month(timestamp) {
     return new Date(timestamp).toLocaleString("ru-RU", {
         year: "numeric",
         month: "long",
+    });
+}
+
+function format_date(timestamp) {
+    return new Date(timestamp).toLocaleString("ru-RU", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
     });
 }
 
@@ -185,7 +217,7 @@ function render_followers_distribution(data) {
                     title: { display: true, text: "Подписчиков", color: TEXT },
                 },
                 y: {
-                    // type: "logarithmic",
+                    type: "logarithmic",
                     grid: { color: GRID },
                     ticks: { color: TEXT },
                 },
@@ -222,7 +254,7 @@ function render_followers_by_age(data) {
             scales: {
                 x: {
                     type: "time",
-                    time: { unit: "year" },
+                    time: { unit: "month" },
                     grid: { color: GRID },
                     ticks: { color: TEXT },
                     title: {
@@ -313,12 +345,19 @@ function render_clans_over_time(data) {
                     ticks: { color: TEXT },
                     title: {
                         display: true,
-                        text: "Регистраций за месяц",
+                        text: "Регистраций",
                         color: TEXT,
                     },
                 },
             },
-            tooltip: base_options.plugins.tooltip,
+            plugins: {
+                tooltip: {
+                    ...base_options.plugins.tooltip,
+                    callbacks: {
+                        title: (items) => format_date(items[0].parsed.x),
+                    },
+                },
+            },
         }),
     });
 }

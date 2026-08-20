@@ -36,13 +36,18 @@ class Bucket(BaseModel):
 
 
 class ScatterPoint(BaseModel):
+    x: float
+    y: float
+
+
+class TimePoint(BaseModel):
     x: datetime
     y: float
 
 
 class ClanShare(BaseModel):
     clan: str
-    points: list[ScatterPoint]
+    points: list[TimePoint]
 
 
 class Cohort(BaseModel):
@@ -88,7 +93,7 @@ def get_followers_distribution(db: Session) -> list[Bucket]:
     return [Bucket(bucket=value, count=count) for value, count in rows]
 
 
-def get_followers_by_age(db: Session) -> list[ScatterPoint]:
+def get_followers_by_age(db: Session) -> list[TimePoint]:
     # sampling keeps the payload small enough to render client side
     rows = (
         db.query(User.created_at, User.followers_count)
@@ -98,10 +103,7 @@ def get_followers_by_age(db: Session) -> list[ScatterPoint]:
         .limit(5000)
         .all()
     )
-    return [
-        ScatterPoint(x=created_at.timestamp() * 1000, y=followers)
-        for created_at, followers in rows
-    ]
+    return [TimePoint(x=created_at, y=followers) for created_at, followers in rows]
 
 
 def get_posts_vs_followers(db: Session) -> list[ScatterPoint]:
@@ -125,7 +127,7 @@ def get_clans_over_time(db: Session) -> list[ClanShare]:
         .where(User.avatar != "")
         .group_by(User.avatar)
         .order_by(desc(func.count(User.id)))
-        .limit(8)
+        .limit(15)
         .all()
     ]
     if not top:
@@ -143,9 +145,9 @@ def get_clans_over_time(db: Session) -> list[ClanShare]:
         .order_by("week")
         .all()
     )
-    shares: dict[str, list[ScatterPoint]] = {clan: [] for clan in top}
+    shares: dict[str, list[TimePoint]] = {clan: [] for clan in top}
     for clan, value, count in rows:
-        shares[clan].append(ScatterPoint(x=value, y=count))
+        shares[clan].append(TimePoint(x=value, y=count))
     return [ClanShare(clan=clan, points=points) for clan, points in shares.items()]
 
 
@@ -225,7 +227,7 @@ def get_follow_ratio(db: Session) -> list[Bucket]:
 class StatsResponse(BaseModel):
     registrations: list[Registrations]
     followers_distribution: list[Bucket]
-    followers_by_age: list[ScatterPoint]
+    followers_by_age: list[TimePoint]
     posts_vs_followers: list[ScatterPoint]
     clans_over_time: list[ClanShare]
     last_seen: list[LastSeenShare]
