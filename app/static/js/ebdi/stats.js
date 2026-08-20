@@ -18,10 +18,14 @@ Chart.defaults.font.family = "Jost";
 Chart.defaults.plugins.legend.labels.usePointStyle = true;
 Chart.defaults.plugins.legend.labels.pointStyle = "dash";
 Chart.defaults.plugins.tooltip.usePointStyle = true;
+Chart.defaults.plugins.tooltip.caretPadding = 16;
 
 const crosshair = {
     id: "crosshair",
     afterDatasetsDraw(chart) {
+        if (!chart.scales.x) {
+            return;
+        }
         const active = chart.getActiveElements();
         if (!active.length) {
             return;
@@ -41,6 +45,13 @@ const crosshair = {
 };
 
 Chart.register(crosshair);
+
+Chart.Tooltip.positioners.cursor = function (items, position) {
+    if (!items.length) {
+        return false;
+    }
+    return { x: position.x, y: position.y };
+};
 
 let clan_names = new Map();
 
@@ -122,6 +133,9 @@ const base_options = {
             titleColor: "#fff",
             bodyColor: TEXT,
             padding: 10,
+            position: "cursor",
+            yAlign: "center",
+            caretPadding: 16,
         },
     },
     scales: {
@@ -217,7 +231,7 @@ function render_followers_distribution(data) {
                     title: { display: true, text: "Подписчиков", color: TEXT },
                 },
                 y: {
-                    type: "logarithmic",
+                    // type: "logarithmic",
                     grid: { color: GRID },
                     ticks: { color: TEXT },
                 },
@@ -384,7 +398,11 @@ function render_last_seen(data) {
             plugins: {
                 legend: {
                     position: "right",
-                    labels: { color: TEXT, boxWidth: 12 },
+                    labels: {
+                        color: TEXT,
+                        boxWidth: 12,
+                        usePointStyle: false,
+                    },
                 },
                 tooltip: base_options.plugins.tooltip,
             },

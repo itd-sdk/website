@@ -96,9 +96,12 @@ def get_followers_distribution(db: Session) -> list[Bucket]:
 def get_followers_by_age(db: Session) -> list[TimePoint]:
     # sampling keeps the payload small enough to render client side
     rows = (
-        db.query(User.created_at, User.followers_count)
+        db.query(
+            func.date_trunc("day", User.created_at).label("day"), User.followers_count
+        )
         .where(User.exists.is_(True))
         .where(User.created_at.isnot(None))
+        .distinct()
         .order_by(desc(User.followers_count))
         .limit(5000)
         .all()
@@ -111,6 +114,7 @@ def get_posts_vs_followers(db: Session) -> list[ScatterPoint]:
         db.query(User.posts_count, User.followers_count)
         .where(User.exists.is_(True))
         .where(User.posts_count > 0)
+        .distinct()
         .order_by(desc(User.followers_count))
         .limit(5000)
         .all()
@@ -127,7 +131,7 @@ def get_clans_over_time(db: Session) -> list[ClanShare]:
         .where(User.avatar != "")
         .group_by(User.avatar)
         .order_by(desc(func.count(User.id)))
-        .limit(15)
+        .limit(10)
         .all()
     ]
     if not top:
@@ -145,10 +149,28 @@ def get_clans_over_time(db: Session) -> list[ClanShare]:
         .order_by("week")
         .all()
     )
-    shares: dict[str, list[TimePoint]] = {clan: [] for clan in top}
+
+    counts: dict[str, dict[datetime, int]] = {clan: {} for clan in top}
     for clan, value, count in rows:
-        shares[clan].append(TimePoint(x=value, y=count))
-    return [ClanShare(clan=clan, points=points) for clan, points in shares.items()]
+        counts[clan][value] = count
+
+    weeks = sorted({value for _, value, _ in rows})
+    if not weeks:
+        return []
+
+    grid = []
+    current = weeks[0]
+    while current <= weeks[-1]:
+        grid.append(current)
+        current += timedelta(weeks=1)
+
+    return [
+        ClanShare(
+            clan=clan,
+            points=[TimePoint(x=week, y=counts[clan].get(week, 0)) for week in grid]
+        )
+        for clan in top
+    ]
 
 
 def get_last_seen(db: Session) -> list[LastSeenShare]:
