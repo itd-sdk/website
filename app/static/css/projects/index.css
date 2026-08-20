@@ -1,0 +1,100 @@
+#landing {
+    height: 15vh;
+    align-items: center;
+    justify-content: center;
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 50px;
+    background-image: linear-gradient(
+        140deg,
+        #1e1c1a 50%,
+        #363029 80%,
+        transparent
+    );
+}
+
+h2 {
+    line-height: 0.5;
+}
+
+#content {
+    display: flex;
+    align-items: center;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.project {
+    background-color: #2c2a27;
+    width: 70vw;
+    padding: 20px;
+    display: flex;
+    flex-direction: row;
+    gap: 20px;
+}
+
+.project-logo {
+    height: 100px;
+    aspect-ratio: 1;
+}
+
+.project-data {
+    display: flex;
+    flex-direction: column;
+}
+
+.project-name {
+    font-weight: 700;
+    font-size: 20px;
+}
+
+.project-description {
+    color: #999;
+}
+
+.project-actions {
+    margin-left: auto;
+}
+
+#feedback {
+    background: linear-gradient(to right, #2c2a2744, #2c2a2744);
+    background-size: cover;
+    border: #fbeadb 1px solid;
+    padding: 15px;
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    max-width: 550px;
+    margin-left: auto;
+    margin-right: auto;
+    margin-bottom: 20px;
+}
+
+#feedback img {
+    width: 50px;
+    margin-right: 5px;
+}
+
+#feedback-title {
+    font-weight: bold;
+}
+
+#feedback-description {
+    color: #999;
+    font-size: 13px;
+}
+
+#feedback button {
+    height: min-content;
+    align-self: center;
+    margin-left: 10px;
+}
+#feedback button img {
+    width: 9px;
+}
+
+@media (max-width: 700px) {
+    .project {
+        width: 90vw;
+    }
+}

@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+
+{% block head %}
+<link rel="stylesheet" href="/static/css/projects/index.css">
+{% endblock %}
+
+{% block content %}
+<div id="landing">
+    <h2>Проекты в ИТД</h2>
+    <div>Список всех проектов для ИТД</div>
+</div>
+<div id="content">
+    <div class="project">
+        <img class="project-logo" src="/static/images/logo-vertical.png">
+        <div class="project-data">
+            <div class="project-name">itd-sdk</div>
+            <div class="project-description">SDK для работы с ИТД на python.</div>
+        </div>
+        <div class="project-actions">
+            <!--<a href="https://github.com/itd-sdk/itd-sdk"><img src="static/icons/github.svg" alt="github"></a>-->
+            <a href="https://itdsdk.qzz.io/docs"><img src="static/icons/open-in-new.svg" alt="open in new"></a>
+        </div>
+    </div>
+    <div class="project">
+        <img class="project-logo" src="/static/images/project-logos/frontend.png">
+        <div class="project-data">
+            <div class="project-name">itd-frontend</div>
+            <div class="project-description">Репозиторий с декомпилированным бандлом ИТД. Архив версий с апреля.</div>
+        </div>
+        <div class="project-actions">
+            <a href="https://github.com/itd-sdk/itd-frontend"><img src="static/icons/open-in-new.svg" alt="open in new"></a>
+        </div>
+    </div>
+    <div class="project">
+        <img class="project-logo" src="/static/images/project-logos/atlas.png">
+        <div class="project-data">
+            <div class="project-name">Атлас</div>
+            <div class="project-description">Атлас пользователей ИТД.</div>
+        </div>
+        <div class="project-actions">
+            <a href="https://atlas.itdsdk.qzz.io"><img src="static/icons/open-in-new.svg" alt="open in new"></a>
+        </div>
+    </div>
+    <div class="project">
+        <img class="project-logo" src="/static/images/project-logos/termy-itd.png">
+        <div class="project-data">
+            <div class="project-name">termy-itd</div>
+            <div class="project-description">Консольный клиент ИТД под ПК.</div>
+        </div>
+        <div class="project-actions">
+            <a href="https://github.com/itd-sdk/termy-itd"><img src="static/icons/open-in-new.svg" alt="open in new"></a>
+        </div>
+    </div>
+    <div class="project">
+        <img class="project-logo" src="/static/images/project-logos/itdapk.jpg">
+        <div class="project-data">
+            <div class="project-name">итд.апк</div>
+            <div class="project-description">Клиент ИТД для Android телефонов от <a href="https://xn--d1ah4a.com/@zpvlc">@zpvlc</a>.</div>
+        </div>
+        <div class="project-actions">
+            <a href="https://t.me/itdtapok"><img src="static/icons/open-in-new.svg" alt="open in new"></a>
+        </div>
+    </div>
+    <div class="project">
+        <img class="project-logo" src="/static/images/project-logos/etcetera.jpg">
+        <div class="project-data">
+            <div class="project-name">etCetera</div>
+            <div class="project-description">Экспериментальный клиент ИТД в стиле Material Design для Android.</div>
+        </div>
+        <div class="project-actions">
+            <a href="https://t.me/etcetera_app"><img src="static/icons/open-in-new.svg" alt="open in new"></a>
+        </div>
+    </div>
+    <div id="feedback">
+        <img src="/static/icons/vote.svg">
+        <div id="feedback-content">
+            <div id="feedback-title">Нет проекта?</div>
+            <div id="feedback-description">Если у вас есть еще какой-то проект в ИТД, которого нет в списке, можете отправить заявку на добавление.</div>
+        </div>
+        <button onclick="location.href='https://github.com/itd-sdk/website/issues/new'">Перейти <img src="/static/icons/arrow.svg"></button>
+    </div>
+</div>
+{% endblock %}

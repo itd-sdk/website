@@ -5,17 +5,16 @@
     display: flex;
     flex-direction: column;
     margin-bottom: 50px; /* типа немношка криво */
-    background:
-        linear-gradient(125deg, #1e1c1a66 50%, #1e1c1acc 70%),
-        url("/static/images/code2.png");
-    background-position: center;
-    background-size: 50vw auto;
-    background-repeat: no-repeat;
+    background: linear-gradient(125deg, #14110f, #221e1a 70%);
+    /*url("/static/images/code2.png");*/
 
     /* linear-gradient(125deg, #1E1C1A 80%, #1e1c1ad3 90%, transparent), */
     /* url('/static/images/grid.png'); */
 }
-
+#banner {
+    width: 500px;
+    margin-bottom: 15px;
+}
 #landing-buttons {
     gap: 15px;
     display: flex;
@@ -181,6 +180,9 @@
 }
 
 @media (max-width: 700px) {
+    #banner {
+        width: 300px;
+    }
     .history-event-circle::after,
     .history-event {
         height: 120px;

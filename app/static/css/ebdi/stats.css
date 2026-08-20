@@ -38,7 +38,12 @@
     margin-right: auto;
 }
 
-@media (max-width: 1000px) {
+canvas {
+    height: initial;
+    width: 90%;
+}
+
+@media (max-width: 700px) {
     #charts {
         grid-template-columns: 1fr;
         width: 94vw;
