@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+
+{% block head %}
+<link rel="stylesheet" href="/static/css/ebdi/style.css">
+<link rel="stylesheet" href="/static/css/ebdi/stats.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script src="https://cdn.jsdelivr.net/npm/luxon@3"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1"></script>
+<script src="/static/js/ebdi/stats.js"></script>
+<meta name="description" content="Единая База Данных ИТД: статистика пользователей, графики роста, распределение подписчиков">
+{% endblock %}
+
+{% block content %}
+<div id="landing">
+    <img id="banner" src="/static/images/ebdi.png">
+    <div id="landing-description">Единая База Данных ИТД</div>
+</div>
+
+<div id="content">
+    <div id="feedback">
+        <img src="/static/icons/vote.svg">
+        <div id="feedback-content">
+            <div id="feedback-title">Обратная связь</div>
+            <div id="feedback-description">Предложите идеи для ЕБДИ или сообщите о баге.</div>
+        </div>
+        <button onclick="location.href='https://github.com/itd-sdk/website/issues/new'">Перейти <img src="/static/icons/arrow.svg"></button>
+    </div>
+    <nav id="tabs">
+        <a href="/ebdi/users" class="tab">Пользователи</a>
+        <a href="/ebdi/clans" class="tab">Кланы</a>
+        <a href="/ebdi/stats" class="tab tab-active">Статистика</a>
+    </nav>
+
+    <h2>Статистика ИТД</h2>
+
+    <div class="row" id="list-loader" hidden>
+        <div class="loader-spinner"></div>
+    </div>
+    <div id="list-error" hidden>
+        <div id="error-text"></div>
+        <button id="retry-button">Попробовать снова</button>
+    </div>
+
+    <div id="charts" hidden>
+        <div class="chart-card">
+            <div class="chart-title">Всего пользователей</div>
+            <div class="chart-description">
+                Общее количество пользователей
+            </div>
+            <div class="chart-box"><canvas id="chart-total"></canvas></div>
+        </div>
+        <div class="chart-card">
+            <div class="chart-title">Регистрации по месяцам</div>
+            <div class="chart-description">
+                Сколько аккаунтов появлялось каждый месяц
+            </div>
+            <div class="chart-box"><canvas id="chart-registrations"></canvas></div>
+        </div>
+
+        <div class="chart-card">
+            <div class="chart-title">Распределение подписчиков</div>
+            <div class="chart-description">
+                Распределение пользователей по количеству подписчиков
+            </div>
+            <div class="chart-box"><canvas id="chart-followers-distribution"></canvas></div>
+        </div>
+
+        <div class="chart-card">
+            <div class="chart-title">Подписчики и дата регистрации</div>
+            <div class="chart-description">
+                Отношение даты регистрации к количеству подписчиков (10 000 пользователей)
+            </div>
+            <div class="chart-box"><canvas id="chart-followers-by-age"></canvas></div>
+        </div>
+
+        <div class="chart-card">
+            <div class="chart-title">Посты и подписчики</div>
+            <div class="chart-description">
+                Отношение количества постов к количеству подписчиков (10 000 пользователей)
+            </div>
+            <div class="chart-box"><canvas id="chart-posts-vs-followers"></canvas></div>
+        </div>
+
+        <div class="chart-card">
+            <div class="chart-title">Популярные кланы во времени</div>
+            <div class="chart-description">
+                Сколько человек с каждым кланом регистрировалось по месяцам
+            </div>
+            <div class="chart-box"><canvas id="chart-clans"></canvas></div>
+        </div>
+
+        <div class="chart-card">
+            <div class="chart-title">Активность</div>
+            <div class="chart-description">
+                Когда пользователи заходили в последний раз
+            </div>
+            <div class="chart-box"><canvas id="chart-last-seen"></canvas></div>
+        </div>
+
+        <div class="chart-card">
+            <div class="chart-title">Доля прироста по статусам</div>
+            <div class="chart-description">
+                Доля верифицированных, ИТД+ и удалённых среди пришедших в каждый месяц
+            </div>
+            <div class="chart-box"><canvas id="chart-cohorts"></canvas></div>
+        </div>
+
+        <div class="chart-card">
+            <div class="chart-title">Подписки против подписчиков</div>
+            <div class="chart-description">
+                Отношение количества подписок к количеству подписчиков
+            </div>
+            <div class="chart-box"><canvas id="chart-follow-ratio"></canvas></div>
+        </div>
+    </div>
+</div>
+{% endblock %}

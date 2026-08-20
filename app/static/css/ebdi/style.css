@@ -475,7 +475,6 @@ emoji-picker {
 
 @media (max-width: 1000px) {
     #tabs {
-        justify-content: flex-start;
         overflow-x: auto;
         scrollbar-width: none;
         margin-bottom: 8px;

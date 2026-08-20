@@ -27,6 +27,11 @@ def get_ebdi_clans(request: Request):
     return templates.TemplateResponse(request, "ebdi/clans.html")
 
 
+@router.get("/stats")
+def get_ebdi_stats(request: Request):
+    return templates.TemplateResponse(request, "ebdi/stats.html")
+
+
 @router.get("/graph")
 def get_ebdi_graph(request: Request):
     return templates.TemplateResponse(request, "ebdi/graph.html")

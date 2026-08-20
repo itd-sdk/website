@@ -42,8 +42,10 @@ l = get_logger()
 
 app.state.projects = get_projects()
 app.state.analogs = get_analogs()
-app.state.users_count_updated_at = datetime(1990, 1, 1)
-app.state.graph_updated_at = datetime(1990, 1, 1)
+app.state.graph_updated_at = datetime.min
+app.state.stats = {}
+app.state.stats_updated_at = datetime.min
+app.state.users_count_updated_at = datetime.min
 app.state.is_loginning = False
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # ty: ignore
