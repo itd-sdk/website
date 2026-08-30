@@ -38,6 +38,37 @@
     margin-right: auto;
 }
 
+#chart-tabs {
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    gap: 4px;
+    margin-bottom: w0px;
+    margin-left: auto;
+    margin-right: auto;
+    margin-top: 20px;
+}
+.chart-tab {
+    padding: 6px 14px;
+    font-size: 14px;
+    color: #bbb;
+    text-decoration: none;
+    white-space: nowrap;
+    transition:
+        background-color 0.2s,
+        color 0.2s;
+}
+
+.chart-tab:hover {
+    background-color: #3e3b37;
+}
+
+.chart-tab-active {
+    background-color: #3e3b37;
+    color: #fbeadb;
+    border-bottom: #eb5e1b solid 2px;
+}
+
 canvas {
     height: initial;
     width: 90%;

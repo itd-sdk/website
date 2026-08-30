@@ -186,23 +186,67 @@ function render_total(data) {
     });
 }
 
-function render_registrations(data) {
-    new Chart(get_el("chart-registrations"), {
+let registrations = null;
+let registrations_chart = null;
+
+function render_registrations(unit) {
+    registrations_chart?.destroy();
+    registrations_chart = new Chart(get_el("chart-registrations"), {
+        type: "bar",
         data: {
-            labels: data.map((row) => format_month(row.month)),
             datasets: [
                 {
-                    type: "bar",
-                    data: data.map((row) => row.count),
+                    label: "Регистраций",
+                    data: registrations[unit].map((row) => ({
+                        x: new Date(row.date).getTime(),
+                        y: row.count,
+                    })),
                     backgroundColor: ACCENT,
-                    yAxisID: "y",
                     pointStyle: "line",
                 },
             ],
         },
         options: merge_options({
-            plugins: { legend: { display: false } },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    ...base_options.plugins.tooltip,
+                    callbacks: {
+                        title: (items) =>
+                            unit === "month"
+                                ? format_month(items[0].parsed.x)
+                                : format_date(items[0].parsed.x),
+                    },
+                },
+            },
+            scales: {
+                x: {
+                    type: "time",
+                    time: { unit },
+                    grid: { color: GRID },
+                    ticks: {
+                        color: TEXT,
+                        maxRotation: 0,
+                        autoSkipPadding: 20,
+                    },
+                },
+                y: base_options.scales.y,
+            },
         }),
+    });
+}
+
+function setup_registration_tabs() {
+    const tabs = get_el("chart-tabs");
+    tabs.addEventListener("click", (event) => {
+        const button = event.target.closest(".chart-tab");
+        if (!button || !registrations) {
+            return;
+        }
+        for (const tab of tabs.children) {
+            tab.classList.toggle("chart-tab-active", tab === button);
+        }
+        render_registrations(button.dataset.unit);
     });
 }
 
@@ -551,8 +595,9 @@ async function load_stats() {
         }
         const data = await res.json();
         get_el("charts").hidden = false;
-        render_registrations(data.registrations);
-        render_total(data.registrations);
+        registrations = data.registrations;
+        render_total(data.total);
+        render_registrations("month");
         render_followers_distribution(data.followers_distribution);
         render_followers_by_age(data.followers_by_age);
         render_posts_vs_followers(data.posts_vs_followers);
@@ -570,6 +615,7 @@ async function load_stats() {
 
 document.addEventListener("DOMContentLoaded", async () => {
     get_el("retry-button").addEventListener("click", load_stats);
+    setup_registration_tabs();
     await load_clan_names();
     await load_stats();
 });

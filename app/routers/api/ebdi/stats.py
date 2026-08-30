@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import Response
 from pydantic import BaseModel
-from sqlalchemy import case, desc, func, literal
+from sqlalchemy import and_, case, desc, extract, func, literal, not_
 
 from app.schemas import User
 from app.services.db import Session, get_db
@@ -22,12 +22,6 @@ def bucket_case(column, bounds: list):
         *[(column < bounds[i + 1], literal(bounds[i])) for i in range(len(bounds) - 1)],
         else_=literal(bounds[-1])
     )
-
-
-class Registrations(BaseModel):
-    month: datetime
-    count: int
-    total: int
 
 
 class Bucket(BaseModel):
@@ -63,21 +57,66 @@ class LastSeenShare(BaseModel):
     count: int
 
 
-def get_registrations(db: Session) -> list[Registrations]:
+class Registrations(BaseModel):
+    date: datetime
+    count: int
+
+
+class Total(BaseModel):
+    month: datetime
+    total: int
+
+
+class RegistrationSeries(BaseModel):
+    day: list[Registrations]
+    week: list[Registrations]
+    month: list[Registrations]
+
+
+def get_registrations(db: Session, unit: str) -> list[Registrations]:
+    bucket = func.date_trunc(unit, User.created_at).label("bucket")
+    query = db.query(bucket, func.count(User.id)).where(User.created_at.isnot(None))
+    if unit != "month":
+        # the new API exposes only the month, so such rows land on the 1st at
+        # noon and would spike every first day of the month
+        query = query.where(
+            not_(
+                and_(
+                    extract("day", User.created_at) == 1,
+                    extract("hour", User.created_at) == 12,
+                    extract("minute", User.created_at) == 0,
+                    extract("second", User.created_at) == 0
+                )
+            )
+        )
+    rows = query.group_by("bucket").order_by("bucket").all()
+    return [Registrations(date=value, count=count) for value, count in rows]
+
+
+def get_registration_series(db: Session) -> RegistrationSeries:
+    return RegistrationSeries(
+        day=get_registrations(db, "day"),
+        week=get_registrations(db, "week"),
+        month=get_registrations(db, "month")
+    )
+
+
+def get_total(db: Session) -> list[Total]:
     rows = (
         db.query(
-            func.date_trunc("week", User.created_at).label("week"), func.count(User.id)
+            func.date_trunc("month", User.created_at).label("month"),
+            func.count(User.id)
         )
         .where(User.created_at.isnot(None))
-        .group_by("week")
-        .order_by("week")
+        .group_by("month")
+        .order_by("month")
         .all()
     )
-    total = 0
     result = []
+    total = 0
     for value, count in rows:
         total += count
-        result.append(Registrations(month=value, count=count, total=total))
+        result.append(Total(month=value, total=total))
     return result
 
 
@@ -247,7 +286,8 @@ def get_follow_ratio(db: Session) -> list[Bucket]:
 
 
 class StatsResponse(BaseModel):
-    registrations: list[Registrations]
+    total: list[Total]
+    registrations: RegistrationSeries
     followers_distribution: list[Bucket]
     followers_by_age: list[TimePoint]
     posts_vs_followers: list[ScatterPoint]
@@ -262,7 +302,8 @@ class StatsResponse(BaseModel):
 def api_get_ebdi_stats(request: Request, db: Session = Depends(get_db)):
     if datetime.now() - request.app.state.stats_updated_at > timedelta(hours=6):
         request.app.state.stats = StatsResponse(
-            registrations=get_registrations(db),
+            total=get_total(db),
+            registrations=get_registration_series(db),
             followers_distribution=get_followers_distribution(db),
             followers_by_age=get_followers_by_age(db),
             posts_vs_followers=get_posts_vs_followers(db),
