@@ -261,9 +261,7 @@ async def api_websocket_ebdi(
                     assert request.target
                     l.debug("(%s) < %s", app.name, request.target.username)
                     for i in request.target.model_fields_set:
-                        if i == "followers" and not request.update_followers:
-                            continue
-                        if i == "following" and not request.update_following:
+                        if i in ("followers", "following", "created_at"):
                             continue
                         setattr(user, i, getattr(request.target, i))
                     user.exists = True
