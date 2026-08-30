@@ -40,8 +40,8 @@ create_db()
 setup_logging("DEBUG")
 l = get_logger()
 
-app.state.projects = get_projects()
-app.state.analogs = get_analogs()
+app.state.projects = []  # get_projects()x
+app.state.analogs = []  # get_analogs()
 app.state.graph_updated_at = datetime.min
 app.state.stats = {}
 app.state.stats_updated_at = datetime.min

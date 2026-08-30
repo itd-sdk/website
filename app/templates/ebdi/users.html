@@ -127,4 +127,38 @@
         <div id="sentinel-bottom" class="sentinel"></div>
     <!--<div id="note">Лицензировано под <a href="https://creativecommons.org/licenses/by-nc/4.0/">CC BY-NC 4.0</a></div>-->
 </div>
+
+<dialog id="user-dialog">
+    <div id="dialog-actions">
+        <!--<button class="dialog-action" id="dialog-download" title="Скачать карточку" aria-label="Скачать карточку">
+            <img src="/static/icons/download.svg">
+        </button>-->
+        <!--<button class="dialog-action" id="dialog-refresh" title="Обновить данные" aria-label="Обновить данные">
+            <img src="/static/icons/refresh.svg"
+        </button>-->
+        <button class="dialog-action" id="dialog-close" title="Закрыть" aria-label="Закрыть">
+            <img src="/static/icons/close.svg">
+        </button>
+    </div>
+
+    <div id="dialog-scroll">
+        <div id="dialog-banner"></div>
+        <div id="dialog-identity">
+            <div id="dialog-avatar"></div>
+            <div id="dialog-names">
+                <a id="dialog-display-name" target="_blank"></a>
+                <div id="dialog-username"></div>
+            </div>
+        </div>
+        <div id="dialog-badges" hidden></div>
+        <div id="dialog-bio" hidden></div>
+        <div id="dialog-error" hidden></div>
+
+        <div class="dialog-section-title">Статистика</div>
+        <div id="dialog-ranks"></div>
+
+        <div class="dialog-section-title">Хронология</div>
+        <div id="dialog-dates"></div>
+    </div>
+</dialog>
 {% endblock %}

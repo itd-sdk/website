@@ -27,6 +27,11 @@ const state = {
 let user_template = null;
 let gap_observer = null;
 
+const users_by_id = new Map();
+let dialog_user = null;
+let dialog_token = 0;
+let scroll_lock_offset = 0;
+
 function get_el(id) {
     const element = document.getElementById(id);
     if (!element) {
@@ -183,11 +188,29 @@ function render_place(node, user) {
     }
 }
 
+function render_badge_icon(user) {
+    let src = null;
+    if (user.verified && user.has_itdp) {
+        src = "/static/icons/itdp_verified.svg";
+    } else if (user.verified) {
+        src = "/static/icons/verified.svg";
+    } else if (user.has_itdp) {
+        src = "/static/icons/itdp.svg";
+    }
+    if (!src) {
+        return null;
+    }
+    const icon = document.createElement("img");
+    icon.src = src;
+    return icon;
+}
+
 function render_user(user) {
     const node = user_template.cloneNode(true);
     node.removeAttribute("id");
     node.dataset.userId = user.user_id;
     node.dataset.position = user.position;
+    users_by_id.set(user.user_id, user);
     if (!user.exists) {
         node.classList.add("row-deleted");
     }
@@ -199,17 +222,8 @@ function render_user(user) {
     display_name.textContent = "";
     display_name.appendChild(name);
     display_name.href = "https://итд.com/@" + user.user_id;
-    if (user.verified && user.has_itdp) {
-        const icon = document.createElement("img");
-        icon.src = "/static/icons/itdp_verified.svg";
-        display_name.appendChild(icon);
-    } else if (user.verified) {
-        const icon = document.createElement("img");
-        icon.src = "/static/icons/verified.svg";
-        display_name.appendChild(icon);
-    } else if (user.has_itdp) {
-        const icon = document.createElement("img");
-        icon.src = "/static/icons/itdp.svg";
+    const icon = render_badge_icon(user);
+    if (icon) {
         display_name.appendChild(icon);
     }
     node.querySelector(".user-username").textContent = "@" + user.username;
@@ -315,6 +329,7 @@ function reset_list() {
     for (const el of document.querySelectorAll(".row-batch, .row-gap")) {
         el.remove();
     }
+    users_by_id.clear();
     state.loaded_offsets.clear();
     state.finished = false;
     hide_error();
@@ -338,6 +353,7 @@ function max_loaded_offset() {
 function can_load() {
     return (
         !state.loading &&
+        !get_el("user-dialog").open &&
         state.failed_offset === null &&
         state.loaded_offsets.size > 0 &&
         Date.now() >= state.cooldown_until
@@ -515,6 +531,311 @@ async function jump_to_user(user) {
     setTimeout(() => node.classList.remove("row-highlighted"), 3000);
 }
 
+function format_number(value) {
+    return new Intl.NumberFormat().format(value);
+}
+
+function format_date(value) {
+    if (value === null || value === undefined || value === "") {
+        return null;
+    }
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+        return String(value);
+    }
+    return date
+        .toLocaleString("ru-RU", {
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+        })
+        .replace(" г.", "");
+}
+
+function create(tag, class_name, text) {
+    const node = document.createElement(tag);
+    if (class_name) {
+        node.className = class_name;
+    }
+    if (text !== undefined) {
+        node.textContent = text;
+    }
+    return node;
+}
+
+function show_dialog_error(message) {
+    const error = get_el("dialog-error");
+    error.textContent = message;
+    error.hidden = !message;
+}
+
+function render_dialog_header(user) {
+    const banner = get_el("dialog-banner");
+    const has_banner =
+        typeof user.banner === "string" && /^https?:\/\//.test(user.banner);
+    banner.style.backgroundImage = has_banner
+        ? `linear-gradient(to bottom, #1e1c1a00, #1e1c1a88), url("${encodeURI(user.banner)}")`
+        : "";
+
+    const avatar = get_el("dialog-avatar");
+    avatar.textContent = user.avatar + "\uFE0F";
+    avatar.title = "Клан";
+
+    const display_name = get_el("dialog-display-name");
+    display_name.replaceChildren(create("span", null, user.display_name));
+    const icon = render_badge_icon(user);
+    if (icon) {
+        display_name.appendChild(icon);
+    }
+    display_name.href = "https://итд.com/@" + user.user_id;
+    get_el("dialog-username").textContent = "@" + user.username;
+
+    const badges = get_el("dialog-badges");
+    badges.replaceChildren();
+
+    if (user.exists == false) {
+        badges.appendChild(
+            create("div", "dialog-user-deleted", "Удален из ИТД"),
+        );
+    }
+    badges.hidden = !badges.children.length;
+
+    const bio = get_el("dialog-bio");
+    bio.textContent = user.bio ?? "";
+    bio.hidden = !user.bio;
+}
+
+function render_gap(label, amount) {
+    const line = create("div");
+    line.append(label + ": ");
+    line.append(create("b", null, "+" + format_number(Math.max(1, amount))));
+    return line;
+}
+
+function render_rank_card(label, rank) {
+    const card = create("div", "rank-card");
+
+    const head = create("div", "rank-head");
+    head.append(create("div", "rank-label", label));
+    head.append(
+        create(
+            "div",
+            "rank-place",
+            rank.place == null ? "-" : `#${rank.place}`,
+        ),
+    );
+    card.append(head);
+    card.append(create("div", "rank-value", format_number(rank.total)));
+    card.append(create("div", "rank-bar"));
+
+    const gaps = create("div", "rank-gaps");
+    if (rank.place == 1) {
+        gaps.append(create("div", "gap-done", "Первое место"));
+    } else if (rank.to_next) {
+        gaps.append(render_gap("До следующего места", rank.to_next));
+    }
+    if (rank.place != null && rank.to_top_100 == null) {
+        gaps.append(create("div", "gap-done", `В топ-100`));
+    } else if (rank.to_top_100 != null) {
+        gaps.append(render_gap(`До топ-100`, rank.to_top_100));
+    }
+    card.append(gaps);
+    return card;
+}
+
+function render_dialog_ranks(ranks) {
+    const container = get_el("dialog-ranks");
+    container.replaceChildren();
+    container.append(render_rank_card("Подписчики", ranks.followers));
+    container.append(render_rank_card("Подписки", ranks.following));
+    container.append(render_rank_card("Посты", ranks.posts));
+}
+
+function render_dialog_timeline(user) {
+    const container = get_el("dialog-dates");
+    container.replaceChildren();
+    for (const entry of [
+        { field: "created_at", label: "Дата регистрации" },
+        { field: "last_seen", label: "Последняя активность" },
+        { field: "found_at", label: "Добавлен в ЕБДИ" },
+        { field: "updated_at", label: "Последняя синхронизация с ИТД" },
+    ]) {
+        const value = format_date(user[entry.field]);
+        if (!value) {
+            continue;
+        }
+        const item = create("div", "dialog-date-item");
+        item.append(create("div", "dialog-date-label", entry.label));
+        item.append(create("div", "dialog-date-value", value));
+        container.append(item);
+    }
+}
+
+function render_dialog(user) {
+    render_dialog_header(user);
+    render_dialog_timeline(user);
+}
+
+async function load_dialog_ranks(user, token) {
+    const container = get_el("dialog-ranks");
+    container.classList.add("ranks-loading");
+    try {
+        const res = await fetch(`/api/ebdi/users/${user.id}/ranks`);
+        if (!res.ok) {
+            throw new Error(`status ${res.status}`);
+        }
+        const json = await res.json();
+        if (token != dialog_token) {
+            return;
+        }
+        render_dialog_ranks(json);
+        show_dialog_error("");
+    } catch (error) {
+        console.warn("ranks request failed", error);
+        if (token == dialog_token) {
+            show_dialog_error("Не удалось загрузить места в рейтинге");
+        }
+    } finally {
+        container.classList.remove("ranks-loading");
+    }
+}
+
+// body overflow would reset the scroll position, so the page is pinned instead
+function lock_scroll() {
+    scroll_lock_offset = window.scrollY;
+    const scrollbar = window.innerWidth - document.documentElement.clientWidth;
+    document.body.style.position = "fixed";
+    document.body.style.top = `-${scroll_lock_offset}px`;
+    document.body.style.left = "0";
+    document.body.style.right = "0";
+    if (scrollbar > 0) {
+        document.body.style.paddingRight = `${scrollbar}px`;
+    }
+}
+
+function unlock_scroll() {
+    document.body.style.position = "";
+    document.body.style.top = "";
+    document.body.style.left = "";
+    document.body.style.right = "";
+    document.body.style.paddingRight = "";
+    window.scrollTo({ top: scroll_lock_offset, behavior: "instant" });
+}
+
+function open_user_dialog(user) {
+    if (!user) {
+        return;
+    }
+    dialog_token += 1;
+    dialog_user = user;
+    show_dialog_error("");
+    render_dialog(user);
+    const dialog = get_el("user-dialog");
+    if (!dialog.open) {
+        lock_scroll();
+        dialog.showModal();
+    }
+    get_el("dialog-scroll").scrollTop = 0;
+    load_dialog_ranks(user, dialog_token);
+}
+
+function close_user_dialog() {
+    dialog_token += 1;
+    const dialog = get_el("user-dialog");
+    if (dialog.open) {
+        dialog.close();
+    }
+}
+
+async function refresh_dialog_user() {
+    const button = get_el("dialog-refresh");
+    button.classList.add("load");
+    button.disabled = true;
+    const user = dialog_user;
+    const token = dialog_token;
+    try {
+        const res = await fetch(`/api/ebdi/users/${user.id}/refresh`, {
+            method: "POST",
+        });
+        if (!res.ok) {
+            show_dialog_error(`Ошибка обновления: ${res.status}`);
+            return;
+        }
+        const json = await res.json();
+        if (token != dialog_token) {
+            return;
+        }
+        users_by_id.set(json.user_id, json);
+        dialog_user = json;
+        show_dialog_error("");
+        render_dialog(json);
+        await load_dialog_ranks(json, token);
+    } catch (error) {
+        console.warn("user refresh failed", error);
+        show_dialog_error("Не удалось связаться с сервером");
+    } finally {
+        button.classList.remove("load");
+        button.disabled = false;
+    }
+}
+
+async function download_dialog_card() {
+    const button = get_el("dialog-download");
+    button.classList.add("load");
+    button.disabled = true;
+    try {
+        const res = await fetch(`/api/ebdi/users/${dialog_user.id}/card`);
+        if (!res.ok) {
+            show_dialog_error(`Ошибка получения карточки: ${res.status}`);
+            return;
+        }
+        const json = await res.json();
+        const url = typeof json === "string" ? json : json.url;
+        if (!url) {
+            show_dialog_error("Сервер не вернул ссылку на карточку");
+            return;
+        }
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = dialog_user.username + ".png";
+        link.target = "_blank";
+        link.rel = "noopener";
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+    } catch (error) {
+        console.warn("card request failed", error);
+        show_dialog_error("Не удалось связаться с сервером");
+    } finally {
+        button.classList.remove("load");
+        button.disabled = false;
+    }
+}
+
+function init_user_dialog() {
+    const dialog = get_el("user-dialog");
+    get_el("rows").addEventListener("click", (event) => {
+        if (event.target.closest("a, button")) {
+            return;
+        }
+        const node = event.target.closest(".row[data-user-id]");
+        if (node) {
+            open_user_dialog(users_by_id.get(node.dataset.userId));
+        }
+    });
+    get_el("dialog-close").addEventListener("click", close_user_dialog);
+    // get_el("dialog-refresh").addEventListener("click", refresh_dialog_user);
+    // get_el("dialog-download").addEventListener("click", download_dialog_card);
+    dialog.addEventListener("click", (event) => {
+        if (event.target == dialog) {
+            close_user_dialog();
+        }
+    });
+    dialog.addEventListener("close", unlock_scroll);
+}
+
 function init_sort_headers() {
     for (const cell of document.querySelectorAll(".row-sortable")) {
         cell.addEventListener("click", () => {
@@ -609,6 +930,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     read_url_state();
     apply_state_to_controls();
     init_controls();
+    init_user_dialog();
     init_infinite_scroll();
     observe_controls_stick();
     await load_batch(0);

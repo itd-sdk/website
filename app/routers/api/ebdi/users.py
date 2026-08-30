@@ -5,7 +5,8 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
-from sqlalchemy import desc, func, or_
+from pydantic import BaseModel
+from sqlalchemy import case, desc, func, or_
 from sqlalchemy.orm import aliased
 
 from app.routers.api.ebdi.websocket import UserBody
@@ -22,14 +23,25 @@ class UserResponse(UserBody):
     found_at: datetime
     has_itdp: bool
     exists: bool
-    # позиция в отфильтрованном списке (1-based), из неё фронт считает
-    # офсет батча при прыжке из поиска
+    # позиция в отфильтрованном списке (1-based), из неё фронт считает офсет батча при прыжке из поиска
     position: int = 0
-    # место в глобальном топе по выбранной сортировке, без учёта фильтров,
-    # удалённые пропущены (у них None)
+    # место в глобальном топе по выбранной сортировке, без учёта фильтров, удалённые пропущены (у них None)
     global_rank: int | None = None
     # место с учётом фильтров, удалённые пропущены (у них None)
     filtered_rank: int | None = None
+
+
+class UserRankResponse(BaseModel):
+    total: int
+    place: int | None = None
+    to_next: int | None = None
+    to_top_100: int | None = None
+
+
+class UserRanksResponse(BaseModel):
+    followers: UserRankResponse
+    following: UserRankResponse
+    posts: UserRankResponse
 
 
 class UserOrder(Enum):
@@ -125,12 +137,108 @@ def api_get_ebdi_users(
     return [serialize_user(row) for row in query.offset(offset).limit(100).all()]
 
 
+@router.get("/{id}/ranks")
+@get_limiter().limit("20/minute")
+def api_get_ebdi_user_ranks(request: Request, id: int, db: Session = Depends(get_db)):
+    ranks = db.query(
+        User,
+        func.row_number()
+        .over(partition_by=User.exists, order_by=(User.followers_count.desc(), User.id))
+        .label("followers_place"),
+        func.row_number()
+        .over(partition_by=User.exists, order_by=(User.following_count.desc(), User.id))
+        .label("following_place"),
+        func.row_number()
+        .over(partition_by=User.exists, order_by=(User.posts_count.desc(), User.id))
+        .label("posts_place")
+    ).subquery()
+    u = aliased(User, ranks, adapt_on_names=True)
+
+    row = (
+        db.query(
+            u, ranks.c.followers_place, ranks.c.following_place, ranks.c.posts_place
+        )
+        .where(u.id == id)
+        .first()
+    )
+    if row is None:
+        raise HTTPException(detail="not found", status_code=404)
+    user, followers_place, following_place, posts_place = row
+
+    if not user.exists:
+        return UserRanksResponse(
+            followers=UserRankResponse(
+                total=user.followers_count, place=None, to_next=None, to_top_100=None
+            ),
+            following=UserRankResponse(
+                total=user.following_count, place=None, to_next=None, to_top_100=None
+            ),
+            posts=UserRankResponse(
+                total=user.posts_count, place=None, to_next=None, to_top_100=None
+            )
+        )
+
+    next_followers, next_following, next_posts = db.query(
+        func.min(
+            case(
+                (
+                    ranks.c.followers_count > user.followers_count,
+                    ranks.c.followers_count
+                )
+            )
+        ),
+        func.min(
+            case(
+                (
+                    ranks.c.following_count > user.following_count,
+                    ranks.c.following_count
+                )
+            )
+        ),
+        func.min(case((ranks.c.posts_count > user.posts_count, ranks.c.posts_count)))
+    ).one()
+
+    top_followers, top_following, top_posts = db.query(
+        func.max(case((ranks.c.followers_place == 100, ranks.c.followers_count))),
+        func.max(case((ranks.c.following_place == 100, ranks.c.following_count))),
+        func.max(case((ranks.c.posts_place == 100, ranks.c.posts_count)))
+    ).one()
+
+    def gap(
+        target: int | None, current: int, place: int, only_outside_top: bool = False
+    ):
+        if target is None or (only_outside_top and place <= 100):
+            return None
+        return target - current
+
+    return UserRanksResponse(
+        followers=UserRankResponse(
+            total=user.followers_count,
+            place=followers_place,
+            to_next=gap(next_followers, user.followers_count, followers_place),
+            to_top_100=gap(top_followers, user.followers_count, followers_place, True)
+        ),
+        following=UserRankResponse(
+            total=user.following_count,
+            place=following_place,
+            to_next=gap(next_following, user.following_count, following_place),
+            to_top_100=gap(top_following, user.following_count, following_place, True)
+        ),
+        posts=UserRankResponse(
+            total=user.posts_count,
+            place=posts_place,
+            to_next=gap(next_posts, user.posts_count, posts_place),
+            to_top_100=gap(top_posts, user.posts_count, posts_place, True)
+        )
+    )
+
+
 @router.post("/{id}/refresh", status_code=204)
 @get_limiter().limit("5/minute")
 def api_post_ebdi_users_refresh(
-    request: Request, id: UUID, db: Session = Depends(get_db)
+    request: Request, id: int, db: Session = Depends(get_db)
 ):
-    user = db.query(User).where(User.user_id == id).first()
+    user = db.query(User).where(User.id == id).first()
     if not user:
         return JSONResponse({"detail": "user not found"}, 404)
     return JSONResponse({"detail": "not implemented"}, 400)
