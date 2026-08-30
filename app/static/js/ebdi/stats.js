@@ -344,8 +344,16 @@ function render_followers_by_age(data) {
                 },
                 y: {
                     type: "logarithmic",
+                    min: 1,
                     grid: { color: GRID },
-                    ticks: { color: TEXT },
+                    ticks: {
+                        color: TEXT,
+                        // log scale emits fractional ticks, followers are integers
+                        callback: (value) =>
+                            Number.isInteger(Math.log10(value))
+                                ? format_number(value)
+                                : null,
+                    },
                     title: { display: true, text: "Подписчики", color: TEXT },
                 },
             },
