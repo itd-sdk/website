@@ -278,40 +278,50 @@ def api_get_user_count(request: Request, db: Session = Depends(get_db)):
 
 @router.get("/graph")
 def api_get_users_graph(request: Request, db: Session = Depends(get_db)):
-    if datetime.now() - request.app.state.graph_updated_at > timedelta(hours=6):
-        users = (
-            db.query(User)
-            .where(or_(User.followers_count > 0, User.following_count > 0))
-            .all()
+    users = (
+        db.query(
+            User.id,
+            User.user_id,
+            User.username,
+            User.display_name,
+            User.followers_count,
+            User.following_count,
+            User.verified,
+            User.avatar,
+            User.following,
+            User.followers
         )
-        user_ids = {str(user.user_id): user.id for user in users}
+        .where(or_(User.followers_count > 0, User.following_count > 0))
+        .all()
+    )
+    user_ids = {str(user.user_id): user.id for user in users}
 
-        edges: set[tuple[int, int]] = set()
-        for user in users:
-            for target in user.following + user.followers:
-                target_id = user_ids.get(str(target))
-                if target_id is not None and (target_id, user.id) not in edges:
-                    edges.add((user.id, target_id))
+    edges: set[tuple[int, int]] = set()
+    for user in users:
+        for target in user.following + user.followers:
+            target_id = user_ids.get(str(target))
+            if target_id is not None and (target_id, user.id) not in edges:
+                edges.add((user.id, target_id))
 
-        linked_ids = {i for edge in edges for i in edge}
-        users = [user for user in users if user.id in linked_ids]
+    linked_ids = {i for edge in edges for i in edge}
+    users = [user for user in users if user.id in linked_ids]
 
-        nodes = [
-            {
-                "id": u.id,
-                "username": u.username,
-                "display_name": u.display_name,
-                "followers": u.followers_count,
-                "following": u.following_count,
-                "verified": u.verified,
-                "avatar": u.avatar
-            }
-            for u in users
-        ]
+    nodes = [
+        {
+            "id": u.id,
+            "username": u.username,
+            "display_name": u.display_name,
+            "followers": u.followers_count,
+            "following": u.following_count,
+            "verified": u.verified,
+            "avatar": u.avatar
+        }
+        for u in users
+    ]
 
-        request.app.state.graph = dumps(
+    return Response(
+        content=dumps(
             {"nodes": nodes, "edges": [{"source": s, "target": t} for s, t in edges]}
-        )
-        request.app.state.graph_updated_at = datetime.now()
-
-    return Response(content=request.app.state.graph, media_type="application/json")
+        ),
+        media_type="application/json"
+    )

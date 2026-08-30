@@ -189,6 +189,30 @@ function render_total(data) {
 let registrations = null;
 let registrations_chart = null;
 
+function bucket_start(date, unit) {
+    const d = new Date(date);
+    if (unit === "month") {
+        return new Date(d.getFullYear(), d.getMonth(), 1).getTime();
+    }
+    if (unit === "week") {
+        d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    }
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+}
+
+function rollup(rows, unit) {
+    const field = unit === "month" ? "count_all" : "count";
+    const totals = new Map();
+    for (const row of rows) {
+        if (!row[field]) {
+            continue;
+        }
+        const key = bucket_start(row.date, unit);
+        totals.set(key, (totals.get(key) || 0) + row[field]);
+    }
+    return [...totals].sort((a, b) => a[0] - b[0]).map(([x, y]) => ({ x, y }));
+}
+
 function render_registrations(unit) {
     registrations_chart?.destroy();
     registrations_chart = new Chart(get_el("chart-registrations"), {
@@ -197,10 +221,7 @@ function render_registrations(unit) {
             datasets: [
                 {
                     label: "Регистраций",
-                    data: registrations[unit].map((row) => ({
-                        x: new Date(row.date).getTime(),
-                        y: row.count,
-                    })),
+                    data: rollup(registrations, unit),
                     backgroundColor: ACCENT,
                     pointStyle: "line",
                 },

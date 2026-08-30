@@ -15,6 +15,13 @@ router = APIRouter(prefix="/stats")
 FOLLOWER_BUCKETS = [0, 1, 2, 10, 50, 100, 500, 1000, 5000]
 RATIO_BUCKETS = [0, 0.1, 0.5, 1, 2, 5, 10]
 
+IMPRECISE_CREATED_AT = and_(
+    extract("day", User.created_at) == 1,
+    extract("hour", User.created_at).in_([6, 7]),
+    extract("minute", User.created_at) == 0,
+    extract("second", User.created_at) == 0
+)
+
 
 def bucket_case(column, bounds: list):
     # assigns each row the lower bound of its bucket
@@ -59,7 +66,8 @@ class LastSeenShare(BaseModel):
 
 class Registrations(BaseModel):
     date: datetime
-    count: int
+    count: int  # without month-only dates
+    count_all: int  # everything
 
 
 class Total(BaseModel):
@@ -67,38 +75,23 @@ class Total(BaseModel):
     total: int
 
 
-class RegistrationSeries(BaseModel):
-    day: list[Registrations]
-    week: list[Registrations]
-    month: list[Registrations]
-
-
-def get_registrations(db: Session, unit: str) -> list[Registrations]:
-    bucket = func.date_trunc(unit, User.created_at).label("bucket")
-    query = db.query(bucket, func.count(User.id)).where(User.created_at.isnot(None))
-    if unit != "month":
-        # the new API exposes only the month, so such rows land on the 1st at
-        # noon and would spike every first day of the month
-        query = query.where(
-            not_(
-                and_(
-                    extract("day", User.created_at) == 1,
-                    extract("hour", User.created_at) == 12,
-                    extract("minute", User.created_at) == 0,
-                    extract("second", User.created_at) == 0
-                )
-            )
+def get_registrations(db: Session) -> list[Registrations]:
+    day = func.date_trunc("day", User.created_at).label("day")
+    rows = (
+        db.query(
+            day,
+            func.count(User.id),
+            func.count(User.id).filter(not_(IMPRECISE_CREATED_AT))
         )
-    rows = query.group_by("bucket").order_by("bucket").all()
-    return [Registrations(date=value, count=count) for value, count in rows]
-
-
-def get_registration_series(db: Session) -> RegistrationSeries:
-    return RegistrationSeries(
-        day=get_registrations(db, "day"),
-        week=get_registrations(db, "week"),
-        month=get_registrations(db, "month")
+        .where(User.created_at.isnot(None))
+        .group_by("day")
+        .order_by("day")
+        .all()
     )
+    return [
+        Registrations(date=value, count=precise, count_all=total)
+        for value, total, precise in rows
+    ]
 
 
 def get_total(db: Session) -> list[Total]:
@@ -140,6 +133,7 @@ def get_followers_by_age(db: Session) -> list[TimePoint]:
         )
         .where(User.exists.is_(True))
         .where(User.created_at.isnot(None))
+        .where(not_(IMPRECISE_CREATED_AT))
         .distinct()
         .order_by(desc(User.followers_count))
         .limit(5000)
@@ -168,6 +162,7 @@ def get_clans_over_time(db: Session) -> list[ClanShare]:
         .where(User.exists.is_(True))
         .where(User.avatar.isnot(None))
         .where(User.avatar != "")
+        .where(not_(IMPRECISE_CREATED_AT))
         .group_by(User.avatar)
         .order_by(desc(func.count(User.id)))
         .limit(10)
@@ -287,7 +282,7 @@ def get_follow_ratio(db: Session) -> list[Bucket]:
 
 class StatsResponse(BaseModel):
     total: list[Total]
-    registrations: RegistrationSeries
+    registrations: list[Registrations]
     followers_distribution: list[Bucket]
     followers_by_age: list[TimePoint]
     posts_vs_followers: list[ScatterPoint]
@@ -303,7 +298,7 @@ def api_get_ebdi_stats(request: Request, db: Session = Depends(get_db)):
     if datetime.now() - request.app.state.stats_updated_at > timedelta(hours=6):
         request.app.state.stats = StatsResponse(
             total=get_total(db),
-            registrations=get_registration_series(db),
+            registrations=get_registrations(db),
             followers_distribution=get_followers_distribution(db),
             followers_by_age=get_followers_by_age(db),
             posts_vs_followers=get_posts_vs_followers(db),
