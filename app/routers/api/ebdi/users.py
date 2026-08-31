@@ -248,8 +248,7 @@ def api_get_ebdi_user_search(
         response = UserResponse.model_validate(user, from_attributes=True)
         response.position = i + 1
         if user.exists:
-            response.global_rank = rank
-            response.filtered_rank = rank
+            response.rank = rank
             rank += 1
         result.append(response)
     return {"results": result}
