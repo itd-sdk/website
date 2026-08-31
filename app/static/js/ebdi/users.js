@@ -682,7 +682,7 @@ function render_dialog_dates(user) {
                 );
             }
         }
-        const item = create("div", "dialog-date-item");
+        const item = create("div", "dialog-date");
         item.append(create("div", "dialog-date-label", entry.label));
         item.append(create("div", "dialog-date-value", value));
         container.append(item);

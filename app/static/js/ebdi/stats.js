@@ -381,13 +381,13 @@ function render_posts_vs_followers(data) {
             },
             scales: {
                 x: {
-                    type: "logarithmic",
+                    // type: "logarithmic",
                     grid: { color: GRID },
                     ticks: { color: TEXT },
                     title: { display: true, text: "Посты", color: TEXT },
                 },
                 y: {
-                    type: "logarithmic",
+                    // type: "logarithmic",
                     grid: { color: GRID },
                     ticks: { color: TEXT },
                     title: { display: true, text: "Подписчики", color: TEXT },
@@ -570,7 +570,7 @@ function render_follow_ratio(data) {
                     },
                 },
                 y: {
-                    type: "logarithmic",
+                    // type: "logarithmic",
                     grid: { color: GRID },
                     ticks: { color: TEXT },
                 },

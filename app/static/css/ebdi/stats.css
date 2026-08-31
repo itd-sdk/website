@@ -77,8 +77,8 @@ canvas {
 @media (max-width: 700px) {
     #charts {
         grid-template-columns: 1fr;
-        width: 94vw;
-        gap: 14px;
+        margin-left: -20px;
+        width: 100vw;
     }
 
     .chart-card {

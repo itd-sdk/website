@@ -363,13 +363,12 @@
 }
 
 .dialog-date {
-    position: relative;
-    margin-left: 4px;
-    padding: 0 0 14px 16px;
+    display: flex;
+    flex-direction: column;
 }
 
 .dialog-date-label {
-    font-size: 12px;
+    font-size: 14px;
     color: #999;
 }
 
@@ -433,5 +432,13 @@
     }
     .rank-gaps {
         grid-column: 1 / -1;
+    }
+    #dialog-dates {
+        flex-wrap: wrap;
+        align-items: flex-start;
+        gap: 10px;
+    }
+    .dialog-date {
+        align-items: center;
     }
 }
