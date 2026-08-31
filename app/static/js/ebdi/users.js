@@ -647,7 +647,6 @@ function render_rank_card(label, rank) {
 
 function render_dialog_ranks(ranks) {
     const container = get_el("dialog-ranks");
-    container.replaceChildren();
     container.append(render_rank_card("Подписчики", ranks.followers));
     container.append(render_rank_card("Подписки", ranks.following));
     container.append(render_rank_card("Посты", ranks.posts));
@@ -662,10 +661,13 @@ function render_dialog_dates(user) {
         { field: "found_at", label: "Добавлен в ЕБДИ" },
         { field: "updated_at", label: "Последняя синхронизация с ИТД" },
     ]) {
+        if (!user[entry.field]) {
+            continue;
+        }
         let value;
         if (entry.field == "last_seen") {
             if (
-                ["recently", "minutes", "hours", "just_now"].contains(
+                ["recently", "minutes", "hours", "just_now"].includes(
                     user[entry.field],
                 )
             ) {
@@ -698,8 +700,9 @@ function render_dialog(user) {
 }
 
 async function load_dialog_ranks(user, token) {
-    const container = get_el("dialog-ranks");
-    container.classList.add("ranks-loading");
+    const loader = get_el("dialog-ranks-loader-container");
+    loader.hidden = false;
+    get_el("dialog-ranks").replaceChildren();
     try {
         const res = await fetch(`/api/ebdi/users/${user.id}/ranks`);
         if (!res.ok) {
@@ -717,7 +720,7 @@ async function load_dialog_ranks(user, token) {
             show_dialog_error("Не удалось загрузить места в рейтинге");
         }
     } finally {
-        container.classList.remove("ranks-loading");
+        loader.hidden = true;
     }
 }
 

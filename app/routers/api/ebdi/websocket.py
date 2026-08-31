@@ -67,8 +67,8 @@ class UserBody(BaseModel):
     created_at: datetime | None = None
     username: str
     display_name: str
-    followers: list[UUID]
-    following: list[UUID]
+    # followers: list[UUID]
+    # following: list[UUID]
     followers_count: int
     following_count: int
     posts_count: int

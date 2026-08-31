@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 from enum import Enum
 from json import dumps
+from time import time
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -21,6 +22,7 @@ class UserResponse(UserBody):
     id: int
     user_id: UUID
     found_at: datetime
+    updated_at: datetime | None = None
     has_itdp: bool
     exists: bool
     # позиция в отфильтрованном списке (1-based), из неё фронт считает офсет батча при прыжке из поиска
@@ -131,15 +133,19 @@ def api_get_ebdi_users(
     exists: bool | None = None,
     db: Session = Depends(get_db)
 ):
+    start = time()
     query, _ = build_users_query(
         db, order, descending, clan, verified, has_itdp, exists
     )
-    return [serialize_user(row) for row in query.offset(offset).limit(100).all()]
+    res = [serialize_user(row) for row in query.offset(offset).limit(100).all()]
+    print("get list", round(time() - start, 2))
+    return res
 
 
 @router.get("/{id}/ranks")
 @get_limiter().limit("20/minute")
 def api_get_ebdi_user_ranks(request: Request, id: int, db: Session = Depends(get_db)):
+    start = time()
     ranks = db.query(
         User,
         func.row_number()
@@ -211,6 +217,7 @@ def api_get_ebdi_user_ranks(request: Request, id: int, db: Session = Depends(get
             return None
         return target - current
 
+    print("get ranks", round(time() - start, 2))
     return UserRanksResponse(
         followers=UserRankResponse(
             total=user.followers_count,
