@@ -296,6 +296,8 @@ async def api_websocket_ebdi(
                     db_user = User()
                     for i in user.model_fields_set:
                         setattr(db_user, i, getattr(user, i))
+                    db_user.followers = []
+                    db_user.following = []
                     db_user.exists = True
                     db_user.updated_at = datetime.now()
                     db.add(db_user)
