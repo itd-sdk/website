@@ -174,18 +174,11 @@ async function fetch_users(offset) {
 
 function render_place(node, user) {
     const place = node.querySelector(".row-place");
-    if (user.filtered_rank === null) {
-        place.textContent = "—";
+    if (user.rank == null) {
+        place.textContent = "-";
         return;
     }
-    place.textContent = user.filtered_rank + ".";
-    if (user.global_rank !== user.filtered_rank) {
-        const global_place = document.createElement("div");
-        global_place.className = "row-global-place";
-        global_place.title = "Место в глобальном топе";
-        global_place.textContent = "#" + user.global_rank;
-        place.appendChild(global_place);
-    }
+    place.textContent = user.rank + ".";
 }
 
 function render_badge_icon(user) {
@@ -676,8 +669,10 @@ function render_dialog_dates(user) {
                 value = "~7 дней назад";
             } else if (user[entry.field] == "this_month") {
                 value = "~30 дней назад";
-            } else {
+            } else if (user[entry.field] == "long_ago") {
                 value = "Давно";
+            } else {
+                value = "Скрыто";
             }
         } else {
             value = format_date(user[entry.field]);

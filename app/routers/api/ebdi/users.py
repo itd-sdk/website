@@ -7,11 +7,10 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
-from sqlalchemy import case, desc, func, or_
-from sqlalchemy.orm import aliased
+from sqlalchemy import and_, desc, func, or_
 
 from app.routers.api.ebdi.websocket import UserBody
-from app.schemas import App, User
+from app.schemas import User
 from app.services.db import Session, get_db
 from app.services.limiter import get_limiter
 
@@ -25,12 +24,8 @@ class UserResponse(UserBody):
     updated_at: datetime | None = None
     has_itdp: bool
     exists: bool
-    # позиция в отфильтрованном списке (1-based), из неё фронт считает офсет батча при прыжке из поиска
     position: int = 0
-    # место в глобальном топе по выбранной сортировке, без учёта фильтров, удалённые пропущены (у них None)
-    global_rank: int | None = None
-    # место с учётом фильтров, удалённые пропущены (у них None)
-    filtered_rank: int | None = None
+    rank: int | None = None
 
 
 class UserRankResponse(BaseModel):
@@ -55,11 +50,16 @@ class UserOrder(Enum):
     updated_at = "updated_at"
 
 
-def verify_app_token(app_token: str, db: Session = Depends(get_db)):
-    app = db.query(App).where(App.token == app_token).first()
-    if app is None:
-        raise HTTPException(detail="invalid app token", status_code=401)
-    return app
+def apply_filters(query, clan, verified, has_itdp, exists):
+    if clan:
+        query = query.where(User.avatar == clan)
+    if verified is not None:
+        query = query.where(User.verified == verified)
+    if has_itdp is not None:
+        query = query.where(User.has_itdp == has_itdp)
+    if exists is not None:
+        query = query.where(User.exists == exists)
+    return query
 
 
 def build_users_query(
@@ -72,52 +72,48 @@ def build_users_query(
     exists: bool | None
 ):
     col = getattr(User, order.value)
-    inner = db.query(
-        User,
-        func.row_number()
-        .over(
-            partition_by=User.exists,
-            order_by=(desc(col) if descending else col.asc(), User.id)
+    query = apply_filters(db.query(User), clan, verified, has_itdp, exists)
+    return query.order_by(desc(col) if descending else col.asc(), User.id)
+
+
+def rank_users(
+    db: Session,
+    users: list[User],
+    order: UserOrder,
+    descending: bool,
+    offset: int,
+    clan: str | None = None,
+    verified: bool | None = None,
+    has_itdp: bool | None = None,
+    exists: bool | None = None
+) -> list[UserResponse]:
+    col = getattr(User, order.value)
+    first = users[0]
+    value = getattr(first, order.value)
+    # rows ahead of the batch, ties broken by id to match the ordering
+    ahead = col > value if descending else col < value
+    base = (
+        apply_filters(
+            db.query(func.count(User.id)).where(User.exists.is_(True)),
+            clan,
+            verified,
+            has_itdp,
+            exists
         )
-        .label("global_rank"),
-        func.row_number()
-        .over(order_by=(desc(col) if descending else col.asc(), User.id))
-        .label("global_position")
-    ).subquery()
-    u = aliased(User, inner, adapt_on_names=True)
-    ordered_col = getattr(u, order.value)
-    order_by = (desc(ordered_col) if descending else ordered_col.asc(), u.id)
-
-    query = db.query(
-        u,
-        inner.c.global_rank,
-        inner.c.global_position,
-        func.row_number().over(order_by=order_by).label("position"),
-        func.row_number()
-        .over(partition_by=u.exists, order_by=order_by)
-        .label("filtered_rank")
+        .where(or_(ahead, and_(col == value, User.id < first.id)))
+        .scalar()
     )
-    if clan:
-        query = query.where(u.avatar == clan)
-    if verified is not None:
-        query = query.where(u.verified == verified)
-    if has_itdp is not None:
-        query = query.where(u.has_itdp == has_itdp)
-    if exists is not None:
-        query = query.where(u.exists == exists)
-    return query.order_by(*order_by), u
 
-
-def serialize_user(row, unfiltered: bool = False) -> UserResponse:
-    user, global_rank, global_position, position, filtered_rank = row
-    response = UserResponse.model_validate(user, from_attributes=True)
-    response.position = global_position if unfiltered else position
-    response.global_rank = global_rank if user.exists else None
-    if unfiltered:
-        response.filtered_rank = response.global_rank
-    else:
-        response.filtered_rank = filtered_rank if user.exists else None
-    return response
+    result = []
+    rank = base + 1
+    for i, user in enumerate(users):
+        response = UserResponse.model_validate(user, from_attributes=True)
+        response.position = offset + i + 1
+        if user.exists:
+            response.rank = rank
+            rank += 1
+        result.append(response)
+    return result
 
 
 @router.get("", response_model=list[UserResponse])
@@ -134,11 +130,15 @@ def api_get_ebdi_users(
     db: Session = Depends(get_db)
 ):
     start = time()
-    query, _ = build_users_query(
-        db, order, descending, clan, verified, has_itdp, exists
+    query = build_users_query(db, order, descending, clan, verified, has_itdp, exists)
+    users = query.offset(offset).limit(100).all()
+    if not users:
+        return []
+
+    res = rank_users(
+        db, users, order, descending, offset, clan, verified, has_itdp, exists
     )
-    res = [serialize_user(row) for row in query.offset(offset).limit(100).all()]
-    print("get list", round(time() - start, 2))
+    print(time() - start)
     return res
 
 
@@ -146,97 +146,55 @@ def api_get_ebdi_users(
 @get_limiter().limit("20/minute")
 def api_get_ebdi_user_ranks(request: Request, id: int, db: Session = Depends(get_db)):
     start = time()
-    ranks = db.query(
-        User,
-        func.row_number()
-        .over(partition_by=User.exists, order_by=(User.followers_count.desc(), User.id))
-        .label("followers_place"),
-        func.row_number()
-        .over(partition_by=User.exists, order_by=(User.following_count.desc(), User.id))
-        .label("following_place"),
-        func.row_number()
-        .over(partition_by=User.exists, order_by=(User.posts_count.desc(), User.id))
-        .label("posts_place")
-    ).subquery()
-    u = aliased(User, ranks, adapt_on_names=True)
-
-    row = (
-        db.query(
-            u, ranks.c.followers_place, ranks.c.following_place, ranks.c.posts_place
-        )
-        .where(u.id == id)
-        .first()
-    )
-    if row is None:
+    user = db.query(User).where(User.id == id).first()
+    if user is None:
         raise HTTPException(detail="not found", status_code=404)
-    user, followers_place, following_place, posts_place = row
 
     if not user.exists:
         return UserRanksResponse(
-            followers=UserRankResponse(
-                total=user.followers_count, place=None, to_next=None, to_top_100=None
-            ),
-            following=UserRankResponse(
-                total=user.following_count, place=None, to_next=None, to_top_100=None
-            ),
-            posts=UserRankResponse(
-                total=user.posts_count, place=None, to_next=None, to_top_100=None
-            )
+            followers=UserRankResponse(total=user.followers_count),
+            following=UserRankResponse(total=user.following_count),
+            posts=UserRankResponse(total=user.posts_count)
         )
 
-    next_followers, next_following, next_posts = db.query(
-        func.min(
-            case(
-                (
-                    ranks.c.followers_count > user.followers_count,
-                    ranks.c.followers_count
-                )
+    def rank_for(column, value: int) -> UserRankResponse:
+        # ties broken by id to match the list ordering
+        ahead = (
+            db.query(func.count(User.id))
+            .where(User.exists.is_(True))
+            .where(or_(column > value, and_(column == value, User.id < id)))
+            .scalar()
+        )
+        next_value = (
+            db.query(func.min(column))
+            .where(User.exists.is_(True))
+            .where(column > value)
+            .scalar()
+        )
+        place = ahead + 1
+        top_100 = None
+        if place > 100:
+            top_100 = (
+                db.query(column)
+                .where(User.exists.is_(True))
+                .order_by(column.desc(), User.id)
+                .offset(99)
+                .limit(1)
+                .scalar()
             )
-        ),
-        func.min(
-            case(
-                (
-                    ranks.c.following_count > user.following_count,
-                    ranks.c.following_count
-                )
-            )
-        ),
-        func.min(case((ranks.c.posts_count > user.posts_count, ranks.c.posts_count)))
-    ).one()
+        return UserRankResponse(
+            total=value,
+            place=place,
+            to_next=(next_value - value) if next_value is not None else None,
+            to_top_100=(top_100 - value) if top_100 is not None else None
+        )
 
-    top_followers, top_following, top_posts = db.query(
-        func.max(case((ranks.c.followers_place == 100, ranks.c.followers_count))),
-        func.max(case((ranks.c.following_place == 100, ranks.c.following_count))),
-        func.max(case((ranks.c.posts_place == 100, ranks.c.posts_count)))
-    ).one()
+    print(time() - start)
 
-    def gap(
-        target: int | None, current: int, place: int, only_outside_top: bool = False
-    ):
-        if target is None or (only_outside_top and place <= 100):
-            return None
-        return target - current
-
-    print("get ranks", round(time() - start, 2))
     return UserRanksResponse(
-        followers=UserRankResponse(
-            total=user.followers_count,
-            place=followers_place,
-            to_next=gap(next_followers, user.followers_count, followers_place),
-            to_top_100=gap(top_followers, user.followers_count, followers_place, True)
-        ),
-        following=UserRankResponse(
-            total=user.following_count,
-            place=following_place,
-            to_next=gap(next_following, user.following_count, following_place),
-            to_top_100=gap(top_following, user.following_count, following_place, True)
-        ),
-        posts=UserRankResponse(
-            total=user.posts_count,
-            place=posts_place,
-            to_next=gap(next_posts, user.posts_count, posts_place),
-            to_top_100=gap(top_posts, user.posts_count, posts_place, True)
-        )
+        followers=rank_for(User.followers_count, user.followers_count),
+        following=rank_for(User.following_count, user.following_count),
+        posts=rank_for(User.posts_count, user.posts_count)
     )
 
 
@@ -258,21 +216,43 @@ def api_get_ebdi_user_search(
     descending: bool = True,
     db: Session = Depends(get_db)
 ):
-    # поиск всегда идёт по всей базе без фильтров, поэтому position совпадает с нефильтрованным списком в выбранной сортировке
-    escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-    pattern = f"%{escaped}%"
-    users_query, u = build_users_query(db, order, descending, None, None, None, None)
-    rows = (
-        users_query.where(
+    pattern = f"%{query.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')}%"
+    query = build_users_query(db, order, descending, None, None, None, None)
+    users = (
+        query.where(
             or_(
-                u.username.ilike(pattern, escape="\\"),
-                u.display_name.ilike(pattern, escape="\\")
+                User.username.ilike(pattern, escape="\\"),
+                User.display_name.ilike(pattern, escape="\\")
             )
         )
         .limit(20)
         .all()
     )
-    return {"results": [serialize_user(row, unfiltered=True) for row in rows]}
+    if not users:
+        return []
+
+    col = getattr(User, order.value)
+    first = users[0]
+    value = getattr(first, order.value)
+    ahead = col > value if descending else col < value
+    base = (
+        db.query(func.count(User.id))
+        .where(User.exists.is_(True))
+        .where(or_(ahead, and_(col == value, User.id < first.id)))
+        .scalar()
+    )
+
+    result = []
+    rank = base + 1
+    for i, user in enumerate(users):
+        response = UserResponse.model_validate(user, from_attributes=True)
+        response.position = i + 1
+        if user.exists:
+            response.global_rank = rank
+            response.filtered_rank = rank
+            rank += 1
+        result.append(response)
+    return {"results": result}
 
 
 @router.get("/count")
