@@ -91,7 +91,7 @@
     border: #494037 1px solid;
     background-color: #1e1c1a;
     color: #fff;
-    width: min(750px, 94vw);
+    width: min(800px, 94vw);
     max-height: 88vh;
     overflow: hidden;
     position: relative;

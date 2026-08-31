@@ -277,14 +277,21 @@ function insert_batch(offset, users) {
     }
     const batches = [...container.querySelectorAll(".row-batch")];
     const next = batches.find((el) => Number(el.dataset.offset) > offset);
-    const anchor = get_scroll_anchor();
-    const anchor_top = anchor ? anchor.getBoundingClientRect().top : 0;
+    // batches inserted above shift everything down, compensate by height delta
+    const prepending = Boolean(next);
+    const height_before = document.documentElement.scrollHeight;
+    const scroll_before = window.scrollY;
+
     container.insertBefore(batch, next ?? get_el("list-loader"));
     update_gaps();
-    if (anchor) {
-        const delta = anchor.getBoundingClientRect().top - anchor_top;
+
+    if (prepending) {
+        const delta = document.documentElement.scrollHeight - height_before;
         if (delta) {
-            window.scrollBy(0, delta);
+            window.scrollTo({
+                top: scroll_before + delta,
+                behavior: "instant",
+            });
         }
     }
 }

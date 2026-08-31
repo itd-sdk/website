@@ -294,6 +294,7 @@ emoji-picker {
     display: flex;
     align-items: center;
     flex-direction: column;
+    overflow-anchor: none;
     gap: 10px;
 }
 
