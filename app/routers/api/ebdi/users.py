@@ -217,39 +217,36 @@ def api_get_ebdi_user_search(
     db: Session = Depends(get_db)
 ):
     pattern = f"%{query.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')}%"
-    query = build_users_query(db, order, descending, None, None, None, None)
+    col = getattr(User, order.value)
     users = (
-        query.where(
+        db.query(User)
+        .where(
             or_(
                 User.username.ilike(pattern, escape="\\"),
                 User.display_name.ilike(pattern, escape="\\")
             )
         )
+        .order_by(desc(col) if descending else col.asc(), User.id)
         .limit(20)
         .all()
     )
-    if not users:
-        return []
-
-    col = getattr(User, order.value)
-    first = users[0]
-    value = getattr(first, order.value)
-    ahead = col > value if descending else col < value
-    base = (
-        db.query(func.count(User.id))
-        .where(User.exists.is_(True))
-        .where(or_(ahead, and_(col == value, User.id < first.id)))
-        .scalar()
-    )
 
     result = []
-    rank = base + 1
-    for i, user in enumerate(users):
+    for user in users:
+        value = getattr(user, order.value)
+        ahead = col > value if descending else col < value
+        # search results are scattered across the list, each needs its own count
+        condition = or_(ahead, and_(col == value, User.id < user.id))
         response = UserResponse.model_validate(user, from_attributes=True)
-        response.position = i + 1
+        response.position = db.query(func.count(User.id)).where(condition).scalar() + 1
         if user.exists:
-            response.rank = rank
-            rank += 1
+            response.rank = (
+                db.query(func.count(User.id))
+                .where(User.exists.is_(True))
+                .where(condition)
+                .scalar()
+                + 1
+            )
         result.append(response)
     return {"results": result}
 

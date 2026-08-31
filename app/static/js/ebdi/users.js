@@ -416,8 +416,7 @@ function render_candidates(users) {
         username.textContent = "@" + user.username;
         const place = document.createElement("div");
         place.className = "search-candidate-place";
-        place.textContent =
-            user.global_rank !== null ? "#" + user.global_rank : "удалён";
+        place.textContent = user.rank != null ? "#" + user.rank : "удалён";
         item.append(avatar, name, username, place);
         item.addEventListener("click", () => jump_to_user(user));
         candidates.appendChild(item);
@@ -493,7 +492,7 @@ async function jump_to_user(user) {
     if (needs_reset) {
         clear_filters();
     }
-    if (user.global_rank === null && !state.show_deleted) {
+    if (user.rank === null && !state.show_deleted) {
         state.show_deleted = true;
         get_el("deleted-checkbox").checked = true;
         write_url_state();
@@ -503,7 +502,7 @@ async function jump_to_user(user) {
         reset_list();
     }
     await wait_loading();
-    const place = state.show_deleted ? user.position : user.global_rank;
+    const place = state.show_deleted ? user.position : user.rank;
     for (const offset of [
         page_offset(place),
         page_offset(place) + PAGE_SIZE,
