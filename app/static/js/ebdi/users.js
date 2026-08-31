@@ -653,7 +653,7 @@ function render_dialog_ranks(ranks) {
     container.append(render_rank_card("Посты", ranks.posts));
 }
 
-function render_dialog_timeline(user) {
+function render_dialog_dates(user) {
     const container = get_el("dialog-dates");
     container.replaceChildren();
     for (const entry of [
@@ -662,9 +662,28 @@ function render_dialog_timeline(user) {
         { field: "found_at", label: "Добавлен в ЕБДИ" },
         { field: "updated_at", label: "Последняя синхронизация с ИТД" },
     ]) {
-        const value = format_date(user[entry.field]);
-        if (!value) {
-            continue;
+        let value;
+        if (entry.field == "last_seen") {
+            if (
+                ["recently", "minutes", "hours", "just_now"].contains(
+                    user[entry.field],
+                )
+            ) {
+                value = "~1 день назад";
+            } else if (user[entry.field] == "this_week") {
+                value = "~7 дней назад";
+            } else if (user[entry.field] == "this_month") {
+                value = "~30 дней назад";
+            } else {
+                value = "Давно";
+            }
+        } else {
+            value = format_date(user[entry.field]);
+            if (!value) {
+                console.warn(
+                    `failed to format date ${user[entry.field]} field=${entry.field}`,
+                );
+            }
         }
         const item = create("div", "dialog-date-item");
         item.append(create("div", "dialog-date-label", entry.label));
@@ -675,7 +694,7 @@ function render_dialog_timeline(user) {
 
 function render_dialog(user) {
     render_dialog_header(user);
-    render_dialog_timeline(user);
+    render_dialog_dates(user);
 }
 
 async function load_dialog_ranks(user, token) {
@@ -839,7 +858,7 @@ function init_user_dialog() {
 function init_sort_headers() {
     for (const cell of document.querySelectorAll(".row-sortable")) {
         cell.addEventListener("click", () => {
-            if (cell.dataset.order === state.order) {
+            if (cell.dataset.order == state.order) {
                 state.descending = !state.descending;
             } else {
                 state.order = cell.dataset.order;
