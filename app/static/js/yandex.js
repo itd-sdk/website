@@ -64,7 +64,10 @@ function move_dvd() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-    if (navigator.userAgent.includes("YaBrowser")) {
+    if (
+        navigator.userAgent.includes("YaBrowser") &&
+        !(localStorage.getItem("yandex_seen") ?? false)
+    ) {
         const check = get_el("captcha-check");
 
         get_el("captcha-dialog").showModal();
@@ -72,6 +75,7 @@ document.addEventListener("DOMContentLoaded", () => {
         check.addEventListener(
             "click",
             async () => {
+                localStorage.setItem("yandex_seen", true);
                 check.hidden = true;
                 get_el("captcha-load").hidden = false;
                 await sleep(1500);
