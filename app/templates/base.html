@@ -10,6 +10,7 @@
         <link rel="stylesheet" href="/static/css/style.css">
         <link href='https://fonts.googleapis.com/css2?family=Jost:wght@400;500;700&display=swap' rel='stylesheet'>
 
+        <script src="/static/js/yandex.js"></script>
         <!-- <script src="{{ url_for('static', path='/js/base.js') }}"></script> -->
         {% block head %}{% endblock %}
     </head>
@@ -73,6 +74,27 @@
                 </div>
             </div>
         </div>
+        <dialog id="captcha-dialog" closedby="none">
+            <div id="captcha">
+                <input type="checkbox" id="captcha-check">
+                <div id="captcha-load" hidden></div>
+                <div>Подтвердите, что вы робот</div>
+            </div>
+        </dialog>
+        <dialog id="yandex-dialog" closedby="none">
+            <div>
+                <div id="yandex-title">🚨⚠️📵 ВНИМАНИЕ! ⚠️⚠️ ОБНАРУЖЕН ЯНДЕКС БРАУЗЕР</div>
+                <div>Загрузка вредоносного ПО..</div>
+                <img src="https://media1.giphy.com/media/v1.Y2lkPWVjZjA1ZTQ3Zmhlejh2Y3hiZWhpd3pvZWRyd25jdjFibjVqemRrOXdsZzQ5bWdpYiZlcD12MV9naWZzX3JlbGF0ZWQmY3Q9Zw/daDPy7kxfE1TfxLzNg/giphy.webp">
+            </div>
+        </dialog>
+        <img id="bear" hidden src="/static/images/bear.gif">
+        <img id="yandex-ads" hidden src="https://panels.twitch.tv/panel-509553990-image-5e787e9c-a293-4100-b407-cb34901232aa">
+        <img id="yandex-bad" hidden src="https://cs17.pikabu.ru/s/2026/08/28/13/xefuwimw.jpg">
+        <img id="rkn" hidden src="https://newreporter.org/wp-content/uploads/2019/08/00000.jpg">
+        <img id="dvd" hidden src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTUiSLC-ZP1qTw8wH9uMkolOLu7LnRp1lTBQE0NRLdRxg&s=10">
+        <img id="putin" hidden src="https://24.kg/thumbnails/1c3c2/1da93/62583_w_h500_1520668417_r.jpg">
+        <img id="dima" hidden src="/static/images/dima.jpg">
         {% endblock %}
     </body>
 </html>

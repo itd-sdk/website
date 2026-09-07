@@ -366,3 +366,172 @@ img {
 #content {
     padding: 0 20px;
 }
+
+body.yandex {
+    background: url("/static/images/russia.gif");
+    background-size: 100% auto;
+}
+
+body.yandex #landing {
+    background: url("/static/images/russia.gif");
+    background-size: 100vw 100vh;
+}
+
+dialog {
+    background-color: #1e1c1a;
+    overflow: hidden;
+    position: relative;
+    padding: 16px;
+}
+dialog:focus {
+    outline: none;
+}
+dialog:not([open]) {
+    display: none;
+}
+
+dialog[open] {
+    display: flex;
+}
+dialog::backdrop {
+    background-color: #000000b3;
+}
+
+#captcha {
+    display: flex;
+    flex-direction: row;
+    gap: 10px;
+}
+
+#captcha-load {
+    width: 24px;
+    height: 24px;
+    border: 3px solid #494037;
+    border-top-color: #ec5e1c;
+    border-radius: 50%;
+    animation: loader-spin 0.8s linear infinite;
+}
+
+@keyframes loader-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+#yandex-dialog {
+    border: none;
+}
+
+#yandex-dialog div {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    align-items: center;
+}
+
+#yandex-title {
+    font-weight: bold;
+    font-size: 50;
+}
+
+#bear:not([hidden]) {
+    position: fixed;
+    top: 150px;
+    right: 0;
+    animation: bear-walk 7.3s linear infinite;
+    width: 35vw;
+    z-index: 101;
+}
+
+@media (max-width: 700px) {
+    #bear:not([hidden]) {
+        width: 50vw;
+    }
+}
+
+@keyframes bear-walk {
+    0% {
+        transform: translateX(0) scaleX(1);
+    }
+    49.99% {
+        transform: translateX(calc(-100vw + 100%)) scaleX(1);
+    }
+    50% {
+        transform: translateX(calc(-100vw + 100%)) scaleX(-1);
+    }
+    100% {
+        transform: translateX(0) scaleX(-1);
+    }
+}
+
+#yandex-ads {
+    bottom: 0;
+    right: 0;
+    z-index: 100;
+}
+
+#yandex-bad {
+    left: 0;
+    bottom: 0;
+    width: 250px;
+    z-index: 100;
+}
+
+#rkn {
+    left: 100px;
+    top: 0;
+    z-index: 100;
+    width: 330px;
+}
+
+#dvd {
+    top: 0;
+    left: 0;
+    will-change: transform;
+    pointer-events: none;
+    width: 50px;
+    z-index: 102;
+}
+
+#putin {
+    top: 30vh;
+    right: 0;
+    animation: rotate 3s linear infinite;
+    z-index: 100;
+    width: 350px;
+}
+
+@keyframes rotate {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+#dima {
+    top: 50vh;
+    left: 50px;
+    animation: scale 2s linear infinite;
+    z-index: 100;
+}
+
+@keyframes scale {
+    0% {
+        transform: scale(0.8);
+    }
+    50% {
+        transform: scale(1.3);
+    }
+    100% {
+        transform: scale(0.8);
+    }
+}
+
+#bear,
+#dvd,
+#yandex-ads,
+#rkn,
+#putin,
+#dima {
+    pointer-events: none;
+    position: fixed;
+}
