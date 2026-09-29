@@ -3,6 +3,456 @@
     opacity: 0.6;
 }
 
+.row,
+#user-dialog {
+    position: relative;
+    isolation: isolate;
+}
+
+/* art layer */
+.row::after,
+#user-dialog::after {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    pointer-events: none;
+}
+
+.row::after {
+    inset: 0 0 0 auto;
+    width: var(--art-w, 100%);
+    background-image: var(--art-row, var(--art));
+    background-repeat: var(--art-repeat-row, var(--art-repeat, no-repeat));
+    background-position: var(--art-pos-row, var(--art-pos, center right));
+    background-size: var(--art-size-row, var(--art-size, cover));
+    opacity: var(--art-opacity-row, var(--art-opacity, 1));
+    mask-image: var(
+        --art-mask-row,
+        var(--art-mask, linear-gradient(to left, #000 25%, transparent))
+    );
+}
+
+#user-dialog::after {
+    /* starts below the banner, the banner shows the user's own image */
+    inset: var(--art-top, 180px) 0 0 0;
+    background-image: var(--art-dialog, var(--art));
+    background-repeat: var(--art-repeat-dialog, var(--art-repeat, no-repeat));
+    background-position: var(--art-pos-dialog, var(--art-pos, bottom center));
+    background-size: var(--art-size-dialog, var(--art-size, cover));
+    opacity: var(--art-opacity-dialog, var(--art-opacity, 0.4));
+    mask-image: var(
+        --art-mask-dialog,
+        linear-gradient(to bottom, transparent, #000 120px)
+    );
+}
+
+/* border layer */
+.row::before,
+#user-dialog::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+}
+
+/* ring: paints only the padding area of ::before */
+:is(
+    [data-border="comet"],
+    [data-border="dashmove"],
+    [data-border="holo"],
+    [data-border="spot"],
+    [data-border="pixel"]
+)::before {
+    padding: var(--bw, 2px);
+    mask-image: linear-gradient(#000 0 0), linear-gradient(#000 0 0);
+    mask-clip: content-box, border-box;
+    mask-composite: exclude;
+}
+
+.border-heavy {
+    border: 4px #ed6a2d solid;
+}
+.border-rainbow {
+    border-width: 3px !important;
+    border-style: solid !important;
+    border-image-source: linear-gradient(
+        to right,
+        red,
+        yellow,
+        lime,
+        blue,
+        magenta,
+        red
+    ) !important;
+    border-image-slice: 1 !important;
+}
+.border-underline {
+    border-bottom: solid 8px #ff854d;
+    padding: 8px 16px 4px 16px;
+}
+/* bad
+.border-gold::before {
+    content: "";
+    background-image: url("/static/images/gold3.png");
+    height: calc(61px + 16px * 2);
+    width: calc(80vw + 3vw * 2);
+    left: calc(10vw - 3vw);
+    position: absolute;
+    background-size: 100% 100%;
+}*/
+.row.border-wave {
+    padding: 18px 16px;
+    margin-bottom: -9px;
+    margin-top: -9px;
+}
+.border-wave {
+    /* https://css-tricks.com/how-to-create-wavy-shapes-patterns-in-css/ */
+    --size: 10px;
+    --m: 2;
+    --p: calc(var(--m) * var(--size));
+    --R: calc(var(--size) * sqrt(var(--m) * var(--m) + 1));
+    mask:
+      /* Gradient 1 */
+        radial-gradient(
+                var(--R) at left 50% bottom calc(var(--size) + var(--p)),
+                #000 99%,
+                #0000 101%
+            )
+            left calc(50% - 2 * var(--size)) bottom 0 / calc(4 * var(--size))
+            51% repeat-x,
+        /* Gradient 2 */
+        radial-gradient(
+                var(--R) at left 50% bottom calc(-1 * var(--p)),
+                #0000 99%,
+                #000 101%
+            )
+            left 50% bottom var(--size) / calc(4 * var(--size))
+            calc(51% - var(--size)) repeat-x,
+        /* Gradient 3 */
+        radial-gradient(
+                var(--R) at left 50% top calc(var(--size) + var(--p)),
+                #000 99%,
+                #0000 101%
+            )
+            left calc(50% - 2 * var(--size)) top 0 / calc(4 * var(--size)) 51%
+            repeat-x,
+        /* Gradient 4 */
+        radial-gradient(
+                var(--R) at left 50% top calc(-1 * var(--p)),
+                #0000 99%,
+                #000 101%
+            )
+            left 50% top var(--size) / calc(4 * var(--size))
+            calc(51% - var(--size)) repeat-x;
+}
+.border-hue {
+    filter: hue-rotate(67deg);
+}
+.border-blind {
+    filter: brightness(5.67);
+}
+[data-art="itd"] {
+    --accent: #fff;
+
+    --art: url("/static/images/bg-itd.png");
+    --art-repeat: repeat;
+    --art-pos: left top;
+    --art-size: 10% auto;
+    --art-size-dialog: 20% auto;
+    --art-mask: linear-gradient(to left, #000 40%, transparent);
+    --art-mask-dialog: none;
+}
+
+[data-art="67"] {
+    --art-opacity: 0.6;
+    --accent: #ed6a2d;
+    --art-repeat-dialog: no-repeat;
+
+    /* digits diamond tiled over the 67deg stripes */
+    --art:
+        url("/static/images/bg-67.png"),
+        repeating-linear-gradient(
+            67deg,
+            #1c1a18,
+            #1c1a18 33.5px,
+            #292623 33.5px,
+            #292623 67px
+        );
+    --art-size: 8% auto, 100% 100%;
+    --art-repeat: repeat, no-repeat;
+    --art-pos: left top, left top;
+    --art-mask: none;
+
+    --art-dialog: url("/static/images/bg-67.gif");
+    --art-size-dialog: 100% 100%;
+    --art-pos-dialog: bottom center;
+    --art-opacity-dialog: 0.5;
+    --art-mask-dialog: none;
+}
+
+#user-dialog[data-art="67"]::after {
+    animation: jump-67 1s linear;
+}
+
+@keyframes jump-67 {
+    0% {
+        background-position: bottom -1000px center;
+    }
+    40% {
+        background-position: bottom -250px center;
+    }
+    75% {
+        background-position: bottom -230px center;
+    }
+    to {
+        background-position: bottom center;
+    }
+}
+
+[data-art="nowkie"] {
+    --accent: #ff2222;
+    --art: url("/static/images/bg-nowkie.jpg");
+    --art-w: clamp(260px, 38%, 620px);
+    --art-dialog: url("/static/images/bg-nowkie3.jpg");
+    --art-mask-dialog: linear-gradient(to bottom, #00000080, #000 150px);
+    --art-opacity-dialog: 0.45;
+}
+
+[data-art="pswet"] {
+    --accent: #000;
+    --art: url("/static/images/bg-pswet.jpg");
+    --art-w: clamp(260px, 38%, 620px);
+    --art-dialog: url("/static/images/bg-pswet3.jpg");
+}
+
+@property --angle {
+    syntax: "<angle>";
+    initial-value: 0deg;
+    inherits: false;
+}
+
+[data-border="shimmer"] {
+    border: 3px solid transparent;
+    background:
+        linear-gradient(#2c2a27, #2c2a27) padding-box,
+        conic-gradient(
+                from var(--angle),
+                #ed6a2d,
+                var(--accent, #fbeadb),
+                #ed6a2d
+            )
+            border-box;
+    animation: spin-border 2s linear infinite;
+}
+
+@keyframes spin-border {
+    to {
+        --angle: 360deg;
+    }
+}
+[data-border="corners"]::before {
+    --c: var(--accent, #ed6a2d);
+    background-image:
+        linear-gradient(var(--c), var(--c)),
+        linear-gradient(var(--c), var(--c)),
+        linear-gradient(var(--c), var(--c)),
+        linear-gradient(var(--c), var(--c)),
+        linear-gradient(var(--c), var(--c)),
+        linear-gradient(var(--c), var(--c)),
+        linear-gradient(var(--c), var(--c)), linear-gradient(var(--c), var(--c));
+    background-size:
+        14px 3px,
+        3px 14px,
+        14px 3px,
+        3px 14px,
+        14px 3px,
+        3px 14px,
+        14px 3px,
+        3px 14px;
+    background-position:
+        left top,
+        left top,
+        right top,
+        right top,
+        left bottom,
+        left bottom,
+        right bottom,
+        right bottom;
+    background-repeat: no-repeat;
+}
+[data-border="ticket"] {
+    clip-path: polygon(
+        36px 0,
+        100% 0,
+        100% calc(100% - 36px),
+        calc(100% - 36px) 100%,
+        0 100%,
+        0 36px
+    );
+}
+[data-border="comet"]::before {
+    --bw: 2px;
+    background:
+        conic-gradient(
+            from var(--angle),
+            transparent 0 70%,
+            #ff5e00 92%,
+            #fff 100%
+        ),
+        linear-gradient(#ffffff14 0 0);
+    animation: spin-border 3s linear infinite;
+}
+
+.row[data-border="dashmove"]::before {
+    background: linear-gradient(
+        45deg,
+        #ed6a2d 25%,
+        transparent 25% 50%,
+        #ed6a2d 50% 75%,
+        transparent 75%
+    );
+    background-size: 36px 36px;
+    animation: dashmove 0.6s linear infinite;
+}
+
+@keyframes dashmove {
+    to {
+        background-position: 36px 0;
+    }
+}
+
+[data-border="holo"]::before {
+    --bw: 3px;
+    background: conic-gradient(
+        from 90deg,
+        #ff6ec7,
+        #ffd86e,
+        #6effa8,
+        #6ed8ff,
+        #b56eff,
+        #ff6ec7
+    );
+    animation: holo 6s linear infinite;
+}
+
+@keyframes holo {
+    to {
+        filter: hue-rotate(360deg);
+    }
+}
+
+[data-border="crt"]::before {
+    background:
+        linear-gradient(
+                transparent,
+                color-mix(in srgb, #000 35%, transparent),
+                transparent
+            )
+            0 -50px / 100% 50px no-repeat,
+        repeating-linear-gradient(
+            transparent 0 2px,
+            color-mix(in srgb, #000 12%, transparent) 2px 3px
+        );
+    box-shadow:
+        inset 0 0 0 1px color-mix(in srgb, #000 60%, transparent),
+        inset 0 0 18px -6px #000;
+    animation:
+        crt-scan var(--crt-speed, 2.5s) linear infinite,
+        crt-flicker 5s steps(1) infinite;
+}
+
+#user-dialog[data-border="crt"]::before {
+    --crt-speed: 5s;
+}
+
+@keyframes crt-scan {
+    to {
+        background-position:
+            0 calc(100% + 50px),
+            0 0;
+    }
+}
+
+@keyframes crt-flicker {
+    0%,
+    93%,
+    100% {
+        opacity: 1;
+    }
+    94% {
+        opacity: 0.55;
+    }
+    96% {
+        opacity: 0.9;
+    }
+    97% {
+        opacity: 0.6;
+    }
+}
+
+[data-border="ember"]::before {
+    background:
+        linear-gradient(
+                90deg,
+                #ff3b00,
+                #ffb300,
+                #ff5e00,
+                #ffd000,
+                #ff2a00,
+                #ff3b00
+            )
+            0 100% / 400px 3px repeat-x,
+        linear-gradient(
+                to top,
+                color-mix(in srgb, #ff3b00 45%, transparent),
+                transparent
+            )
+            0 100% / 100% 22px no-repeat;
+    animation:
+        ember-flow 4s linear infinite,
+        ember 1.8s ease-in-out infinite alternate;
+}
+
+@keyframes ember-flow {
+    /* shift equals tile width, so the loop is seamless */
+    to {
+        background-position:
+            400px 100%,
+            0 100%;
+    }
+}
+
+[data-border="pixel"] {
+    clip-path: polygon(
+        0 calc(6px * 2),
+        6px calc(6px * 2),
+        6px 6px,
+        calc(6px * 2) 6px,
+        calc(6px * 2) 0,
+        calc(100% - 6px * 2) 0,
+        calc(100% - 6px * 2) 6px,
+        calc(100% - 6px) 6px,
+        calc(100% - 6px) calc(6px * 2),
+        100% calc(6px * 2),
+        100% calc(100% - 6px * 2),
+        calc(100% - 6px) calc(100% - 6px * 2),
+        calc(100% - 6px) calc(100% - 6px),
+        calc(100% - 6px * 2) calc(100% - 6px),
+        calc(100% - 6px * 2) 100%,
+        calc(6px * 2) 100%,
+        calc(6px * 2) calc(100% - 6px),
+        6px calc(100% - 6px),
+        6px calc(100% - 6px * 2),
+        0 calc(100% - 6px * 2)
+    );
+}
+
+[data-border="pixel"]::before {
+    --bw: 3px;
+    /*background: var(--accent);*/
+}
+
 .user-name {
     flex-grow: 3;
     min-width: 0;
@@ -88,7 +538,9 @@
 }
 #user-dialog {
     padding: 0;
-    border: #494037 1px solid;
+    /*border: #494037 1px solid;*/
+    border: none;
+    border: var(--accent) 3px solid;
     background-color: #1e1c1a;
     color: #fff;
     width: min(800px, 94vw);
@@ -108,6 +560,12 @@
 
 #user-dialog::backdrop {
     background-color: #000000b3;
+}
+
+#user-dialog[data-art] .rank-card {
+    background-color: #2c2a27cc;
+    backdrop-filter: blur(2px);
+    border: var(--accent, #494037) 2px dashed;
 }
 
 #dialog-actions {
@@ -262,12 +720,11 @@
 }
 
 .dialog-section-title {
-    font-size: 12px;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: #777;
+    font-size: 17px;
+    font-weight: bold;
+    color: #ddd;
     padding: 0 24px;
-    margin: 24px 0 10px;
+    margin: 16px 0 10px;
 }
 
 #dialog-ranks {
@@ -332,9 +789,9 @@
 }
 
 .rank-bar {
-    height: 4px;
+    height: 3px;
     margin: 10px 0 8px;
-    background-color: #3a352f;
+    background-color: var(--accent, #3a352f);
     overflow: hidden;
 }
 
@@ -368,8 +825,8 @@
 }
 
 .dialog-date-label {
-    font-size: 14px;
-    color: #999;
+    font-size: 15px;
+    color: #ccc;
 }
 
 .dialog-label-value {
@@ -390,6 +847,57 @@
 }
 #dialog-close::after {
     display: none;
+}
+
+#dialog-status {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 2;
+    padding: 5px 12px;
+    text-align: center;
+    font-size: 13px;
+    font-weight: 600;
+    color: #fff;
+    text-shadow: 0 1px 2px #000;
+    background:
+        linear-gradient(
+                45deg,
+                #ed6a2d 25%,
+                transparent 25% 50%,
+                #ed6a2d 50% 75%,
+                transparent 75%
+            )
+            0 0 / 24px 24px,
+        #1e1c1a;
+    animation:
+        status-in 0.2s cubic-bezier(0.2, 0.8, 0.2, 1),
+        status-dashmove 1.6s linear infinite;
+}
+
+@keyframes status-in {
+    from {
+        translate: 0 -100%;
+    }
+}
+
+@keyframes status-dashmove {
+    to {
+        background-position: 24px 0;
+    }
+}
+
+#dialog-scroll {
+    transition: opacity 0.2s;
+}
+
+#user-dialog.refreshing #dialog-scroll {
+    opacity: 0.6;
+}
+
+.dialog-action.load img {
+    animation: loader-spin 0.8s linear infinite;
 }
 
 @media (max-width: 1000px) {
@@ -440,5 +948,12 @@
     }
     .dialog-date {
         align-items: center;
+    }
+
+    #user-dialog.border-pswet {
+        background-image: url("/static/images/bg-pswet2.jpg");
+    }
+    [data-art="nowkie"] {
+        --art-dialog: url("/static/images/bg-nowkie2.jpg");
     }
 }

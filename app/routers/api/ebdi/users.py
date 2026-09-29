@@ -206,7 +206,6 @@ def api_post_ebdi_users_refresh(
     user = db.query(User).where(User.id == id).first()
     if not user:
         return JSONResponse({"detail": "user not found"}, 404)
-    return JSONResponse({"detail": "not implemented"}, 400)
 
 
 @router.get("/search")

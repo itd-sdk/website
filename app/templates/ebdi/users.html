@@ -56,7 +56,7 @@
             </label>
             <div id="clan-box">
                 <button id="clan-button">
-                    <div id="clan-text">Клан: -</div>
+                    <div id="clan-text">Клан: Все</div>
                     <img src="/static/icons/arrow.svg">
                 </button>
                 <div id="clan-picker" hidden>
@@ -129,19 +129,20 @@
 </div>
 
 <dialog id="user-dialog">
+    <div id="dialog-status" hidden>Обновление...</div>
     <div id="dialog-actions">
         <!--<button class="dialog-action" id="dialog-download" title="Скачать карточку" aria-label="Скачать карточку">
             <img src="/static/icons/download.svg">
         </button>-->
-        <!--<button class="dialog-action" id="dialog-refresh" title="Обновить данные" aria-label="Обновить данные">
-            <img src="/static/icons/refresh.svg"
-        </button>-->
+        <button class="dialog-action" id="dialog-refresh" title="Обновить данные" aria-label="Обновить данные">
+            <img src="/static/icons/refresh.svg">
+        </button>
         <button class="dialog-action" id="dialog-close" title="Закрыть" aria-label="Закрыть">
             <img src="/static/icons/close.svg">
         </button>
     </div>
 
-    <div id="dialog-scroll">
+    <div id="dialog-scroll" tabindex="-1" autofocus>
         <div id="dialog-banner"></div>
         <div id="dialog-identity">
             <div id="dialog-avatar"></div>

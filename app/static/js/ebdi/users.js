@@ -51,7 +51,7 @@ function read_url_state() {
             continue;
         }
         const value = params.get(key);
-        state[key] = BOOL_KEYS.includes(key) ? value === "true" : value;
+        state[key] = BOOL_KEYS.includes(key) ? value == "true" : value;
     }
     console.info("restored state from url", location.search);
 }
@@ -59,7 +59,7 @@ function read_url_state() {
 function write_url_state() {
     const params = new URLSearchParams();
     for (const key of URL_KEYS) {
-        if (state[key] !== "" && state[key] !== DEFAULT_STATE[key]) {
+        if (state[key] != "" && state[key] != DEFAULT_STATE[key]) {
             params.set(key, state[key]);
         }
     }
@@ -69,7 +69,7 @@ function write_url_state() {
 
 function update_sort_headers() {
     for (const cell of document.querySelectorAll(".row-sortable")) {
-        const active = cell.dataset.order === state.order;
+        const active = cell.dataset.order == state.order;
         cell.classList.toggle("sort-active", active);
         const arrow = cell.querySelector(".sort-arrow");
         arrow.src = active ? "/static/icons/arrow.svg" : "";
@@ -107,7 +107,7 @@ function build_params(extra = {}) {
         ...extra,
     });
     for (const key of LIST_FILTERS) {
-        if (state[key] !== "") {
+        if (state[key] != "") {
             params.set(key, state[key]);
         }
     }
@@ -153,7 +153,7 @@ async function fetch_users(offset) {
     const params = build_params({ offset: offset });
     try {
         const res = await fetch("/api/ebdi/users?" + params);
-        if (res.status === 429) {
+        if (res.status == 429) {
             state.cooldown_until = Date.now() + 10000;
             show_error(offset, "Слишком много запросов, подождите немного");
             return null;
@@ -235,7 +235,41 @@ function render_user(user) {
             day: "numeric",
         })
         .replace(" г.", "");
+
+    apply_style(node, user?.bio);
     return node;
+}
+
+const BORDERS = new Set([
+    "heavy",
+    "rainbow",
+    "underline",
+    "wave",
+    "shimmer",
+    "corners",
+    "ticket",
+    "glow",
+    "comet",
+    "dashmove",
+    "holo",
+    "glitch",
+    "crt",
+    "ember",
+    "pixel",
+    "spot",
+]);
+const ARTS = new Set(["pswet", "nowkie", "67", "itd"]);
+
+const STYLE_RE = /ebdi:(border|art):([a-z0-9-]{1,16})/gi;
+const STYLE_STRIP_RE = /\s*ebdi:(?:border|art):[a-z0-9-]{1,16}/gi;
+
+function apply_style(node, bio) {
+    if (!bio) return;
+    for (const [, slot, raw] of bio.matchAll(STYLE_RE)) {
+        const value = raw.toLowerCase();
+        if (slot == "border" && BORDERS.has(value)) node.dataset.border = value;
+        if (slot == "art" && ARTS.has(value)) node.dataset.art = value;
+    }
 }
 
 function update_gaps() {
@@ -309,7 +343,7 @@ async function load_batch(offset) {
     const users = await fetch_users(offset);
     show_loader(false);
     state.loading = false;
-    if (users === null) {
+    if (users == null) {
         return;
     }
     const is_last = !state.loaded_offsets.size || offset > max_loaded_offset();
@@ -354,7 +388,7 @@ function can_load() {
     return (
         !state.loading &&
         !get_el("user-dialog").open &&
-        state.failed_offset === null &&
+        state.failed_offset == null &&
         state.loaded_offsets.size > 0 &&
         Date.now() >= state.cooldown_until
     );
@@ -383,7 +417,7 @@ function init_infinite_scroll() {
         if (!entries.some((entry) => entry.isIntersecting)) {
             return;
         }
-        if (!can_load() || min_loaded_offset() === 0) {
+        if (!can_load() || min_loaded_offset() == 0) {
             return;
         }
         await load_batch(min_loaded_offset() - PAGE_SIZE);
@@ -458,7 +492,7 @@ function on_search_input(event) {
         hide_candidates();
         return;
     }
-    if (query === last_query) {
+    if (query == last_query) {
         return;
     }
     search_timer = setTimeout(() => {
@@ -476,7 +510,7 @@ function page_offset(place) {
 }
 
 function has_active_filters() {
-    return LIST_FILTERS.some((key) => state[key] !== DEFAULT_STATE[key]);
+    return LIST_FILTERS.some((key) => state[key] != DEFAULT_STATE[key]);
 }
 
 function clear_filters() {
@@ -499,7 +533,7 @@ async function jump_to_user(user) {
     if (needs_reset) {
         clear_filters();
     }
-    if (user.rank === null && !state.show_deleted) {
+    if (user.rank == null && !state.show_deleted) {
         state.show_deleted = true;
         get_el("deleted-checkbox").checked = true;
         write_url_state();
@@ -523,6 +557,7 @@ async function jump_to_user(user) {
     const node = find_user_node(user.user_id);
     if (!node) {
         console.warn(`user ${user.user_id} not found in loaded batches`);
+        alert("Ошибка: пользователь не найден");
         return;
     }
     node.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -535,7 +570,7 @@ function format_number(value) {
 }
 
 function format_date(value) {
-    if (value === null || value === undefined || value === "") {
+    if (value == null || value == undefined || value == "") {
         return null;
     }
     const date = new Date(value);
@@ -558,22 +593,24 @@ function create(tag, class_name, text) {
     if (class_name) {
         node.className = class_name;
     }
-    if (text !== undefined) {
+    if (text != undefined) {
         node.textContent = text;
     }
     return node;
 }
 
 function show_dialog_error(message) {
-    const error = get_el("dialog-error");
-    error.textContent = message;
-    error.hidden = !message;
+    // const error = get_el("dialog-error");
+    // error.textContent = message;
+    // error.hidden = !message;
+    console.error(message);
+    alert(message);
 }
 
 function render_dialog_header(user) {
     const banner = get_el("dialog-banner");
     const has_banner =
-        typeof user.banner === "string" && /^https?:\/\//.test(user.banner);
+        typeof user.banner == "string" && /^https?:\/\//.test(user.banner);
     banner.style.backgroundImage = has_banner
         ? `linear-gradient(to bottom, #1e1c1a00, #1e1c1a88), url("${encodeURI(user.banner)}")`
         : "";
@@ -601,9 +638,15 @@ function render_dialog_header(user) {
     }
     badges.hidden = !badges.children.length;
 
+    const dialog = get_el("user-dialog");
+    delete dialog.dataset.art;
+    delete dialog.dataset.border;
+
     const bio = get_el("dialog-bio");
-    bio.textContent = user.bio ?? "";
-    bio.hidden = !user.bio;
+    bio.textContent = user.bio?.replace(STYLE_STRIP_RE, "").trim() ?? "";
+    bio.hidden = !user.bio?.replace(STYLE_STRIP_RE, "").trim();
+
+    apply_style(dialog, user.bio);
 }
 
 function render_gap(label, amount) {
@@ -714,7 +757,6 @@ async function load_dialog_ranks(user, token) {
             return;
         }
         render_dialog_ranks(json);
-        show_dialog_error("");
     } catch (error) {
         console.warn("ranks request failed", error);
         if (token == dialog_token) {
@@ -753,7 +795,6 @@ function open_user_dialog(user) {
     }
     dialog_token += 1;
     dialog_user = user;
-    show_dialog_error("");
     render_dialog(user);
     const dialog = get_el("user-dialog");
     if (!dialog.open) {
@@ -771,36 +812,63 @@ function close_user_dialog() {
         dialog.close();
     }
 }
+function set_refreshing(on) {
+    const button = get_el("dialog-refresh");
+    button.classList.toggle("load", on);
+    button.disabled = on;
+    get_el("dialog-status").hidden = !on;
+    get_el("user-dialog").classList.toggle("refreshing", on);
+}
+
+function update_row(user) {
+    const node = find_user_node(user.user_id);
+    if (node) {
+        node.replaceWith(render_user(user));
+    }
+}
 
 async function refresh_dialog_user() {
-    const button = get_el("dialog-refresh");
-    button.classList.add("load");
-    button.disabled = true;
     const user = dialog_user;
     const token = dialog_token;
+    if (!user) {
+        return;
+    }
+    set_refreshing(true);
     try {
-        const res = await fetch(`/api/ebdi/users/${user.id}/refresh`, {
-            method: "POST",
-        });
-        if (!res.ok) {
-            show_dialog_error(`Ошибка обновления: ${res.status}`);
+        // const res = await fetch(`/api/ebdi/users/${user.id}/refresh`, {
+        //     method: "POST",
+        // });
+        await new Promise((resolve) => setTimeout(resolve, 5000));
+        if (res.status == 429) {
+            if (token == dialog_token) {
+                show_dialog_error(
+                    "Слишком частые обновления, подождите немного",
+                );
+            }
             return;
         }
-        const json = await res.json();
+        if (!res.ok) {
+            if (token == dialog_token) {
+                show_dialog_error(`Ошибка обновления: ${res.status}`);
+            }
+            return;
+        }
+        // refresh response may lack leaderboard-only fields (rank, position)
+        const fresh = { ...user, ...(await res.json()) };
+        users_by_id.set(fresh.user_id, fresh);
+        update_row(fresh);
+
         if (token != dialog_token) {
             return;
         }
-        users_by_id.set(json.user_id, json);
-        dialog_user = json;
-        show_dialog_error("");
-        render_dialog(json);
-        await load_dialog_ranks(json, token);
+        dialog_user = fresh;
+        render_dialog(fresh);
+        await load_dialog_ranks(fresh, token);
     } catch (error) {
         console.warn("user refresh failed", error);
-        show_dialog_error("Не удалось связаться с сервером");
+        alert("Не удалось обновить данные пользователя");
     } finally {
-        button.classList.remove("load");
-        button.disabled = false;
+        set_refreshing(false);
     }
 }
 
@@ -815,7 +883,7 @@ async function download_dialog_card() {
             return;
         }
         const json = await res.json();
-        const url = typeof json === "string" ? json : json.url;
+        const url = typeof json == "string" ? json : json.url;
         if (!url) {
             show_dialog_error("Сервер не вернул ссылку на карточку");
             return;
@@ -849,7 +917,7 @@ function init_user_dialog() {
         }
     });
     get_el("dialog-close").addEventListener("click", close_user_dialog);
-    // get_el("dialog-refresh").addEventListener("click", refresh_dialog_user);
+    get_el("dialog-refresh").addEventListener("click", refresh_dialog_user);
     // get_el("dialog-download").addEventListener("click", download_dialog_card);
     dialog.addEventListener("click", (event) => {
         if (event.target == dialog) {
