@@ -835,10 +835,9 @@ async function refresh_dialog_user() {
     }
     set_refreshing(true);
     try {
-        // const res = await fetch(`/api/ebdi/users/${user.id}/refresh`, {
-        //     method: "POST",
-        // });
-        await new Promise((resolve) => setTimeout(resolve, 5000));
+        const res = await fetch(`/api/ebdi/users/${user.id}/refresh`, {
+            method: "POST",
+        });
         if (res.status == 429) {
             if (token == dialog_token) {
                 show_dialog_error(

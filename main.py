@@ -8,6 +8,13 @@ from fastapi import FastAPI, Request, Response
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from itd import (
+    HalfRateLimiter,
+    ITDConfig,
+    LimiterConfig,
+    init_client,
+    set_limiter_config
+)
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -35,6 +42,8 @@ templates = Jinja2Templates(directory="app/templates/")
 limiter = Limiter(get_remote_address, default_limits=["2/second"])
 
 set_limiter(limiter)
+set_limiter_config(LimiterConfig(HalfRateLimiter))
+init_client(config=ITDConfig("bot"))
 load_dotenv()
 create_db()
 setup_logging("DEBUG")

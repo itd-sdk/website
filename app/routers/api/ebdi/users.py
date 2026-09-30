@@ -6,6 +6,8 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
+from itd import User as ItdUser
+from itd.exceptions import NotFoundError, TargetUserBannedError
 from pydantic import BaseModel
 from sqlalchemy import and_, desc, func, or_
 
@@ -198,14 +200,34 @@ def api_get_ebdi_user_ranks(request: Request, id: int, db: Session = Depends(get
     )
 
 
-@router.post("/{id}/refresh", status_code=204)
+@router.post("/{id}/refresh")
 @get_limiter().limit("5/minute")
 def api_post_ebdi_users_refresh(
     request: Request, id: int, db: Session = Depends(get_db)
 ):
-    user = db.query(User).where(User.id == id).first()
-    if not user:
+    db_user = db.query(User).where(User.id == id).first()
+    if not db_user:
         return JSONResponse({"detail": "user not found"}, 404)
+
+    try:
+        user = ItdUser(db_user.user_id)
+        for i in UserBody.model_fields:
+            if i in ("followers", "following", "created_at"):
+                continue
+            if i == "last_seen" and user.last_seen:
+                db_user.last_seen = user.last_seen.unit.value
+            elif i == "user_id":
+                db_user.user_id = user.id
+            else:
+                setattr(db_user, i, getattr(user, i))
+    except (NotFoundError, TargetUserBannedError):
+        db_user.exists = False
+    else:
+        db_user.exists = True
+    finally:
+        db_user.updated_at = datetime.now()
+        db.commit()
+    return UserResponse.model_validate(db_user, from_attributes=True)
 
 
 @router.get("/search")

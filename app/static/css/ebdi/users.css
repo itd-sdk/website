@@ -892,14 +892,6 @@
     transition: opacity 0.2s;
 }
 
-#user-dialog.refreshing #dialog-scroll {
-    opacity: 0.6;
-}
-
-.dialog-action.load img {
-    animation: loader-spin 0.8s linear infinite;
-}
-
 @media (max-width: 1000px) {
     #user-dialog {
         width: 100vw;
