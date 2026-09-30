@@ -212,7 +212,7 @@ def api_post_ebdi_users_refresh(
     try:
         user = ItdUser(db_user.user_id)
         for i in UserBody.model_fields:
-            if i in ("followers", "following", "created_at"):
+            if i in ("followers", "following", "created_at", "avatar"):
                 continue
             if i == "last_seen" and user.last_seen:
                 db_user.last_seen = user.last_seen.unit.value
