@@ -32,3 +32,4 @@ class User(Base):
     bio: Mapped[str | None]
     banner: Mapped[str | None]
     last_seen: Mapped[str | None]
+    last_post_id: Mapped[UUID | None] = mapped_column(nullable=True)

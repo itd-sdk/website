@@ -12,12 +12,16 @@ from starlette.websockets import WebSocketDisconnect
 from websockets.exceptions import ConnectionClosedError
 
 from app.logger import get_logger
-from app.schemas import App, User
+from app.schemas import App, Comment, Post, User
 from app.services.db import Session, get_db
 from app.services.settings import get_settings
 
 router = APIRouter(prefix="/websocket")
 l = get_logger("ebdi.websocket")
+
+POSTS_EVERY = 2  # every Nth task without user updates scrapes posts, others discover users
+POSTS_PER_TASK = 3  # users per posts task
+idle_counter = 0
 
 
 @dataclass
@@ -45,6 +49,28 @@ def remove_expired_tasks():
     for t in expired:
         l.warning("expire task for %s", t.app.name)
         tasks.remove(t)
+
+
+def upsert_comment(
+    db: Session, post_id: UUID, comment: "CommentBody", parent_id: UUID | None
+) -> None:
+    db_comment = (
+        db.query(Comment).where(Comment.comment_id == comment.comment_id).first()
+    )
+    if db_comment is None:
+        db_comment = Comment(comment_id=comment.comment_id)
+        db.add(db_comment)
+    db_comment.post_id = post_id
+    db_comment.parent_comment_id = parent_id
+    db_comment.author_id = comment.author_id
+    db_comment.reply_to_id = comment.reply_to_id
+    db_comment.created_at = comment.created_at
+    db_comment.content = comment.content
+    db_comment.attachments = comment.attachments
+    db_comment.likes_count = comment.likes_count
+    db_comment.replies_count = comment.replies_count
+    db_comment.exists = True
+    db_comment.updated_at = datetime.now()
 
 
 ALPHABET = ascii_lowercase + digits + "абвгдеёжзийклмнопрстуфхцчшщъыьэюя"
@@ -85,11 +111,46 @@ class UserBody(BaseModel):
         return value.replace("\ufe0e", "").replace("\ufe0f", "")
 
 
+class CommentBody(BaseModel):
+    comment_id: UUID
+    content: str = ""
+    created_at: datetime | None = None
+    author_id: UUID
+    reply_to_id: UUID | None = None
+    likes_count: int = 0
+    replies_count: int = 0
+    attachments: list = []
+    replies: list["CommentBody"] = []
+
+
+CommentBody.model_rebuild()
+
+
+class PostBody(BaseModel):
+    post_id: UUID
+    author_id: UUID
+    created_at: datetime | None = None
+    edited_at: datetime | None = None
+    content: str = ""
+    spans: list = []
+    attachments: list = []
+    poll: dict | None = None
+    likes_count: int = 0
+    comments_count: int = 0
+    reposts_count: int = 0
+    views_count: int = 0
+    is_pinned: bool = False
+    original_post_id: UUID | None = None
+    wall_recipient_id: UUID | None = None
+    comments: list[CommentBody] = []
+
+
 class WSRequestType(Enum):
     task = "task"
     update = "update"
     create = "create"
     known = "known"
+    posts = "posts"
 
 
 class WSTargetType(Enum):
@@ -105,6 +166,7 @@ class WSRequest(BaseModel):
     update_followers: bool | None = None
     update_following: bool | None = None
     target_ids: list[UUID] | None = None
+    posts: list[PostBody] | None = None
 
 
 def refresh_interval():
@@ -195,11 +257,26 @@ async def api_websocket_ebdi(
                 if update_query:
                     task = Task(app, update_query, type="update")
                 else:
-                    settings = get_settings(db)
-                    prefix = settings.search_cursor
-                    settings.search_cursor = increment_prefix(prefix)
-                    db.commit()
-                    task = Task(app, type="create", prefix=prefix)
+                    global idle_counter
+                    idle_counter += 1
+                    posts_query = None
+                    if idle_counter % POSTS_EVERY == 0:
+                        posts_query = (
+                            db.query(User)
+                            .where(User.posts_count > 0)
+                            .where(User.id.not_in(get_targets()))
+                            .order_by(desc(User.posts_count))
+                            .limit(POSTS_PER_TASK)
+                            .all()
+                        )
+                    if posts_query:
+                        task = Task(app, posts_query, type="posts")
+                    else:
+                        settings = get_settings(db)
+                        prefix = settings.search_cursor
+                        settings.search_cursor = increment_prefix(prefix)
+                        db.commit()
+                        task = Task(app, type="create", prefix=prefix)
 
                 l.debug("(%s) new task", app.name)
                 # if not task.targets:
@@ -219,7 +296,11 @@ async def api_websocket_ebdi(
                             {
                                 "id": str(target.user_id),
                                 "followers_count": target.followers_count,
-                                "following_count": target.following_count
+                                "following_count": target.following_count,
+                                "posts_count": target.posts_count,
+                                "last_post_id": str(target.last_post_id)
+                                if target.last_post_id
+                                else None
                             }
                             for target in task.targets or []
                         ]
@@ -309,6 +390,72 @@ async def api_websocket_ebdi(
                 #     await websocket.send_json(
                 #         {"type": "error", "detail": "already exists"}
                 #     )
+
+            elif request.type == WSRequestType.posts:
+                if task is None or task.type != "posts":
+                    await websocket.send_json({"type": "error", "detail": "no task"})
+                    continue
+
+                assert request.target_id
+                user = next(
+                    (
+                        user
+                        for user in task.targets or []
+                        if user.user_id == request.target_id
+                    ),
+                    None
+                )
+                if user is None:
+                    l.error("(%s) user not in task targets", app.name)
+                    await websocket.send_json(
+                        {"type": "error", "detail": "user not in task targets"}
+                    )
+                    continue
+
+                for post in request.posts or []:
+                    db_post = (
+                        db.query(Post).where(Post.post_id == post.post_id).first()
+                    )
+                    if db_post is None:
+                        db_post = Post(post_id=post.post_id)
+                        db.add(db_post)
+                    db_post.author_id = post.author_id
+                    db_post.created_at = post.created_at
+                    db_post.edited_at = post.edited_at
+                    db_post.content = post.content
+                    db_post.spans = post.spans
+                    db_post.attachments = post.attachments
+                    db_post.poll = post.poll
+                    db_post.likes_count = post.likes_count
+                    db_post.comments_count = post.comments_count
+                    db_post.reposts_count = post.reposts_count
+                    db_post.views_count = post.views_count
+                    db_post.is_pinned = post.is_pinned
+                    db_post.original_post_id = post.original_post_id
+                    db_post.wall_recipient_id = post.wall_recipient_id
+                    db_post.exists = True
+                    db_post.updated_at = datetime.now()
+
+                    for comment in post.comments:
+                        upsert_comment(
+                            db, db_post.post_id, comment, parent_id=None
+                        )
+                        for reply in comment.replies:
+                            upsert_comment(
+                                db,
+                                db_post.post_id,
+                                reply,
+                                parent_id=comment.comment_id
+                            )
+
+                dated = [p for p in request.posts or [] if p.created_at]
+                if dated:
+                    user.last_post_id = max(dated, key=lambda p: p.created_at).post_id
+                user.updated_at = datetime.now()
+
+                await websocket.send_json({"type": "posts_updated"})
+                app.refreshed += 1
+                db.commit()
 
             elif request.type == WSRequestType.known:
                 if request.target_ids is None:
