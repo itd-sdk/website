@@ -1,9 +1,9 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import Text, func
+from sqlalchemy import ForeignKey, Text
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.services.db import Base
 
@@ -13,21 +13,18 @@ class Comment(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     comment_id: Mapped[UUID] = mapped_column(unique=True)
-    post_id: Mapped[UUID] = mapped_column(index=True)  # posts.post_id
-    parent_comment_id: Mapped[UUID | None] = mapped_column(
-        nullable=True, index=True
-    )  # comments.comment_id, set for replies
-    author_id: Mapped[UUID] = mapped_column(index=True)
-    reply_to_id: Mapped[UUID | None] = mapped_column(
-        nullable=True
-    )  # user being replied to
-    found_at: Mapped[datetime] = mapped_column(server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(
-        server_default=func.now(), onupdate=func.now()
+    post_id: Mapped[UUID] = mapped_column(
+        ForeignKey("posts.post_id", ondelete="CASCADE"), index=True
     )
+    parent_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("comments.comment_id", ondelete="CASCADE"), index=True
+    )  # set for replies
+    author_id: Mapped[UUID] = mapped_column(index=True)
     created_at: Mapped[datetime | None]
     content: Mapped[str] = mapped_column(Text, default="")
     attachments: Mapped[list] = mapped_column(JSONB, default=list)
     likes_count: Mapped[int] = mapped_column(default=0)
-    replies_count: Mapped[int] = mapped_column(default=0)
-    exists: Mapped[bool] = mapped_column(default=True)
+
+    replies: Mapped[list["Comment"]] = relationship(
+        order_by="Comment.created_at", viewonly=True
+    )

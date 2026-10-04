@@ -1,6 +1,7 @@
 from asyncio import wait_for
+from collections.abc import Iterator
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from string import ascii_lowercase, digits
 from uuid import UUID
@@ -8,6 +9,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, WebSocket
 from pydantic import BaseModel, field_validator
 from sqlalchemy import case, desc, func
+from sqlalchemy.dialects.postgresql import insert
 from starlette.websockets import WebSocketDisconnect
 from websockets.exceptions import ConnectionClosedError
 
@@ -20,7 +22,8 @@ router = APIRouter(prefix="/websocket")
 l = get_logger("ebdi.websocket")
 
 POSTS_EVERY = 2  # every Nth task without user updates scrapes posts, others discover users
-POSTS_PER_TASK = 3  # users per posts task
+POSTS_OVERLAP = timedelta(days=30)  # rescrape posts newer than last check minus this
+POSTS_TIMEOUT = 600  # one post with all comments and replies can take a while
 idle_counter = 0
 
 
@@ -51,26 +54,40 @@ def remove_expired_tasks():
         tasks.remove(t)
 
 
-def upsert_comment(
-    db: Session, post_id: UUID, comment: "CommentBody", parent_id: UUID | None
-) -> None:
-    db_comment = (
-        db.query(Comment).where(Comment.comment_id == comment.comment_id).first()
+def find_target(task: Task, target_id: UUID | None) -> User | None:
+    return next(
+        (user for user in task.targets or [] if user.user_id == target_id), None
     )
-    if db_comment is None:
-        db_comment = Comment(comment_id=comment.comment_id)
-        db.add(db_comment)
-    db_comment.post_id = post_id
-    db_comment.parent_comment_id = parent_id
-    db_comment.author_id = comment.author_id
-    db_comment.reply_to_id = comment.reply_to_id
-    db_comment.created_at = comment.created_at
-    db_comment.content = comment.content
-    db_comment.attachments = comment.attachments
-    db_comment.likes_count = comment.likes_count
-    db_comment.replies_count = comment.replies_count
-    db_comment.exists = True
-    db_comment.updated_at = datetime.now()
+
+
+def serialize_target(task: Task, target: User) -> dict:
+    if task.type == "posts":
+        since = None
+        if target.posts_updated_at is not None:
+            # naive local time -> aware utc, client compares it with post dates
+            since = (
+                (target.posts_updated_at - POSTS_OVERLAP)
+                .astimezone(timezone.utc)
+                .isoformat()
+            )
+        return {"id": str(target.user_id), "username": target.username, "since": since}
+    return {
+        "id": str(target.user_id),
+        "followers_count": target.followers_count,
+        "following_count": target.following_count
+    }
+
+
+def upsert(db: Session, model: type[Post] | type[Comment], key: str, rows: list[dict]):
+    # chunks keep a single statement below the postgres bind parameters limit
+    for i in range(0, len(rows), 1000):
+        stmt = insert(model).values(rows[i : i + 1000])
+        db.execute(
+            stmt.on_conflict_do_update(
+                index_elements=[key],
+                set_={c: stmt.excluded[c] for c in rows[0] if c != key}
+            )
+        )
 
 
 ALPHABET = ascii_lowercase + digits + "абвгдеёжзийклмнопрстуфхцчшщъыьэюя"
@@ -113,17 +130,12 @@ class UserBody(BaseModel):
 
 class CommentBody(BaseModel):
     comment_id: UUID
-    content: str = ""
-    created_at: datetime | None = None
     author_id: UUID
-    reply_to_id: UUID | None = None
-    likes_count: int = 0
-    replies_count: int = 0
+    created_at: datetime | None = None
+    content: str = ""
     attachments: list = []
+    likes_count: int = 0
     replies: list["CommentBody"] = []
-
-
-CommentBody.model_rebuild()
 
 
 class PostBody(BaseModel):
@@ -134,15 +146,29 @@ class PostBody(BaseModel):
     content: str = ""
     spans: list = []
     attachments: list = []
-    poll: dict | None = None
     likes_count: int = 0
     comments_count: int = 0
-    reposts_count: int = 0
     views_count: int = 0
-    is_pinned: bool = False
+    poll_question: str | None = None
+    poll_options: list | None = None
+    poll_multiple: bool | None = None
+    dominant: str | None = None
     original_post_id: UUID | None = None
     wall_recipient_id: UUID | None = None
     comments: list[CommentBody] = []
+
+
+def flatten_comments(
+    comments: list[CommentBody], post_id: UUID, parent_id: UUID | None = None
+) -> Iterator[dict]:
+    # parents always go before their replies so the parent_id fk is satisfied
+    for comment in comments:
+        yield {
+            **comment.model_dump(exclude={"replies"}),
+            "post_id": post_id,
+            "parent_id": parent_id
+        }
+        yield from flatten_comments(comment.replies, post_id, comment.comment_id)
 
 
 class WSRequestType(Enum):
@@ -150,7 +176,8 @@ class WSRequestType(Enum):
     update = "update"
     create = "create"
     known = "known"
-    posts = "posts"
+    post = "post"
+    posts_done = "posts_done"
 
 
 class WSTargetType(Enum):
@@ -166,7 +193,7 @@ class WSRequest(BaseModel):
     update_followers: bool | None = None
     update_following: bool | None = None
     target_ids: list[UUID] | None = None
-    posts: list[PostBody] | None = None
+    post: PostBody | None = None
 
 
 def refresh_interval():
@@ -228,8 +255,9 @@ async def api_websocket_ebdi(
     try:
         while True:
             try:
+                timeout = POSTS_TIMEOUT if task and task.type == "posts" else 60
                 request = WSRequest.model_validate(
-                    await wait_for(websocket.receive_json(), 60)
+                    await wait_for(websocket.receive_json(), timeout)
                 )
             except TimeoutError:
                 l.error("(%s) timeout", app.name)
@@ -259,18 +287,19 @@ async def api_websocket_ebdi(
                 else:
                     global idle_counter
                     idle_counter += 1
-                    posts_query = None
+                    posts_user = None
                     if idle_counter % POSTS_EVERY == 0:
-                        posts_query = (
+                        posts_user = (
                             db.query(User)
+                            .where(User.exists.is_(True))
                             .where(User.posts_count > 0)
+                            .where(User.last_seen.is_distinct_from("long_ago"))
                             .where(User.id.not_in(get_targets()))
-                            .order_by(desc(User.posts_count))
-                            .limit(POSTS_PER_TASK)
-                            .all()
+                            .order_by(User.posts_updated_at.asc().nulls_first())
+                            .first()
                         )
-                    if posts_query:
-                        task = Task(app, posts_query, type="posts")
+                    if posts_user is not None:
+                        task = Task(app, [posts_user], type="posts")
                     else:
                         settings = get_settings(db)
                         prefix = settings.search_cursor
@@ -293,15 +322,7 @@ async def api_websocket_ebdi(
                         "prefix": task.prefix,
                         "target_type": WSTargetType.user.value,
                         "targets": [
-                            {
-                                "id": str(target.user_id),
-                                "followers_count": target.followers_count,
-                                "following_count": target.following_count,
-                                "posts_count": target.posts_count,
-                                "last_post_id": str(target.last_post_id)
-                                if target.last_post_id
-                                else None
-                            }
+                            serialize_target(task, target)
                             for target in task.targets or []
                         ]
                     }
@@ -391,20 +412,12 @@ async def api_websocket_ebdi(
                 #         {"type": "error", "detail": "already exists"}
                 #     )
 
-            elif request.type == WSRequestType.posts:
+            elif request.type in (WSRequestType.post, WSRequestType.posts_done):
                 if task is None or task.type != "posts":
                     await websocket.send_json({"type": "error", "detail": "no task"})
                     continue
 
-                assert request.target_id
-                user = next(
-                    (
-                        user
-                        for user in task.targets or []
-                        if user.user_id == request.target_id
-                    ),
-                    None
-                )
+                user = find_target(task, request.target_id)
                 if user is None:
                     l.error("(%s) user not in task targets", app.name)
                     await websocket.send_json(
@@ -412,50 +425,35 @@ async def api_websocket_ebdi(
                     )
                     continue
 
-                for post in request.posts or []:
-                    db_post = (
-                        db.query(Post).where(Post.post_id == post.post_id).first()
+                if request.type == WSRequestType.posts_done:
+                    l.debug("(%s) < posts done %s", app.name, user.username)
+                    user.posts_updated_at = datetime.now()
+                    app.refreshed += 1
+                    db.commit()
+                    await websocket.send_json({"type": "posts_updated"})
+                    continue
+
+                post = request.post
+                if post is None:
+                    await websocket.send_json({"type": "error", "detail": "no post"})
+                    continue
+                if user.user_id not in (post.author_id, post.wall_recipient_id):
+                    l.error("(%s) post not from target user", app.name)
+                    await websocket.send_json(
+                        {"type": "error", "detail": "post not from target user"}
                     )
-                    if db_post is None:
-                        db_post = Post(post_id=post.post_id)
-                        db.add(db_post)
-                    db_post.author_id = post.author_id
-                    db_post.created_at = post.created_at
-                    db_post.edited_at = post.edited_at
-                    db_post.content = post.content
-                    db_post.spans = post.spans
-                    db_post.attachments = post.attachments
-                    db_post.poll = post.poll
-                    db_post.likes_count = post.likes_count
-                    db_post.comments_count = post.comments_count
-                    db_post.reposts_count = post.reposts_count
-                    db_post.views_count = post.views_count
-                    db_post.is_pinned = post.is_pinned
-                    db_post.original_post_id = post.original_post_id
-                    db_post.wall_recipient_id = post.wall_recipient_id
-                    db_post.exists = True
-                    db_post.updated_at = datetime.now()
+                    continue
 
-                    for comment in post.comments:
-                        upsert_comment(
-                            db, db_post.post_id, comment, parent_id=None
-                        )
-                        for reply in comment.replies:
-                            upsert_comment(
-                                db,
-                                db_post.post_id,
-                                reply,
-                                parent_id=comment.comment_id
-                            )
-
-                dated = [p for p in request.posts or [] if p.created_at]
-                if dated:
-                    user.last_post_id = max(dated, key=lambda p: p.created_at).post_id
-                user.updated_at = datetime.now()
-
-                await websocket.send_json({"type": "posts_updated"})
-                app.refreshed += 1
+                l.debug("(%s) < post %s", app.name, post.post_id)
+                upsert(db, Post, "post_id", [post.model_dump(exclude={"comments"})])
+                # same comment can come twice (pagination shifts), one insert
+                # with duplicate keys fails, so keep the first occurrence
+                comments: dict[UUID, dict] = {}
+                for row in flatten_comments(post.comments, post.post_id):
+                    comments.setdefault(row["comment_id"], row)
+                upsert(db, Comment, "comment_id", list(comments.values()))
                 db.commit()
+                await websocket.send_json({"type": "post_saved"})
 
             elif request.type == WSRequestType.known:
                 if request.target_ids is None:
