@@ -84,11 +84,6 @@ class CommentBody(BaseModel):
     replies: list["CommentBody"] = []
 
 
-class PollOption(BaseModel):
-    text: str
-    votes: int = 0
-
-
 class PostBody(BaseModel):
     post_id: UUID
     author_id: UUID
@@ -101,7 +96,7 @@ class PostBody(BaseModel):
     comments_count: int = 0
     views_count: int = 0
     poll_question: str | None = None
-    poll_options: list[PollOption] | None = None
+    poll_options: list[str] | None = None
     poll_multiple: bool | None = None
     dominant: str | None = None
     original_post_id: UUID | None = None
@@ -111,8 +106,6 @@ class PostBody(BaseModel):
 
 class UpdateTarget(BaseModel):
     id: UUID
-    followers_count: int
-    following_count: int
 
 
 class PostsTarget(BaseModel):
@@ -132,10 +125,6 @@ class UpdateRequest(BaseModel):
     type: Literal[ClientMessageType.update] = ClientMessageType.update
     target_id: UUID
     target: UserBody | None  # None if the user does not exist anymore
-    update_followers: bool = False
-    update_following: bool = False
-    followers: list[UUID] = []  # not stored by the server yet
-    following: list[UUID] = []
 
 
 class CreateRequest(BaseModel):

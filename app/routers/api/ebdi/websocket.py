@@ -199,12 +199,7 @@ def task_response(task: Task) -> BaseModel:
         case TaskType.update:
             return UpdateTaskResponse(
                 targets=[
-                    UpdateTarget(
-                        id=target.user_id,
-                        followers_count=target.followers_count,
-                        following_count=target.following_count
-                    )
-                    for target in task.targets
+                    UpdateTarget(id=target.user_id) for target in task.targets
                 ]
             )
         case TaskType.create:
@@ -290,7 +285,7 @@ async def handle_create(conn: Connection, request: CreateRequest):
         db.add(
             User(
                 **user.model_dump(),
-                followers=[],
+                followers=[],  # followers are not scraped for now
                 following=[],
                 exists=True,
                 updated_at=datetime.now()

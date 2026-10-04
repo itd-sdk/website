@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-from sqlalchemy import Text
+from sqlalchemy import ARRAY, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -27,7 +27,7 @@ class Post(Base):
     comments_count: Mapped[int] = mapped_column(default=0)
     views_count: Mapped[int] = mapped_column(default=0)
     poll_question: Mapped[str | None] = mapped_column(Text)
-    poll_options: Mapped[list | None] = mapped_column(JSONB)
+    poll_options: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
     poll_multiple: Mapped[bool | None]
     dominant: Mapped[str | None]  # dominant emoji
     original_post_id: Mapped[UUID | None] = mapped_column(

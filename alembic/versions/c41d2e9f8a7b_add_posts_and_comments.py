@@ -38,7 +38,7 @@ def upgrade() -> None:
         sa.Column("comments_count", sa.Integer(), nullable=False),
         sa.Column("views_count", sa.Integer(), nullable=False),
         sa.Column("poll_question", sa.Text(), nullable=True),
-        sa.Column("poll_options", postgresql.JSONB(), nullable=True),
+        sa.Column("poll_options", postgresql.ARRAY(sa.Text()), nullable=True),
         sa.Column("poll_multiple", sa.Boolean(), nullable=True),
         sa.Column("dominant", sa.String(), nullable=True),
         sa.Column("original_post_id", postgresql.UUID(as_uuid=True), nullable=True),
