@@ -70,10 +70,10 @@
     mask-composite: exclude;
 }
 
-.border-heavy {
+[data-border="heavy"] {
     border: 4px #ed6a2d solid;
 }
-.border-rainbow {
+[data-border="rainbow"] {
     border-width: 3px !important;
     border-style: solid !important;
     border-image-source: linear-gradient(
@@ -87,7 +87,7 @@
     ) !important;
     border-image-slice: 1 !important;
 }
-.border-underline {
+[data-border="underline"] {
     border-bottom: solid 8px #ff854d;
     padding: 8px 16px 4px 16px;
 }
@@ -101,57 +101,49 @@
     position: absolute;
     background-size: 100% 100%;
 }*/
-.row.border-wave {
+.row[data-border="wave"] {
     padding: 18px 16px;
     margin-bottom: -9px;
     margin-top: -9px;
 }
-.border-wave {
+[data-border="wave"] {
     /* https://css-tricks.com/how-to-create-wavy-shapes-patterns-in-css/ */
-    --size: 10px;
-    --m: 2;
-    --p: calc(var(--m) * var(--size));
-    --R: calc(var(--size) * sqrt(var(--m) * var(--m) + 1));
     mask:
       /* Gradient 1 */
         radial-gradient(
-                var(--R) at left 50% bottom calc(var(--size) + var(--p)),
+                calc(10px * sqrt(5)) at left 50% bottom calc(10px + 20px),
                 #000 99%,
                 #0000 101%
             )
-            left calc(50% - 2 * var(--size)) bottom 0 / calc(4 * var(--size))
-            51% repeat-x,
+            left calc(50% - 2 * 10px) bottom 0 / calc(4 * 10px) 51% repeat-x,
         /* Gradient 2 */
         radial-gradient(
-                var(--R) at left 50% bottom calc(-1 * var(--p)),
+                calc(10px * sqrt(5)) at left 50% bottom calc(-1 * 20px),
                 #0000 99%,
                 #000 101%
             )
-            left 50% bottom var(--size) / calc(4 * var(--size))
-            calc(51% - var(--size)) repeat-x,
+            left 50% bottom 10px / calc(4 * 10px) calc(51% - 10px) repeat-x,
         /* Gradient 3 */
         radial-gradient(
-                var(--R) at left 50% top calc(var(--size) + var(--p)),
+                calc(10px * sqrt(5)) at left 50% top calc(10px + 20px),
                 #000 99%,
                 #0000 101%
             )
-            left calc(50% - 2 * var(--size)) top 0 / calc(4 * var(--size)) 51%
-            repeat-x,
+            left calc(50% - 2 * 10px) top 0 / calc(4 * 10px) 51% repeat-x,
         /* Gradient 4 */
         radial-gradient(
-                var(--R) at left 50% top calc(-1 * var(--p)),
+                calc(10px * sqrt(5)) at left 50% top calc(-1 * 20px),
                 #0000 99%,
                 #000 101%
             )
-            left 50% top var(--size) / calc(4 * var(--size))
-            calc(51% - var(--size)) repeat-x;
+            left 50% top 10px / calc(4 * 10px) calc(51% - 10px) repeat-x;
 }
-.border-hue {
+/*[data-filter="hue"] {
     filter: hue-rotate(67deg);
 }
-.border-blind {
+[data-filter="blind"] {
     filter: brightness(5.67);
-}
+}*/
 [data-art="itd"] {
     --accent: #fff;
 
