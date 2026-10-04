@@ -79,7 +79,7 @@ class CommentBody(BaseModel):
     reply_to_id: UUID | None = None  # user being replied to
     created_at: datetime | None = None
     content: str = ""
-    attachments: list[dict] = []
+    attachments: list[str] = []
     likes_count: int = 0
     replies: list["CommentBody"] = []
 
@@ -91,7 +91,7 @@ class PostBody(BaseModel):
     edited_at: datetime | None = None
     content: str = ""
     spans: list[dict] = []
-    attachments: list[dict] = []
+    attachments: list[str] = []
     likes_count: int = 0
     comments_count: int = 0
     views_count: int = 0

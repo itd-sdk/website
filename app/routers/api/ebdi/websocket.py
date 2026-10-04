@@ -2,6 +2,7 @@ from asyncio import wait_for
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
+from random import randint
 from string import ascii_lowercase, digits
 from uuid import UUID
 
@@ -44,10 +45,10 @@ from app.services.settings import get_settings
 router = APIRouter(prefix="/websocket")
 l = get_logger("ebdi.websocket")
 
-POSTS_EVERY = 2  # every Nth task without user updates scrapes posts, others discover users
 POSTS_OVERLAP = timedelta(days=30)  # rescrape posts newer than last check minus this
-POSTS_TIMEOUT = 600  # one post with all comments and replies can take a while
-idle_counter = 0
+POSTS = True
+UPDATE = False
+CREATE = False
 
 
 @dataclass
@@ -155,27 +156,25 @@ def refresh_interval():
     )
 
 
-def new_task(db: Session, app: App) -> Task:
-    global idle_counter
+def new_task(db: Session, app: App) -> Task | None:
+    if UPDATE:
+        priority = (
+            func.extract("epoch", func.now() - User.updated_at) / refresh_interval()
+        )
+        update_query = (
+            db.query(User)
+            .where(priority >= 0.8)
+            .where(User.id.not_in(get_targets()))
+            .where(User.followers_count >= 1)
+            .order_by(desc(priority))
+            .limit(20)
+            .all()
+        )
+        if update_query:
+            return Task(app, TaskType.update, update_query)
 
-    priority = (
-        func.extract("epoch", func.now() - User.updated_at) / refresh_interval()
-    )
-    update_query = (
-        db.query(User)
-        .where(priority >= 0.8)
-        .where(User.id.not_in(get_targets()))
-        .where(User.followers_count >= 1)
-        .order_by(desc(priority))
-        .limit(20)
-        .all()
-    )
-    if update_query:
-        return Task(app, TaskType.update, update_query)
-
-    idle_counter += 1
-    if idle_counter % POSTS_EVERY == 0:
-        posts_user = (
+    if POSTS and (not CREATE or randint(0, 1) == 0):
+        posts_query = (
             db.query(User)
             .where(User.exists.is_(True))
             .where(User.posts_count > 0)
@@ -184,23 +183,22 @@ def new_task(db: Session, app: App) -> Task:
             .order_by(User.posts_updated_at.asc().nulls_first())
             .first()
         )
-        if posts_user is not None:
-            return Task(app, TaskType.posts, [posts_user])
+        if posts_query is not None:
+            return Task(app, TaskType.posts, [posts_query])
 
-    settings = get_settings(db)
-    prefix = settings.search_cursor
-    settings.search_cursor = increment_prefix(prefix)
-    db.commit()
-    return Task(app, TaskType.create, prefix=prefix)
+    if CREATE:
+        settings = get_settings(db)
+        prefix = settings.search_cursor
+        settings.search_cursor = increment_prefix(prefix)
+        db.commit()
+        return Task(app, TaskType.create, prefix=prefix)
 
 
 def task_response(task: Task) -> BaseModel:
     match task.type:
         case TaskType.update:
             return UpdateTaskResponse(
-                targets=[
-                    UpdateTarget(id=target.user_id) for target in task.targets
-                ]
+                targets=[UpdateTarget(id=target.user_id) for target in task.targets]
             )
         case TaskType.create:
             assert task.prefix is not None
@@ -241,14 +239,22 @@ class Connection:
         return user
 
 
-async def handle_task(conn: Connection, request: TaskRequest):
-    if conn.task is not None and conn.task in tasks:
-        tasks.remove(conn.task)
+async def handle_task(connection: Connection, request: TaskRequest):
+    if connection.task is not None and connection.task in tasks:
+        tasks.remove(connection.task)
 
-    conn.task = new_task(conn.db, conn.app)
-    tasks.append(conn.task)
-    l.debug("(%s) new %s task", conn.app.name, conn.task.type.value)
-    await conn.send(task_response(conn.task))
+    connection.task = new_task(connection.db, connection.app)
+    if connection.task is None:
+        l.warning("no tasks")
+        return
+    tasks.append(connection.task)
+    l.debug(
+        "(%s) new task type=%s targets=%s",
+        connection.app.name,
+        connection.task.type.value,
+        [target.username for target in connection.task.targets]
+    )
+    await connection.send(task_response(connection.task))
 
 
 async def handle_update(conn: Connection, request: UpdateRequest):
@@ -300,9 +306,7 @@ async def handle_create(conn: Connection, request: CreateRequest):
 async def handle_known(conn: Connection, request: KnownRequest):
     known = [
         u.user_id
-        for u in conn.db.query(User.user_id).where(
-            User.user_id.in_(request.target_ids)
-        )
+        for u in conn.db.query(User.user_id).where(User.user_id.in_(request.target_ids))
     ]
     await conn.send(KnownResponse(user_ids=known))
 
@@ -376,7 +380,7 @@ async def api_websocket_ebdi(
         while True:
             timeout = 60
             if conn.task is not None and conn.task.type == TaskType.posts:
-                timeout = POSTS_TIMEOUT
+                timeout = 600
             try:
                 data = await wait_for(websocket.receive_text(), timeout)
             except TimeoutError:
