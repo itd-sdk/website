@@ -58,6 +58,7 @@ def upgrade() -> None:
         sa.Column("post_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("parent_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("author_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("reply_to_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("created_at", sa.DateTime(), nullable=True),
         sa.Column("content", sa.Text(), nullable=False),
         sa.Column("attachments", postgresql.JSONB(), nullable=False),
@@ -73,9 +74,11 @@ def upgrade() -> None:
     op.create_index("ix_comments_post_id", "comments", ["post_id"])
     op.create_index("ix_comments_parent_id", "comments", ["parent_id"])
     op.create_index("ix_comments_author_id", "comments", ["author_id"])
+    op.create_index("ix_comments_reply_to_id", "comments", ["reply_to_id"])
 
 
 def downgrade() -> None:
+    op.drop_index("ix_comments_reply_to_id", table_name="comments")
     op.drop_index("ix_comments_author_id", table_name="comments")
     op.drop_index("ix_comments_parent_id", table_name="comments")
     op.drop_index("ix_comments_post_id", table_name="comments")

@@ -11,7 +11,7 @@ from itd.exceptions import NotFoundError, TargetUserBannedError
 from pydantic import BaseModel
 from sqlalchemy import and_, desc, func, or_
 
-from app.routers.api.ebdi.websocket import UserBody
+from app.routers.api.ebdi.protocol import NewUserBody
 from app.schemas import User
 from app.services.db import Session, get_db
 from app.services.limiter import get_limiter
@@ -19,7 +19,7 @@ from app.services.limiter import get_limiter
 router = APIRouter(prefix="/users")
 
 
-class UserResponse(UserBody):
+class UserResponse(NewUserBody):
     id: int
     user_id: UUID
     found_at: datetime
@@ -211,7 +211,7 @@ def api_post_ebdi_users_refresh(
 
     try:
         user = ItdUser(db_user.user_id)
-        for i in UserBody.model_fields:
+        for i in NewUserBody.model_fields:
             if i in ("followers", "following", "created_at", "avatar"):
                 continue
             if i == "last_seen" and user.last_seen:

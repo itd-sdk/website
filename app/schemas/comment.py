@@ -20,6 +20,9 @@ class Comment(Base):
         ForeignKey("comments.comment_id", ondelete="CASCADE"), index=True
     )  # set for replies
     author_id: Mapped[UUID] = mapped_column(index=True)
+    reply_to_id: Mapped[UUID | None] = mapped_column(
+        index=True
+    )  # user being replied to
     created_at: Mapped[datetime | None]
     content: Mapped[str] = mapped_column(Text, default="")
     attachments: Mapped[list] = mapped_column(JSONB, default=list)
