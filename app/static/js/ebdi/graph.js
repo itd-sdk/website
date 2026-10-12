@@ -14,6 +14,8 @@ const LINK_FAR = [0.22, 0.2, 0.18, 1];
 const DEPTH_FALLOFF = 0.45;
 const MAX_DEPTH = 3;
 const HUB_DEGREE = 50;
+// layout is settled enough below this alpha, further ticks only burn the gpu
+const STOP_ALPHA = 0.1;
 
 function get_el(id) {
     return document.getElementById(id);
@@ -43,8 +45,10 @@ function escape_html(value) {
     );
 }
 
+// the layout already fills most of the space (it can't grow past gpu texture
+// limits), so gaps between users come from smaller points, not stronger repulsion
 function point_size(followers) {
-    return Math.max(4, Math.min(16, 4 + Math.log10(1 + followers) * 2.6));
+    return Math.max(2, Math.min(8, 2 + Math.log10(1 + followers) * 1.3));
 }
 
 (async () => {
@@ -298,9 +302,12 @@ function point_size(followers) {
     }
 
     function on_tick(alpha) {
-        progress.style.width = 20 + Math.round((1 - alpha) * 75) + "%";
-        if (alpha < 0.15) {
-            hide_loading();
+        const done = Math.min(1, (1 - alpha) / (1 - STOP_ALPHA));
+        progress.style.width = 20 + Math.round(done * 75) + "%";
+        if (alpha < STOP_ALPHA) {
+            // freeze the layout, cosmos stops scheduling frames once nothing moves
+            // (fires onSimulationEnd, which hides the loading screen)
+            graph.stop();
         }
     }
 
@@ -342,6 +349,9 @@ function point_size(followers) {
         simulationLinkDistance: 80,
         simulationFriction: 0.9,
         simulationDecay: 1000,
+        // pushes overlapping points apart, with a small gap between their edges
+        simulationCollision: 1,
+        simulationCollisionPadding: 1,
         fitViewOnInit: true,
         fitViewDelay: 1500,
         fitViewPadding: 0.2,
