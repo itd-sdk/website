@@ -112,6 +112,8 @@ class PostsTarget(BaseModel):
     id: UUID
     username: str
     since: datetime | None  # send posts created after it, None means all posts
+    # comments_count of already stored posts, comments are refetched only on change
+    known_comments: dict[UUID, int] = {}
 
 
 # client -> server
@@ -146,6 +148,7 @@ class PostRequest(BaseModel):
 class PostsDoneRequest(BaseModel):
     type: Literal[ClientMessageType.posts_done] = ClientMessageType.posts_done
     target_id: UUID
+    target_exists: bool = True
 
 
 ClientMessage = Annotated[

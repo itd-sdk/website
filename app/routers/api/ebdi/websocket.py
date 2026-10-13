@@ -8,7 +8,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, WebSocket
 from pydantic import BaseModel, ValidationError
-from sqlalchemy import case, desc, func
+from sqlalchemy import case, desc, func, or_
 from sqlalchemy.dialects.postgresql import insert
 from starlette.websockets import WebSocketDisconnect
 from websockets.exceptions import ConnectionClosedError
@@ -46,6 +46,16 @@ router = APIRouter(prefix="/websocket")
 l = get_logger("ebdi.websocket")
 
 POSTS_OVERLAP = timedelta(days=30)  # rescrape posts newer than last check minus this
+# how often posts are rechecked by last activity, long_ago users are not checked at all
+POSTS_INTERVALS = {
+    "just_now": timedelta(days=1),
+    "recently": timedelta(days=1),
+    "minutes": timedelta(days=1),
+    "hours": timedelta(days=1),
+    "this_week": timedelta(days=3),
+    "this_month": timedelta(days=14)
+}
+POSTS_INTERVAL_DEFAULT = timedelta(days=7)
 POSTS = True
 UPDATE = False
 CREATE = False
@@ -174,11 +184,25 @@ def new_task(db: Session, app: App) -> Task | None:
             return Task(app, TaskType.update, update_query)
 
     if POSTS and (not CREATE or randint(0, 1) == 0):
+        interval = case(
+            *[
+                (User.last_seen == value, int(interval.total_seconds()))
+                for value, interval in POSTS_INTERVALS.items()
+            ],
+            else_=int(POSTS_INTERVAL_DEFAULT.total_seconds())
+        )
         posts_query = (
             db.query(User)
             .where(User.exists.is_(True))
             .where(User.posts_count > 0)
             .where(User.last_seen.is_distinct_from("long_ago"))
+            .where(
+                or_(
+                    User.posts_updated_at.is_(None),
+                    func.extract("epoch", func.now() - User.posts_updated_at)
+                    >= interval
+                )
+            )
             .where(User.id.not_in(get_targets()))
             .order_by(User.posts_updated_at.asc().nulls_first())
             .first()
@@ -194,7 +218,7 @@ def new_task(db: Session, app: App) -> Task | None:
         return Task(app, TaskType.create, prefix=prefix)
 
 
-def task_response(task: Task) -> BaseModel:
+def task_response(db: Session, task: Task) -> BaseModel:
     match task.type:
         case TaskType.update:
             return UpdateTaskResponse(
@@ -206,11 +230,29 @@ def task_response(task: Task) -> BaseModel:
         case TaskType.posts:
             user = task.targets[0]
             since = None
+            known_comments = {}
             if user.posts_updated_at is not None:
+                since_local = user.posts_updated_at - POSTS_OVERLAP
+                known_comments = {
+                    post_id: count
+                    for post_id, count in db.query(Post.post_id, Post.comments_count)
+                    .where(
+                        or_(
+                            Post.author_id == user.user_id,
+                            Post.wall_recipient_id == user.user_id
+                        )
+                    )
+                    .where(Post.created_at > since_local)
+                }
                 # naive local time -> aware utc, client compares it with post dates
-                since = (user.posts_updated_at - POSTS_OVERLAP).astimezone(timezone.utc)
+                since = since_local.astimezone(timezone.utc)
             return PostsTaskResponse(
-                target=PostsTarget(id=user.user_id, username=user.username, since=since)
+                target=PostsTarget(
+                    id=user.user_id,
+                    username=user.username,
+                    since=since,
+                    known_comments=known_comments
+                )
             )
 
 
@@ -245,7 +287,8 @@ async def handle_task(connection: Connection, request: TaskRequest):
 
     connection.task = new_task(connection.db, connection.app)
     if connection.task is None:
-        l.warning("no tasks")
+        # the client waits for a reply, it sleeps on error and asks again
+        await connection.error("no tasks")
         return
     tasks.append(connection.task)
     l.debug(
@@ -254,7 +297,7 @@ async def handle_task(connection: Connection, request: TaskRequest):
         connection.task.type.value,
         [target.username for target in connection.task.targets]
     )
-    await connection.send(task_response(connection.task))
+    await connection.send(task_response(connection.db, connection.task))
 
 
 async def handle_update(conn: Connection, request: UpdateRequest):
@@ -340,6 +383,8 @@ async def handle_posts_done(conn: Connection, request: PostsDoneRequest):
 
     l.debug("(%s) < posts done %s", conn.app.name, user.username)
     user.posts_updated_at = datetime.now()
+    if not request.target_exists:
+        user.exists = False
     conn.app.refreshed += 1
     conn.db.commit()
     await conn.send(PostsUpdatedResponse())
