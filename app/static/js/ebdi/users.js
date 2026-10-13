@@ -767,6 +767,136 @@ async function load_dialog_ranks(user, token) {
     }
 }
 
+// chart.js is only needed in the dialog, so it is loaded on the first open
+const CHART_SCRIPTS = [
+    "https://cdn.jsdelivr.net/npm/chart.js@4",
+    "https://cdn.jsdelivr.net/npm/luxon@3",
+    "https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1",
+];
+const HISTORY_SERIES = [
+    { field: "followers", label: "Подписчики", color: "#ed6a2d", hidden: false },
+    { field: "following", label: "Подписки", color: "#fbeadb", hidden: true },
+    { field: "posts", label: "Посты", color: "#88B369", hidden: true },
+];
+let chart_scripts = null;
+let history_chart = null;
+
+function load_script(src) {
+    return new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = src;
+        script.onload = resolve;
+        script.onerror = reject;
+        document.head.append(script);
+    });
+}
+
+function load_chart_scripts() {
+    // the luxon adapter registers itself on Chart, so the order matters
+    chart_scripts ??= CHART_SCRIPTS.reduce(
+        (previous, src) => previous.then(() => load_script(src)),
+        Promise.resolve(),
+    );
+    return chart_scripts;
+}
+
+function render_dialog_history(history) {
+    const notes = [];
+    if (history.deleted_between) {
+        const [after, before] = history.deleted_between;
+        notes.push(
+            after
+                ? `Удален из ИТД примерно между ${format_date(after)} и ${format_date(before)}`
+                : `Удален из ИТД до ${format_date(before)}`,
+        );
+    }
+    const points = history.points;
+    if (points.length < 2) {
+        notes.push("Изменений пока не было");
+    }
+    const note = get_el("dialog-history-note");
+    note.textContent = notes.join(". ");
+    note.hidden = !notes.length;
+
+    const chart_box = get_el("dialog-history-chart");
+    chart_box.hidden = points.length < 2;
+    if (chart_box.hidden) {
+        return;
+    }
+    Chart.defaults.font.family = "Jost";
+    history_chart = new Chart(get_el("dialog-history-canvas"), {
+        type: "line",
+        data: {
+            datasets: HISTORY_SERIES.map((series) => ({
+                label: series.label,
+                data: points.map((point) => ({
+                    x: new Date(point.t).getTime(),
+                    y: point[series.field],
+                })),
+                borderColor: series.color,
+                backgroundColor: series.color,
+                hidden: series.hidden,
+                borderWidth: 2,
+                pointRadius: 2,
+            })),
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            interaction: { mode: "nearest", axis: "x", intersect: false },
+            plugins: {
+                legend: {
+                    labels: { color: "#bbb", usePointStyle: true, pointStyle: "dash" },
+                },
+                tooltip: {
+                    callbacks: { title: (items) => format_date(items[0].parsed.x) },
+                },
+            },
+            scales: {
+                x: {
+                    type: "time",
+                    adapters: { date: { locale: "ru" } },
+                    grid: { color: "#3a3532" },
+                    ticks: { color: "#bbb", maxRotation: 0, autoSkipPadding: 20 },
+                },
+                y: {
+                    grid: { color: "#3a3532" },
+                    ticks: { color: "#bbb", precision: 0 },
+                },
+            },
+        },
+    });
+}
+
+async function load_dialog_history(user, token) {
+    history_chart?.destroy();
+    history_chart = null;
+    get_el("dialog-history-chart").hidden = true;
+    get_el("dialog-history-note").hidden = true;
+    try {
+        const [res] = await Promise.all([
+            fetch(`/api/ebdi/users/${user.id}/history`),
+            load_chart_scripts(),
+        ]);
+        if (!res.ok) {
+            throw new Error(`status ${res.status}`);
+        }
+        const json = await res.json();
+        if (token != dialog_token) {
+            return;
+        }
+        render_dialog_history(json);
+    } catch (error) {
+        console.warn("history request failed", error);
+        if (token == dialog_token) {
+            const note = get_el("dialog-history-note");
+            note.textContent = "Не удалось загрузить историю";
+            note.hidden = false;
+        }
+    }
+}
+
 // body overflow would reset the scroll position, so the page is pinned instead
 function lock_scroll() {
     scroll_lock_offset = window.scrollY;
@@ -803,6 +933,7 @@ function open_user_dialog(user) {
     }
     get_el("dialog-scroll").scrollTop = 0;
     load_dialog_ranks(user, dialog_token);
+    load_dialog_history(user, dialog_token);
 }
 
 function close_user_dialog() {
