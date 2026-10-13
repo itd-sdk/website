@@ -1,3 +1,4 @@
+from collections.abc import Iterator
 from datetime import datetime, timedelta
 from enum import Enum
 from json import dumps
@@ -5,15 +6,15 @@ from time import time
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from itd import User as ItdUser
 from itd.exceptions import NotFoundError, TargetUserBannedError
 from pydantic import BaseModel
-from sqlalchemy import and_, desc, func, or_
+from sqlalchemy import and_, desc, func, or_, text
 
 from app.routers.api.ebdi.websocket import UserBody
 from app.schemas import User
-from app.services.db import Session, get_db
+from app.services.db import Session, get_db, new_session
 from app.services.limiter import get_limiter
 
 router = APIRouter(prefix="/users")
@@ -280,52 +281,69 @@ def api_get_user_count(request: Request, db: Session = Depends(get_db)):
     return {"count": request.app.state.users_count}
 
 
-@router.get("/graph")
-def api_get_users_graph(request: Request, db: Session = Depends(get_db)):
-    users = (
-        db.query(
-            User.id,
-            User.user_id,
-            User.username,
-            User.display_name,
-            User.followers_count,
-            User.following_count,
-            User.verified,
-            User.avatar,
-            User.following,
-            User.followers
+# users linked by follows, each pair once; stored in a temp table because both
+# the nodes and the edges queries need it
+GRAPH_EDGES = """
+    create temp table graph_edges on commit drop as
+    with active as (
+        select id, user_id, following, followers
+        from users
+        where followers_count > 0 or following_count > 0
+    )
+    select distinct least(a.id, b.id) as source, greatest(a.id, b.id) as target
+    from active a
+    cross join lateral unnest(a.following || a.followers) as linked(user_id)
+    join active b on b.user_id = linked.user_id
+    where a.id <> b.id
+"""
+GRAPH_NODES = """
+    select id, username, display_name, followers_count, following_count, verified, avatar
+    from users
+    where id in (select source from graph_edges union select target from graph_edges)
+"""
+GRAPH_BATCH = 5000
+
+
+def stream_graph() -> Iterator[str]:
+    # a server-side cursor keeps only one batch in memory, the full graph of
+    # 450k+ users used to take hundreds of megabytes per request
+    with new_session() as db:
+        db.execute(text(GRAPH_EDGES))
+        yield '{"nodes":['
+        separator = ""
+        nodes = db.execute(
+            text(GRAPH_NODES), execution_options={"yield_per": GRAPH_BATCH}
         )
-        .where(or_(User.followers_count > 0, User.following_count > 0))
-        .all()
-    )
-    user_ids = {str(user.user_id): user.id for user in users}
+        for rows in nodes.partitions(GRAPH_BATCH):
+            yield separator + ",".join(
+                dumps(
+                    {
+                        "id": id,
+                        "username": username,
+                        "display_name": display_name,
+                        "followers": followers,
+                        "following": following,
+                        "verified": verified,
+                        "avatar": avatar
+                    }
+                )
+                for id, username, display_name, followers, following, verified, avatar in rows
+            )
+            separator = ","
+        yield '],"edges":['
+        separator = ""
+        edges = db.execute(
+            text("select source, target from graph_edges"),
+            execution_options={"yield_per": GRAPH_BATCH}
+        )
+        for rows in edges.partitions(GRAPH_BATCH):
+            yield separator + ",".join(
+                f'{{"source":{source},"target":{target}}}' for source, target in rows
+            )
+            separator = ","
+        yield "]}"
 
-    edges: set[tuple[int, int]] = set()
-    for user in users:
-        for target in user.following + user.followers:
-            target_id = user_ids.get(str(target))
-            if target_id is not None and (target_id, user.id) not in edges:
-                edges.add((user.id, target_id))
 
-    linked_ids = {i for edge in edges for i in edge}
-    users = [user for user in users if user.id in linked_ids]
-
-    nodes = [
-        {
-            "id": u.id,
-            "username": u.username,
-            "display_name": u.display_name,
-            "followers": u.followers_count,
-            "following": u.following_count,
-            "verified": u.verified,
-            "avatar": u.avatar
-        }
-        for u in users
-    ]
-
-    return Response(
-        content=dumps(
-            {"nodes": nodes, "edges": [{"source": s, "target": t} for s, t in edges]}
-        ),
-        media_type="application/json"
-    )
+@router.get("/graph")
+def api_get_users_graph():
+    return StreamingResponse(stream_graph(), media_type="application/json")
