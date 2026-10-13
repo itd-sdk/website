@@ -40,6 +40,7 @@ from app.routers.api.ebdi.protocol import (
 )
 from app.schemas import App, Comment, Post, User
 from app.services.db import Session, get_db
+from app.services.history import record_changes, user_state
 from app.services.settings import get_settings
 
 router = APIRouter(prefix="/websocket")
@@ -305,6 +306,7 @@ async def handle_update(conn: Connection, request: UpdateRequest):
     if user is None:
         return
 
+    before = user_state(user)
     if request.target is not None:
         l.debug("(%s) < %s", conn.app.name, request.target.username)
         for i in request.target.model_fields_set:
@@ -315,7 +317,9 @@ async def handle_update(conn: Connection, request: UpdateRequest):
     else:
         l.debug("(%s) < not exists", conn.app.name)
         user.exists = False
-    user.updated_at = datetime.now()
+    now = datetime.now()
+    user.updated_at = now
+    record_changes(conn.db, user, before, now)
 
     conn.app.refreshed += 1
     conn.db.commit()
@@ -331,15 +335,16 @@ async def handle_create(conn: Connection, request: CreateRequest):
     db = conn.db
     if db.query(User).where(User.user_id == user.user_id).first() is None:
         l.debug("(%s) < %s", conn.app.name, user.username)
-        db.add(
-            User(
-                **user.model_dump(),
-                followers=[],  # followers are not scraped for now
-                following=[],
-                exists=True,
-                updated_at=datetime.now()
-            )
+        now = datetime.now()
+        db_user = User(
+            **user.model_dump(),
+            followers=[],  # followers are not scraped for now
+            following=[],
+            exists=True,
+            updated_at=now
         )
+        db.add(db_user)
+        record_changes(db, db_user, None, now)
         conn.app.added += 1
         db.commit()
 

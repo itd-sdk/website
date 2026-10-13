@@ -812,6 +812,21 @@
     color: #7fb069;
 }
 
+#dialog-history {
+    padding: 0 24px;
+}
+
+#dialog-history-chart {
+    position: relative;
+    height: 220px;
+}
+
+#dialog-history-note {
+    margin-top: 8px;
+    font-size: 13px;
+    color: #999;
+}
+
 #dialog-dates {
     padding: 0 24px;
     display: flex;

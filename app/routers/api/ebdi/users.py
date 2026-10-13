@@ -12,8 +12,9 @@ from pydantic import BaseModel
 from sqlalchemy import and_, desc, func, or_
 
 from app.routers.api.ebdi.protocol import NewUserBody
-from app.schemas import User
+from app.schemas import User, UserSnapshot
 from app.services.db import Session, get_db
+from app.services.history import record_changes, user_state
 from app.services.limiter import get_limiter
 
 router = APIRouter(prefix="/users")
@@ -209,6 +210,7 @@ def api_post_ebdi_users_refresh(
     if not db_user:
         return JSONResponse({"detail": "user not found"}, 404)
 
+    before = user_state(db_user)
     try:
         user = ItdUser(db_user.user_id)
         for i in NewUserBody.model_fields:
@@ -225,9 +227,74 @@ def api_post_ebdi_users_refresh(
     else:
         db_user.exists = True
     finally:
-        db_user.updated_at = datetime.now()
+        now = datetime.now()
+        db_user.updated_at = now
+        record_changes(db, db_user, before, now)
         db.commit()
     return UserResponse.model_validate(db_user, from_attributes=True)
+
+
+class HistoryPoint(BaseModel):
+    t: datetime
+    followers: int
+    following: int
+    posts: int
+    exists: bool
+
+
+class HistoryResponse(BaseModel):
+    points: list[HistoryPoint]
+    # last time the user was seen existing and the first time it was gone
+    deleted_between: tuple[datetime | None, datetime] | None = None
+
+
+@router.get("/{id}/history", response_model=HistoryResponse)
+@get_limiter().limit("20/minute")
+def api_get_ebdi_user_history(
+    request: Request, id: int, db: Session = Depends(get_db)
+):
+    user = db.query(User).where(User.id == id).first()
+    if not user:
+        return JSONResponse({"detail": "user not found"}, 404)
+
+    points = [
+        HistoryPoint(
+            t=s.recorded_at,
+            followers=s.followers_count,
+            following=s.following_count,
+            posts=s.posts_count,
+            exists=s.exists
+        )
+        for s in db.query(UserSnapshot)
+        .where(UserSnapshot.user_id == user.user_id)
+        .order_by(UserSnapshot.recorded_at)
+    ]
+    # the current state is the last known point even if it was never snapshotted
+    if not points or points[-1].t < user.updated_at:
+        points.append(
+            HistoryPoint(
+                t=user.updated_at,
+                followers=user.followers_count,
+                following=user.following_count,
+                posts=user.posts_count,
+                exists=user.exists
+            )
+        )
+
+    deleted_between = None
+    if not user.exists:
+        alive = [point.t for point in points if point.exists]
+        last_alive = alive[-1] if alive else None
+        first_gone = next(
+            (
+                point.t
+                for point in points
+                if not point.exists and (last_alive is None or point.t > last_alive)
+            ),
+            user.updated_at
+        )
+        deleted_between = (last_alive, first_gone)
+    return HistoryResponse(points=points, deleted_between=deleted_between)
 
 
 @router.get("/search")
