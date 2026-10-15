@@ -6,7 +6,7 @@ from time import time
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import JSONResponse, Response, StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from itd import User as ItdUser
 from itd.exceptions import NotFoundError, TargetUserBannedError
 from pydantic import BaseModel

@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-from sqlalchemy import ARRAY, Text
+from sqlalchemy import ARRAY, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -20,7 +20,14 @@ class Post(Base):
     author_id: Mapped[UUID] = mapped_column(index=True)
     created_at: Mapped[datetime | None]
     edited_at: Mapped[datetime | None]
+    found_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=func.now(), onupdate=func.now()
+    )
     content: Mapped[str] = mapped_column(Text, default="")
+    red_pens: Mapped[list] = mapped_column(JSONB, default=list)
+    red_pen_authors: Mapped[list[str]] = mapped_column(ARRAY(Text))
+    correctors: Mapped[list] = mapped_column(JSONB, default=list)
     spans: Mapped[list] = mapped_column(JSONB, default=list)
     attachments: Mapped[list] = mapped_column(JSONB, default=list)
     likes_count: Mapped[int] = mapped_column(default=0)

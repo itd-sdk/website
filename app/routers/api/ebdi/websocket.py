@@ -57,7 +57,7 @@ POSTS_INTERVALS = {
 }
 POSTS_INTERVAL_DEFAULT = timedelta(days=7)
 POSTS = True
-UPDATE = False
+UPDATE = True
 CREATE = False
 
 

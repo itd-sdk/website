@@ -102,6 +102,9 @@ class PostBody(BaseModel):
     original_post_id: UUID | None = None
     wall_recipient_id: UUID | None = None
     comments: list[CommentBody] = []
+    red_pens: list[dict] = []
+    red_pen_authors: list[str] = []
+    correctors: list[dict] = []
 
 
 class UpdateTarget(BaseModel):
