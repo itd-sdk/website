@@ -32,3 +32,4 @@ class User(Base):
     bio: Mapped[str | None]
     banner: Mapped[str | None]
     last_seen: Mapped[str | None]
+    posts_updated_at: Mapped[datetime | None] = mapped_column(index=True)
