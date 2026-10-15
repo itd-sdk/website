@@ -12,14 +12,24 @@ SessionLocal = None
 
 def create_db() -> None:
     global SessionLocal
-    engine = create_engine(getenv("DATABASE_URL", ""), pool_size=10, max_overflow=20)
+    engine = create_engine(
+        getenv("DATABASE_URL", ""),
+        pool_size=10,
+        max_overflow=20,
+        # drop connections broken by a postgres restart instead of failing requests
+        pool_pre_ping=True
+    )
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     Base.metadata.create_all(bind=engine)
 
 
-def get_db() -> Generator[Session, None, None]:
+def new_session() -> Session:
     assert SessionLocal, "create db first"
-    db = SessionLocal()
+    return SessionLocal()
+
+
+def get_db() -> Generator[Session, None, None]:
+    db = new_session()
     try:
         yield db
     finally:
