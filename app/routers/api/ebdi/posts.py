@@ -5,6 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel
 from sqlalchemy import desc, func
+from sqlalchemy.orm import aliased
 
 from app.schemas import Post, User
 from app.services.db import Session, get_db
@@ -71,6 +72,9 @@ class PostResponse(BaseModel):
     dominant: str | None
     original_post_id: UUID | None
     wall_recipient_id: UUID | None
+    wall_recipient: PostAuthor | None  # owner of the wall the post was left on
+    exists: bool
+    original: "PostResponse | None" = None  # the reposted post, if it is stored
 
 
 def attachment_urls(attachments: list) -> list[str]:
@@ -80,6 +84,52 @@ def attachment_urls(attachments: list) -> list[str]:
         for a in attachments
         if isinstance(a, str) or (isinstance(a, dict) and a.get("url"))
     ]
+
+
+def to_author(user: User | None) -> PostAuthor | None:
+    return PostAuthor.model_validate(user, from_attributes=True) if user else None
+
+
+def to_response(
+    post: Post,
+    author: User | None,
+    recipient: User | None,
+    original: PostResponse | None = None
+) -> PostResponse:
+    return PostResponse(
+        post_id=post.post_id,
+        author_id=post.author_id,
+        author=to_author(author),
+        created_at=post.created_at,
+        edited_at=post.edited_at,
+        found_at=post.found_at,
+        content=post.content,
+        attachments=attachment_urls(post.attachments or []),
+        likes_count=post.likes_count,
+        comments_count=post.comments_count,
+        reposts_count=post.reposts_count,
+        views_count=post.views_count,
+        poll_question=post.poll_question,
+        poll_options=post.poll_options,
+        poll_multiple=post.poll_multiple,
+        dominant=post.dominant,
+        original_post_id=post.original_post_id,
+        wall_recipient_id=post.wall_recipient_id,
+        wall_recipient=to_author(recipient)
+        if post.wall_recipient_id != post.author_id
+        else None,
+        exists=post.exists,
+        original=original
+    )
+
+
+def posts_with_users(db: Session):
+    recipient = aliased(User)
+    return (
+        db.query(Post, User, recipient)
+        .outerjoin(User, User.user_id == Post.author_id)
+        .outerjoin(recipient, recipient.user_id == Post.wall_recipient_id)
+    )
 
 
 @router.get("", response_model=list[PostResponse])
@@ -92,7 +142,7 @@ def api_get_ebdi_posts(
     limit: int = Query(20, ge=1, le=50),
     db: Session = Depends(get_db)
 ):
-    query = db.query(Post, User).outerjoin(User, User.user_id == Post.author_id)
+    query = posts_with_users(db)
     if period != PostPeriod.all:
         query = query.where(Post.created_at >= datetime.now() - PERIODS[period])
     rows = (
@@ -101,30 +151,19 @@ def api_get_ebdi_posts(
         .limit(limit)
         .all()
     )
+
+    # reposted posts of the whole page in one query
+    original_ids = {post.original_post_id for post, _, _ in rows if post.original_post_id}
+    originals = {}
+    if original_ids:
+        for post, author, recipient in posts_with_users(db).where(
+            Post.post_id.in_(original_ids)
+        ):
+            originals[post.post_id] = to_response(post, author, recipient)
+
     return [
-        PostResponse(
-            post_id=post.post_id,
-            author_id=post.author_id,
-            author=PostAuthor.model_validate(user, from_attributes=True)
-            if user
-            else None,
-            created_at=post.created_at,
-            edited_at=post.edited_at,
-            found_at=post.found_at,
-            content=post.content,
-            attachments=attachment_urls(post.attachments or []),
-            likes_count=post.likes_count,
-            comments_count=post.comments_count,
-            reposts_count=post.reposts_count,
-            views_count=post.views_count,
-            poll_question=post.poll_question,
-            poll_options=post.poll_options,
-            poll_multiple=post.poll_multiple,
-            dominant=post.dominant,
-            original_post_id=post.original_post_id,
-            wall_recipient_id=post.wall_recipient_id
-        )
-        for post, user in rows
+        to_response(post, author, recipient, originals.get(post.original_post_id))
+        for post, author, recipient in rows
     ]
 
 

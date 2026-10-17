@@ -104,6 +104,27 @@
     color: #ddd;
 }
 
+.post-badge a {
+    color: #fbeadb;
+}
+
+.post-badge-deleted {
+    background-color: #6b2a22;
+    color: #fbeadb;
+}
+
+.post-original {
+    background-color: #24221f;
+    border-left: #494037 3px solid;
+}
+
+.post-original-missing {
+    padding: 10px 14px;
+    font-size: 13px;
+    color: #999;
+    font-style: italic;
+}
+
 .post-content {
     white-space: pre-wrap;
     overflow-wrap: anywhere;
@@ -153,17 +174,19 @@
 .post-stats {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px 18px;
-    font-size: 13px;
-    color: #999;
+    gap: 6px 20px;
+    font-size: 14px;
+    color: #bbb;
 }
 
 .post-stat {
     display: flex;
+    align-items: center;
     gap: 6px;
 }
 
-.post-stat b {
-    color: #fbeadb;
-    font-weight: 600;
+.post-stat svg {
+    width: 18px;
+    height: 18px;
+    color: #999;
 }

@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-from sqlalchemy import ARRAY, Text, func
+from sqlalchemy import ARRAY, Text, func, true
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -43,6 +43,7 @@ class Post(Base):
         index=True
     )  # posts.post_id, for reposts
     wall_recipient_id: Mapped[UUID | None] = mapped_column(index=True)
+    exists: Mapped[bool] = mapped_column(default=True, server_default=true())
 
     # top-level comments only, replies are available via Comment.replies
     comments: Mapped[list["Comment"]] = relationship(

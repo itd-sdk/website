@@ -8,7 +8,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, WebSocket
 from pydantic import BaseModel, ValidationError
-from sqlalchemy import case, desc, func, or_
+from sqlalchemy import and_, case, desc, func, or_
 from sqlalchemy.dialects.postgresql import insert
 from starlette.websockets import WebSocketDisconnect
 from websockets.exceptions import ConnectionClosedError
@@ -46,6 +46,7 @@ router = APIRouter(prefix="/websocket")
 l = get_logger("ebdi.websocket")
 
 POSTS_OVERLAP = timedelta(days=30)  # rescrape posts newer than last check minus this
+POSTS_DELETE_MARGIN = timedelta(days=1)
 # how often posts are rechecked by last activity, long_ago users are not checked at all
 POSTS_INTERVALS = {
     "just_now": timedelta(days=1),
@@ -68,6 +69,10 @@ class Task:
     targets: list[User] = field(default_factory=list)
     prefix: str | None = None
     started_at: datetime = field(default_factory=lambda: datetime.now())
+    # posts task: the client sends every post newer than `since`, the stored
+    # ones it did not send are gone from ITD
+    since: datetime | None = None
+    seen_posts: set[UUID] = field(default_factory=set)
 
 
 tasks: list[Task] = []
@@ -244,6 +249,7 @@ def task_response(db: Session, task: Task) -> BaseModel:
                     )
                     .where(Post.created_at > since_local)
                 }
+                task.since = since_local
                 # naive local time -> aware utc, client compares it with post dates
                 since = since_local.astimezone(timezone.utc)
             return PostsTaskResponse(
@@ -365,7 +371,17 @@ async def handle_post(conn: Connection, request: PostRequest):
         return
 
     l.debug("(%s) < post %s", conn.app.name, post.post_id)
-    upsert(conn.db, Post, "post_id", [post.model_dump(exclude={"comments"})])
+    assert conn.task is not None
+    conn.task.seen_posts.add(post.post_id)
+    exclude = {"comments", "original_post"}
+    if post.original_post is not None:
+        upsert(
+            conn.db,
+            Post,
+            "post_id",
+            [{**post.original_post.model_dump(exclude=exclude), "exists": True}]
+        )
+    upsert(conn.db, Post, "post_id", [{**post.model_dump(exclude=exclude), "exists": True}])
     # same comment can come twice (pagination shifts), one insert
     # with duplicate keys fails, so keep the first occurrence
     comments: dict[UUID, dict] = {}
@@ -374,6 +390,29 @@ async def handle_post(conn: Connection, request: PostRequest):
     upsert(conn.db, Comment, "comment_id", list(comments.values()))
     conn.db.commit()
     await conn.send(PostSavedResponse())
+
+
+def mark_deleted_posts(db: Session, task: Task | None, user: User) -> None:
+    assert task is not None
+    # posts shown on the user's profile: own ones and the ones others left on it;
+    # own posts on other walls do not show up there, so they are left alone
+    query = (
+        db.query(Post)
+        .where(Post.exists.is_(True))
+        .where(
+            or_(
+                Post.wall_recipient_id == user.user_id,
+                and_(Post.author_id == user.user_id, Post.wall_recipient_id.is_(None))
+            )
+        )
+        .where(Post.post_id.not_in(task.seen_posts))
+    )
+    if task.since is not None:
+        # margin covers a timezone mismatch between the app and the database
+        query = query.where(Post.created_at > task.since + POSTS_DELETE_MARGIN)
+    deleted = query.update({Post.exists: False}, synchronize_session=False)
+    if deleted:
+        l.debug("(%s) %s posts deleted", user.username, deleted)
 
 
 async def handle_posts_done(conn: Connection, request: PostsDoneRequest):
@@ -385,6 +424,8 @@ async def handle_posts_done(conn: Connection, request: PostsDoneRequest):
     user.posts_updated_at = datetime.now()
     if not request.target_exists:
         user.exists = False
+    else:
+        mark_deleted_posts(conn.db, conn.task, user)
     conn.app.refreshed += 1
     conn.db.commit()
     await conn.send(PostsUpdatedResponse())
