@@ -8,7 +8,18 @@ const ICONS = {
     views: '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 20 20"><path stroke="currentColor" stroke-width="1.5" d="M2 10s2.91-6 8-6 8 6 8 6-2.91 6-8 6-8-6-8-6Z"></path><path stroke="currentColor" stroke-width="1.5" d="M10 12a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"></path></svg>',
 };
 
-let state = { sort: "new", period: "all" };
+// posts and comments tabs share this file, the script tag tells which one it is
+const KIND = document.currentScript.dataset.kind;
+const FEEDS = {
+    posts: { api: "/api/ebdi/posts", error: "постов", render: (item) => render_post(item) },
+    comments: { api: "/api/ebdi/comments", error: "комментариев", render: (item) => render_comment(item) },
+};
+const FEED = FEEDS[KIND];
+const DEFAULT_STATE = { sort: "found", q: "", user: "", deleted: false };
+const SEARCH_DELAY = 300;
+
+let state = { ...DEFAULT_STATE };
+let search_timer = null;
 let offset = 0;
 let has_more = true;
 let loading = false;
@@ -54,16 +65,20 @@ function profile_url(user) {
 
 function read_url_state() {
     const params = new URLSearchParams(location.search);
-    state.sort = params.get("sort") || "new";
-    state.period = params.get("period") || "all";
+    const sort = params.get("sort");
+    // links from older versions may carry sorts that no longer exist
+    const known = [...get_el("sort-select").options].some((o) => o.value == sort);
+    state.sort = known ? sort : DEFAULT_STATE.sort;
+    state.q = params.get("q") || "";
+    state.user = params.get("user") || "";
+    state.deleted = params.get("deleted") == "true";
 }
 
 function write_url_state() {
     const params = new URLSearchParams();
-    if (state.sort != "new") {
-        params.set("sort", state.sort);
-        if (state.period != "all") {
-            params.set("period", state.period);
+    for (const [key, value] of Object.entries(state)) {
+        if (value != DEFAULT_STATE[key]) {
+            params.set(key, value);
         }
     }
     const query = params.toString();
@@ -71,23 +86,26 @@ function write_url_state() {
 }
 
 function apply_state_to_controls() {
-    for (const input of document.querySelectorAll("#filters input")) {
-        input.checked = state[input.name] == input.value;
-    }
-    // "new" is ordered by when the post was found, a period makes no sense there
-    get_el("period-group").hidden = state.sort == "new";
+    get_el("sort-select").value = state.sort;
+    get_el("deleted-checkbox").checked = state.deleted;
+    get_el("user-input").value = state.user;
+    get_el("query-input").value = state.q;
 }
 
-function render_author(post) {
-    const author = post.author;
+function post_url(post_id, author, author_id) {
+    return `${ITD}/@${author ? author.username : author_id}/post/${post_id}`;
+}
+
+// avatar, name, @username and the date linking to the post in ITD
+function render_header(author, author_id, date, url) {
     const header = create("div", "post-header");
-    const avatar = create("div", "row-avatar", author ? author.avatar + "️" : "?");
+    const avatar = create("div", "row-avatar", author ? author.avatar + "\uFE0F" : "?");
     header.append(avatar);
 
     const names = create("div", "post-names");
     const name = create("a", "post-display-name");
     name.target = "_blank";
-    name.href = `${ITD}/@${author ? author.username : post.author_id}`;
+    name.href = `${ITD}/@${author ? author.username : author_id}`;
     name.append(create("span", null, author ? author.display_name : "Неизвестный автор"));
     if (author?.verified) {
         const icon = create("img", "post-verified");
@@ -100,12 +118,21 @@ function render_author(post) {
     }
     header.append(names);
 
-    const date = create("a", "post-date", format_date(post.created_at || post.found_at));
-    date.target = "_blank";
-    date.href = `${ITD}/@${author ? author.username : post.author_id}/post/${post.post_id}`;
-    date.title = "Открыть в ИТД";
-    header.append(date);
+    const link = create("a", "post-date", format_date(date));
+    link.target = "_blank";
+    link.href = url;
+    link.title = "Открыть в ИТД";
+    header.append(link);
     return header;
+}
+
+function render_author(post) {
+    return render_header(
+        post.author,
+        post.author_id,
+        post.created_at || post.found_at,
+        post_url(post.post_id, post.author, post.author_id),
+    );
 }
 
 function render_attachments(urls) {
@@ -145,21 +172,21 @@ function render_poll(post) {
     return poll;
 }
 
-function render_stat(post, key, title) {
+function render_stat(value, icon, title) {
     const item = create("div", "post-stat");
     item.title = title;
     // icons are constants from this file, never data from the api
-    item.innerHTML = ICONS[key];
-    item.append(create("span", null, format_number(post[`${key}_count`])));
+    item.innerHTML = ICONS[icon];
+    item.append(create("span", null, format_number(value)));
     return item;
 }
 
 // likes comments reposts ........ clan views
 function render_stats(post) {
     const stats = create("div", "post-stats");
-    stats.append(render_stat(post, "likes", "Лайки"));
-    stats.append(render_stat(post, "comments", "Комментарии"));
-    stats.append(render_stat(post, "reposts", "Репосты"));
+    stats.append(render_stat(post.likes_count, "likes", "Лайки"));
+    stats.append(render_stat(post.comments_count, "comments", "Комментарии"));
+    stats.append(render_stat(post.reposts_count, "reposts", "Репосты"));
 
     const right = create("div", "post-stats-right");
     if (post.dominant) {
@@ -167,7 +194,7 @@ function render_stats(post) {
         clan.title = "Доминирующий клан";
         right.append(clan);
     }
-    right.append(render_stat(post, "views", "Просмотры"));
+    right.append(render_stat(post.views_count, "views", "Просмотры"));
     stats.append(right);
     return stats;
 }
@@ -229,6 +256,54 @@ function render_post(post, nested = false) {
     return card;
 }
 
+function render_comment(comment) {
+    const card = create("article", "post-card comment-card");
+    if (comment.author && !comment.author.exists) {
+        card.classList.add("post-deleted-author");
+    }
+    card.append(
+        render_header(
+            comment.author,
+            comment.author_id,
+            comment.created_at || comment.found_at,
+            post_url(comment.post_id, comment.post_author, comment.post_author?.user_id),
+        ),
+    );
+
+    const badges = create("div", "post-badges");
+    if (!comment.post_exists) {
+        badges.append(create("span", "post-badge post-badge-deleted", "Пост удалён"));
+    }
+    if (comment.parent_id) {
+        const badge = create("span", "post-badge", "Ответ");
+        if (comment.reply_to) {
+            badge.append(" ");
+            const link = create("a", null, "@" + comment.reply_to.username);
+            link.href = profile_url(comment.reply_to);
+            link.target = "_blank";
+            badge.append(link);
+        }
+        badges.append(badge);
+    }
+    if (badges.children.length) {
+        card.append(badges);
+    }
+    if (comment.content) {
+        card.append(create("div", "post-content", comment.content));
+    }
+    if (comment.attachments.length) {
+        card.append(render_attachments(comment.attachments));
+    }
+
+    const stats = create("div", "post-stats");
+    stats.append(render_stat(comment.likes_count, "likes", "Лайки"));
+    if (!comment.parent_id) {
+        stats.append(render_stat(comment.replies_count, "comments", "Ответы"));
+    }
+    card.append(stats);
+    return card;
+}
+
 function show_error(message) {
     get_el("error-text").textContent = message;
     get_el("list-error").hidden = false;
@@ -243,13 +318,8 @@ async function load_page() {
     get_el("list-loader").hidden = false;
     get_el("list-error").hidden = true;
     try {
-        const params = new URLSearchParams({
-            sort: state.sort,
-            period: state.sort == "new" ? "all" : state.period,
-            offset,
-            limit: PAGE_SIZE,
-        });
-        const res = await fetch("/api/ebdi/posts?" + params);
+        const params = new URLSearchParams({ ...state, offset, limit: PAGE_SIZE });
+        const res = await fetch(`${FEED.api}?${params}`);
         if (token != request_token) {
             return;
         }
@@ -258,24 +328,24 @@ async function load_page() {
             return;
         }
         if (!res.ok) {
-            show_error(`Ошибка получения постов: ${res.status}`);
+            show_error(`Ошибка получения ${FEED.error}: ${res.status}`);
             return;
         }
-        const posts = await res.json();
+        const items = await res.json();
         if (token != request_token) {
             return;
         }
-        const list = get_el("posts");
-        for (const post of posts) {
-            list.append(render_post(post));
+        const list = get_el("feed");
+        for (const item of items) {
+            list.append(FEED.render(item));
         }
-        offset += posts.length;
-        has_more = posts.length == PAGE_SIZE;
+        offset += items.length;
+        has_more = items.length == PAGE_SIZE;
         get_el("list-empty").hidden = offset > 0;
         // the observer only fires on changes, a short page keeps the sentinel visible
         requestAnimationFrame(load_if_visible);
     } catch (error) {
-        console.warn("posts request failed", error);
+        console.warn("feed request failed", error);
         if (token == request_token) {
             show_error("Не удалось связаться с сервером");
         }
@@ -300,14 +370,14 @@ function reload() {
     loading = false;
     offset = 0;
     has_more = true;
-    get_el("posts").replaceChildren();
+    get_el("feed").replaceChildren();
     get_el("list-empty").hidden = true;
     load_page();
 }
 
 async function load_count() {
     try {
-        const res = await fetch("/api/ebdi/posts/count");
+        const res = await fetch(`${FEED.api}/count`);
         if (!res.ok) {
             return;
         }
@@ -315,7 +385,7 @@ async function load_count() {
         get_el("total-objects-value").textContent = format_number(json.count);
         get_el("total-objects").hidden = false;
     } catch (error) {
-        console.warn("posts count request failed", error);
+        console.warn("count request failed", error);
     }
 }
 
@@ -323,12 +393,34 @@ document.addEventListener("DOMContentLoaded", () => {
     read_url_state();
     apply_state_to_controls();
 
-    get_el("filters").addEventListener("change", (event) => {
-        state[event.target.name] = event.target.value;
-        apply_state_to_controls();
+    const apply = () => {
         write_url_state();
         reload();
+    };
+    get_el("sort-select").addEventListener("change", (event) => {
+        state.sort = event.target.value;
+        apply();
     });
+    get_el("deleted-checkbox").addEventListener("change", (event) => {
+        state.deleted = event.target.checked;
+        apply();
+    });
+    // the list follows the search fields as they are typed in
+    for (const [id, key] of [
+        ["user-input", "user"],
+        ["query-input", "q"],
+    ]) {
+        get_el(id).addEventListener("input", (event) => {
+            clearTimeout(search_timer);
+            search_timer = setTimeout(() => {
+                const value = event.target.value.trim();
+                if (value != state[key]) {
+                    state[key] = value;
+                    apply();
+                }
+            }, SEARCH_DELAY);
+        });
+    }
     get_el("retry-button").addEventListener("click", load_page);
 
     new IntersectionObserver(

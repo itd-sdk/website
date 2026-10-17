@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-from sqlalchemy import ARRAY, Text, func, true
+from sqlalchemy import ARRAY, Index, Text, func, true
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -14,6 +14,14 @@ if TYPE_CHECKING:
 
 class Post(Base):
     __tablename__ = "posts"
+    __table_args__ = (
+        Index(
+            "ix_posts_content_trgm",
+            "content",
+            postgresql_using="gin",
+            postgresql_ops={"content": "gin_trgm_ops"}
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     post_id: Mapped[UUID] = mapped_column(unique=True)

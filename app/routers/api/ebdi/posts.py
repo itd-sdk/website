@@ -4,7 +4,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel
-from sqlalchemy import desc, func
+from sqlalchemy import desc, func, or_, select
 from sqlalchemy.orm import aliased
 
 from app.schemas import Post, User
@@ -15,32 +15,38 @@ router = APIRouter(prefix="/posts")
 
 
 class PostSort(Enum):
-    new = "new"  # by the time the post got into the database
+    created = "created"
+    found = "found"  # by the time the post got into the database
     likes = "likes"
-    reposts = "reposts"
     comments = "comments"
+    reposts = "reposts"
     views = "views"
 
 
-class PostPeriod(Enum):
-    all = "all"
-    day = "day"
-    week = "week"
-    month = "month"
-
-
 SORT_COLUMNS = {
-    PostSort.new: Post.found_at,
+    PostSort.created: Post.created_at,
+    PostSort.found: Post.found_at,
     PostSort.likes: Post.likes_count,
-    PostSort.reposts: Post.reposts_count,
     PostSort.comments: Post.comments_count,
+    PostSort.reposts: Post.reposts_count,
     PostSort.views: Post.views_count
 }
-PERIODS = {
-    PostPeriod.day: timedelta(days=1),
-    PostPeriod.week: timedelta(days=7),
-    PostPeriod.month: timedelta(days=30)
-}
+
+
+def ilike_pattern(text: str) -> str:
+    escaped = text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
+
+
+def matching_users(text: str):
+    """user_id of users whose username or display name contains the text"""
+    pattern = ilike_pattern(text.strip().removeprefix("@"))
+    return select(User.user_id).where(
+        or_(
+            User.username.ilike(pattern, escape="\\"),
+            User.display_name.ilike(pattern, escape="\\")
+        )
+    )
 
 
 class PostAuthor(BaseModel):
@@ -136,17 +142,25 @@ def posts_with_users(db: Session):
 @get_limiter().limit("30/minute")
 def api_get_ebdi_posts(
     request: Request,
-    sort: PostSort = PostSort.new,
-    period: PostPeriod = PostPeriod.all,
+    sort: PostSort = PostSort.found,
+    q: str = Query("", max_length=200),  # text in the content
+    user: str = Query("", max_length=100),  # text in the author's name
+    deleted: bool = False,
     offset: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=50),
     db: Session = Depends(get_db)
 ):
     query = posts_with_users(db)
-    if period != PostPeriod.all:
-        query = query.where(Post.created_at >= datetime.now() - PERIODS[period])
+    if not deleted:
+        query = query.where(Post.exists.is_(True))
+    if q.strip():
+        query = query.where(
+            Post.content.ilike(ilike_pattern(q.strip()), escape="\\")
+        )
+    if user.strip():
+        query = query.where(Post.author_id.in_(matching_users(user)))
     rows = (
-        query.order_by(desc(SORT_COLUMNS[sort]), desc(Post.id))
+        query.order_by(desc(SORT_COLUMNS[sort]).nulls_last(), desc(Post.id))
         .offset(offset)
         .limit(limit)
         .all()

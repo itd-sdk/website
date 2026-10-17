@@ -114,8 +114,12 @@ def flatten_comments(
 ) -> Iterator[dict]:
     # parents always go before their replies so the parent_id fk is satisfied
     for comment in comments:
+        replies_count = comment.replies_count
+        if replies_count is None:
+            replies_count = len(comment.replies)
         yield {
             **comment.model_dump(exclude={"replies"}),
+            "replies_count": replies_count,
             "post_id": post_id,
             "parent_id": parent_id
         }

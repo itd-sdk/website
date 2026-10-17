@@ -2,8 +2,8 @@
 
 {% block head %}
 <link rel="stylesheet" href="/static/css/ebdi/style.css">
-<link rel="stylesheet" href="/static/css/ebdi/posts.css">
-<script src="/static/js/ebdi/posts.js"></script>
+<link rel="stylesheet" href="/static/css/ebdi/feed.css">
+<script src="/static/js/ebdi/feed.js" data-kind="posts"></script>
 <meta name="description" content="Единая База Данных ИТД: лента постов, самые популярные посты по лайкам, репостам, комментариям и просмотрам">
 {% endblock %}
 
@@ -26,6 +26,7 @@
         <a href="/ebdi/users" class="tab">Пользователи</a>
         <a href="/ebdi/clans" class="tab">Кланы</a>
         <a href="/ebdi/posts" class="tab tab-active">Посты</a>
+        <a href="/ebdi/comments" class="tab">Комментарии</a>
         <a href="/ebdi/stats" class="tab">Статистика</a>
     </nav>
 
@@ -33,28 +34,28 @@
 
     <div id="total-objects" hidden>Всего в базе данных <span id="total-objects-value">0</span> постов</div>
 
-    <div id="controls-box">
-        <div id="controls">
-            <div id="filters">
-                <div class="filter-group" id="sort-group">
-                    <label><input type="radio" name="sort" value="new" checked>Новые</label>
-                    <label><input type="radio" name="sort" value="likes">Лайки</label>
-                    <label><input type="radio" name="sort" value="reposts">Репосты</label>
-                    <label><input type="radio" name="sort" value="comments">Комментарии</label>
-                    <label><input type="radio" name="sort" value="views">Просмотры</label>
-                </div>
-                <div class="filter-group" id="period-group" hidden>
-                    <label><input type="radio" name="period" value="all" checked>Всё время</label>
-                    <label><input type="radio" name="period" value="month">Месяц</label>
-                    <label><input type="radio" name="period" value="week">Неделя</label>
-                    <label><input type="radio" name="period" value="day">День</label>
-                </div>
-            </div>
+    <div id="feed-controls">
+        <div id="feed-controls-row">
+            <label id="sort-label">Сортировка
+                <select id="sort-select">
+                    <option value="created">Дата создания</option>
+                    <option value="found">Дата добавления в ЕБДИ</option>
+                    <option value="likes">Количество лайков</option>
+                    <option value="comments">Количество комментариев</option>
+                    <option value="reposts">Количество репостов</option>
+                    <option value="views">Количество просмотров</option>
+                </select>
+            </label>
+            <label id="deleted-toggle">
+                <input type="checkbox" id="deleted-checkbox"><span>Показывать удалённые</span>
+            </label>
         </div>
+        <input id="user-input" class="feed-search" type="search" placeholder="Поиск по пользователю" autocomplete="off">
+        <input id="query-input" class="feed-search" type="search" placeholder="Поиск по содержанию" autocomplete="off">
     </div>
 
-    <div id="posts"></div>
-    <div id="list-empty" hidden>Постов пока нет</div>
+    <div id="feed"></div>
+    <div id="list-empty" hidden>Ничего не найдено</div>
     <div id="list-error" hidden>
         <div id="error-text"></div>
         <button id="retry-button">Попробовать снова</button>

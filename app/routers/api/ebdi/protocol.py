@@ -81,6 +81,7 @@ class CommentBody(BaseModel):
     content: str = ""
     attachments: list[str] = []
     likes_count: int = 0
+    replies_count: int | None = None  # None: count the sent replies
     replies: list["CommentBody"] = []
 
 
