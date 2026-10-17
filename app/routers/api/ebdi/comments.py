@@ -4,7 +4,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel
-from sqlalchemy import desc, func
+from sqlalchemy import desc, func, select
 from sqlalchemy.orm import aliased
 
 from app.routers.api.ebdi.posts import (
@@ -109,6 +109,95 @@ def api_get_ebdi_comments(
         query = query.where(Comment.author_id.in_(matching_users(user)))
     rows = (
         query.order_by(desc(SORT_COLUMNS[sort]).nulls_last(), desc(Comment.id))
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+    return [to_response(row) for row in rows]
+
+
+THREAD_BATCH = 100
+REPLIES_PREVIEW = 3
+
+
+class ThreadComment(CommentResponse):
+    replies: list[CommentResponse]  # the first few replies
+    replies_total: int  # stored replies, the rest are loaded on demand
+
+
+def chronological(query):
+    return query.order_by(Comment.created_at.asc().nulls_last(), Comment.id)
+
+
+@router.get("/post/{post_id}", response_model=list[ThreadComment])
+@get_limiter().limit("60/minute")
+def api_get_ebdi_post_comments(
+    request: Request,
+    post_id: UUID,
+    offset: int = Query(0, ge=0),
+    limit: int = Query(THREAD_BATCH, ge=1, le=THREAD_BATCH),
+    db: Session = Depends(get_db)
+):
+    rows = (
+        chronological(
+            comments_with_users(db)
+            .where(Comment.post_id == post_id)
+            .where(Comment.parent_id.is_(None))
+        )
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+    ids = [row[0].comment_id for row in rows]
+
+    # first replies of every comment in one query
+    ranked = (
+        select(
+            Comment.id,
+            func.row_number()
+            .over(
+                partition_by=Comment.parent_id,
+                order_by=(Comment.created_at.asc().nulls_last(), Comment.id)
+            )
+            .label("place"),
+            func.count().over(partition_by=Comment.parent_id).label("total")
+        )
+        .where(Comment.parent_id.in_(ids))
+        .subquery()
+    )
+    previews: dict[UUID, list[CommentResponse]] = {}
+    totals: dict[UUID, int] = {}
+    for *row, total in chronological(
+        comments_with_users(db)
+        .join(ranked, ranked.c.id == Comment.id)
+        .where(ranked.c.place <= REPLIES_PREVIEW)
+        .add_columns(ranked.c.total)
+    ):
+        reply = to_response(row)
+        previews.setdefault(reply.parent_id, []).append(reply)
+        totals[reply.parent_id] = total
+
+    return [
+        ThreadComment(
+            **to_response(row).model_dump(),
+            replies=previews.get(row[0].comment_id, []),
+            replies_total=totals.get(row[0].comment_id, 0)
+        )
+        for row in rows
+    ]
+
+
+@router.get("/{comment_id}/replies", response_model=list[CommentResponse])
+@get_limiter().limit("60/minute")
+def api_get_ebdi_comment_replies(
+    request: Request,
+    comment_id: UUID,
+    offset: int = Query(0, ge=0),
+    limit: int = Query(THREAD_BATCH, ge=1, le=THREAD_BATCH),
+    db: Session = Depends(get_db)
+):
+    rows = (
+        chronological(comments_with_users(db).where(Comment.parent_id == comment_id))
         .offset(offset)
         .limit(limit)
         .all()

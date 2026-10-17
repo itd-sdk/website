@@ -5,6 +5,7 @@ const ICONS = {
     likes: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="none" width="20" height="20"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 4.6a3.7 3.7 0 0 0-5.2-.9C3.2 5 2.4 7.6 3.6 10.2 4.8 12.7 10 17 10 17s5.3-4.3 6.5-6.8c1.2-2.6 0-5.2-1.6-6.5s-4-.8-4.9.9"></path></svg>',
     comments: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 20" width="20" height="20"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.0" d="M10 17a7 7 0 1 0-6.2-3.7L3 17l3.7-.8a7 7 0 0 0 3.3.8"></path></svg>',
     reposts: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 20" width="20" height="20"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.0" d="M4 9V8a3 3 0 0 1 3-3h9m-3 3 3-3-3-3M16 11v1a3 3 0 0 1-3 3H4m3-3-3 3 3 3"></path></svg>',
+    close: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="none" width="16" height="16"><path stroke="currentColor" stroke-linecap="round" stroke-width="2" d="m5 5 10 10M15 5 5 15"></path></svg>',
     views: '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 20 20"><path stroke="currentColor" stroke-width="1.5" d="M2 10s2.91-6 8-6 8 6 8 6-2.91 6-8 6-8-6-8-6Z"></path><path stroke="currentColor" stroke-width="1.5" d="M10 12a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"></path></svg>',
 };
 
@@ -17,6 +18,7 @@ const FEEDS = {
 const FEED = FEEDS[KIND];
 const DEFAULT_STATE = { sort: "found", q: "", user: "", deleted: false };
 const SEARCH_DELAY = 300;
+const THREAD_BATCH = 100;
 
 let state = { ...DEFAULT_STATE };
 let search_timer = null;
@@ -225,8 +227,11 @@ function render_badges(post) {
     return box;
 }
 
-function render_post(post, nested = false) {
+function render_post(post, nested = false, in_dialog = false) {
     const card = create("article", nested ? "post-card post-original" : "post-card");
+    if (!in_dialog) {
+        make_clickable(card, () => open_post_dialog(post));
+    }
     if (post.author && !post.author.exists) {
         card.classList.add("post-deleted-author");
     }
@@ -247,7 +252,7 @@ function render_post(post, nested = false) {
     }
     if (post.original_post_id && !nested) {
         if (post.original) {
-            card.append(render_post(post.original, true));
+            card.append(render_post(post.original, true, in_dialog));
         } else {
             card.append(create("div", "post-original post-original-missing", "Оригинальный пост не сохранён в базе"));
         }
@@ -256,8 +261,115 @@ function render_post(post, nested = false) {
     return card;
 }
 
-function render_comment(comment) {
+// clicks on links, buttons, nested clickable cards or a text selection are not card clicks
+function make_clickable(card, on_click) {
+    card.classList.add("clickable");
+    card.addEventListener("click", (event) => {
+        const target = event.target;
+        if (target.closest("a, button, .comment-replies") || target.closest(".clickable") != card) {
+            return;
+        }
+        if (window.getSelection().toString()) {
+            return;
+        }
+        on_click(event);
+    });
+}
+
+// replies of a comment, loaded by THREAD_BATCH; in the dialog with a button,
+// in the comments list automatically while scrolling
+function render_replies(comment, { preview = [], total = comment.replies_count, auto = false, root = null }) {
+    const box = create("div", "comment-replies");
+    const list = create("div", "comment-replies-list");
+    box.append(list);
+    let loaded = 0;
+    let loading = false;
+
+    const add = (replies) => {
+        for (const reply of replies) {
+            list.append(render_comment(reply, true));
+        }
+        loaded += replies.length;
+    };
+    add(preview);
+
+    const more = create("button", "comment-replies-more");
+    const sentinel = create("div", "sentinel");
+    const loader = create("div", "loader-spinner comment-replies-loader");
+    loader.hidden = true;
+    const update = () => {
+        const left = total - loaded;
+        more.hidden = auto || left <= 0;
+        more.textContent = `Показать ещё ${format_number(Math.min(THREAD_BATCH, left))} ответов (всего ${format_number(total)})`;
+    };
+
+    let observer = null;
+    const load = async () => {
+        if (loading || loaded >= total) {
+            return;
+        }
+        loading = true;
+        more.disabled = true;
+        loader.hidden = false;
+        try {
+            const params = new URLSearchParams({ offset: loaded, limit: THREAD_BATCH });
+            const res = await fetch(`/api/ebdi/comments/${comment.comment_id}/replies?${params}`);
+            if (!res.ok) {
+                throw new Error(`status ${res.status}`);
+            }
+            const replies = await res.json();
+            add(replies);
+            if (replies.length < THREAD_BATCH) {
+                total = loaded;
+            }
+            update();
+        } catch (error) {
+            console.warn("replies request failed", error);
+            more.hidden = false;
+            more.textContent = "Не удалось загрузить ответы, попробовать снова";
+            observer?.disconnect();
+            observer = null;
+        } finally {
+            loading = false;
+            more.disabled = false;
+            loader.hidden = true;
+        }
+        if (observer && loaded < total) {
+            // re-observing reports the current state, the sentinel may still be in view
+            observer.unobserve(sentinel);
+            observer.observe(sentinel);
+        }
+    };
+    more.addEventListener("click", load);
+    box.append(loader, more);
+    update();
+
+    if (auto) {
+        box.append(sentinel);
+        observer = new IntersectionObserver(
+            (entries) => entries.some((entry) => entry.isIntersecting) && load(),
+            { root, rootMargin: "400px" },
+        );
+        observer.observe(sentinel);
+    }
+    return box;
+}
+
+function render_comment(comment, in_thread = false) {
     const card = create("article", "post-card comment-card");
+    // in the main list a comment opens its replies under itself
+    if (!in_thread && !comment.parent_id && comment.replies_count) {
+        let replies = null;
+        make_clickable(card, () => {
+            if (replies) {
+                replies.remove();
+                replies = null;
+            } else {
+                replies = render_replies(comment, { auto: true });
+                card.append(replies);
+            }
+        });
+    }
     if (comment.author && !comment.author.exists) {
         card.classList.add("post-deleted-author");
     }
@@ -271,7 +383,7 @@ function render_comment(comment) {
     );
 
     const badges = create("div", "post-badges");
-    if (!comment.post_exists) {
+    if (!comment.post_exists && !in_thread) {
         badges.append(create("span", "post-badge post-badge-deleted", "Пост удалён"));
     }
     if (comment.parent_id) {
@@ -302,6 +414,113 @@ function render_comment(comment) {
     }
     card.append(stats);
     return card;
+}
+
+let dialog_token = 0;
+let dialog_observer = null;
+
+function close_post_dialog() {
+    get_el("post-dialog")?.close();
+}
+
+function build_post_dialog() {
+    const dialog = create("dialog");
+    dialog.id = "post-dialog";
+    const close = create("button");
+    close.id = "post-dialog-close";
+    close.title = "Закрыть";
+    close.setAttribute("aria-label", "Закрыть");
+    close.innerHTML = ICONS.close;
+    close.addEventListener("click", close_post_dialog);
+    const header = create("div", "post-dialog-header");
+    header.append(close);
+    const scroll = create("div");
+    scroll.id = "post-dialog-scroll";
+    dialog.append(header, scroll);
+    // a click on the backdrop lands on the dialog element itself
+    dialog.addEventListener("click", (event) => {
+        if (event.target == dialog) {
+            close_post_dialog();
+        }
+    });
+    dialog.addEventListener("close", () => {
+        dialog_token += 1;
+        document.body.style.overflow = "";
+    });
+    document.body.append(dialog);
+    return dialog;
+}
+
+function open_post_dialog(post) {
+    const dialog = get_el("post-dialog") || build_post_dialog();
+    const token = ++dialog_token;
+    const scroll = get_el("post-dialog-scroll");
+    scroll.replaceChildren();
+    scroll.append(render_post(post, false, true));
+    scroll.append(create("div", "dialog-section-title", `Комментарии (${format_number(post.comments_count)})`));
+    const list = create("div", "post-dialog-comments");
+    const empty = create("div", "post-dialog-empty", "Комментариев в базе нет");
+    empty.hidden = true;
+    const loader = create("div", "loader-spinner comment-replies-loader");
+    const sentinel = create("div", "sentinel");
+    scroll.append(list, empty, loader, sentinel);
+
+    let offset = 0;
+    let has_more = true;
+    let loading = false;
+    let observer = null;
+    const load = async () => {
+        if (loading || !has_more || token != dialog_token) {
+            return;
+        }
+        loading = true;
+        loader.hidden = false;
+        try {
+            const params = new URLSearchParams({ offset, limit: THREAD_BATCH });
+            const res = await fetch(`/api/ebdi/comments/post/${post.post_id}?${params}`);
+            if (!res.ok) {
+                throw new Error(`status ${res.status}`);
+            }
+            const comments = await res.json();
+            if (token != dialog_token) {
+                return;
+            }
+            for (const comment of comments) {
+                const card = render_comment(comment, true);
+                if (comment.replies_total) {
+                    card.append(render_replies(comment, { preview: comment.replies, total: comment.replies_total }));
+                }
+                list.append(card);
+            }
+            offset += comments.length;
+            has_more = comments.length == THREAD_BATCH;
+            empty.hidden = offset > 0;
+        } catch (error) {
+            console.warn("post comments request failed", error);
+            has_more = false;
+            empty.textContent = "Не удалось загрузить комментарии";
+            empty.hidden = false;
+        } finally {
+            loading = false;
+            loader.hidden = true;
+        }
+        if (has_more && observer) {
+            observer.unobserve(sentinel);
+            observer.observe(sentinel);
+        }
+    };
+    dialog_observer?.disconnect();
+    observer = dialog_observer = new IntersectionObserver(
+        (entries) => entries.some((entry) => entry.isIntersecting) && load(),
+        { root: scroll, rootMargin: "600px" },
+    );
+
+    if (!dialog.open) {
+        document.body.style.overflow = "hidden";
+        dialog.showModal();
+    }
+    scroll.scrollTop = 0;
+    observer.observe(sentinel);
 }
 
 function show_error(message) {
