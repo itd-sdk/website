@@ -5,7 +5,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy import and_, case, desc, extract, func, literal, not_, text
 
-from app.schemas import Post, User
+from app.schemas import Comment, Post, User
 from app.services.db import Session, get_db
 from app.services.limiter import get_limiter
 
@@ -282,13 +282,10 @@ def get_follow_ratio(db: Session) -> list[Bucket]:
     return [Bucket(bucket=value, count=count) for value, count in rows]
 
 
-def get_posts_total(db: Session) -> list[Total]:
+def get_running_total(db: Session, created_at) -> list[Total]:
     rows = (
-        db.query(
-            func.date_trunc("month", Post.created_at).label("month"),
-            func.count(Post.id)
-        )
-        .where(Post.created_at.isnot(None))
+        db.query(func.date_trunc("month", created_at).label("month"), func.count())
+        .where(created_at.isnot(None))
         .group_by("month")
         .order_by("month")
         .all()
@@ -301,21 +298,21 @@ def get_posts_total(db: Session) -> list[Total]:
     return result
 
 
-class PostsPerDay(BaseModel):
+class PerDay(BaseModel):
     date: datetime
     count: int
 
 
-def get_posts_per_day(db: Session) -> list[PostsPerDay]:
-    day = func.date_trunc("day", Post.created_at).label("day")
+def get_per_day(db: Session, created_at) -> list[PerDay]:
+    day = func.date_trunc("day", created_at).label("day")
     rows = (
-        db.query(day, func.count(Post.id))
-        .where(Post.created_at.isnot(None))
+        db.query(day, func.count())
+        .where(created_at.isnot(None))
         .group_by("day")
         .order_by("day")
         .all()
     )
-    return [PostsPerDay(date=value, count=count) for value, count in rows]
+    return [PerDay(date=value, count=count) for value, count in rows]
 
 
 class WordCount(BaseModel):
@@ -374,7 +371,9 @@ class StatsResponse(BaseModel):
     cohorts: list[Cohort]
     follow_ratio: list[Bucket]
     posts_total: list[Total]
-    posts_per_day: list[PostsPerDay]
+    posts_per_day: list[PerDay]
+    comments_total: list[Total]
+    comments_per_day: list[PerDay]
     words_posts: list[WordCount]
     words_comments: list[WordCount]
 
@@ -393,8 +392,10 @@ def api_get_ebdi_stats(request: Request, db: Session = Depends(get_db)):
             last_seen=get_last_seen(db),
             cohorts=get_cohorts(db),
             follow_ratio=get_follow_ratio(db),
-            posts_total=get_posts_total(db),
-            posts_per_day=get_posts_per_day(db),
+            posts_total=get_running_total(db, Post.created_at),
+            posts_per_day=get_per_day(db, Post.created_at),
+            comments_total=get_running_total(db, Comment.created_at),
+            comments_per_day=get_per_day(db, Comment.created_at),
             words_posts=get_top_words(db, "posts"),
             words_comments=get_top_words(db, "comments")
         ).model_dump_json()

@@ -209,7 +209,10 @@ def new_task(db: Session, app: App) -> Task | None:
                 )
             )
             .where(User.id.not_in(get_targets()))
-            .order_by(User.posts_updated_at.asc().nulls_first())
+            # users with the most posts first, one or two posts can wait
+            .order_by(
+                desc(User.posts_count), User.posts_updated_at.asc().nulls_first()
+            )
             .first()
         )
         if posts_query is not None:
@@ -373,15 +376,12 @@ async def handle_post(conn: Connection, request: PostRequest):
     l.debug("(%s) < post %s", conn.app.name, post.post_id)
     assert conn.task is not None
     conn.task.seen_posts.add(post.post_id)
-    exclude = {"comments", "original_post"}
-    if post.original_post is not None:
-        upsert(
-            conn.db,
-            Post,
-            "post_id",
-            [{**post.original_post.model_dump(exclude=exclude), "exists": True}]
-        )
-    upsert(conn.db, Post, "post_id", [{**post.model_dump(exclude=exclude), "exists": True}])
+    upsert(
+        conn.db,
+        Post,
+        "post_id",
+        [{**post.model_dump(exclude={"comments"}), "exists": True}]
+    )
     # same comment can come twice (pagination shifts), one insert
     # with duplicate keys fails, so keep the first occurrence
     comments: dict[UUID, dict] = {}

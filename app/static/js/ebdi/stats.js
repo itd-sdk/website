@@ -272,18 +272,19 @@ function setup_tabs(id, on_select) {
     });
 }
 
-let posts_per_day = null;
-let posts_per_day_chart = null;
+// per-day series of posts and comments, rolled up into the selected period
+const per_day = { posts: null, comments: null };
+const per_day_charts = {};
 
-function render_posts_per_day(unit) {
-    posts_per_day_chart?.destroy();
-    posts_per_day_chart = new Chart(get_el("chart-posts-per-day"), {
+function render_per_day(source, unit) {
+    per_day_charts[source]?.destroy();
+    per_day_charts[source] = new Chart(get_el(`chart-${source}-per-day`), {
         type: "bar",
         data: {
             datasets: [
                 {
-                    label: "Постов",
-                    data: rollup(posts_per_day, unit, "count"),
+                    label: source === "posts" ? "Постов" : "Комментариев",
+                    data: rollup(per_day[source], unit, "count"),
                     backgroundColor: ACCENT,
                     pointStyle: "line",
                 },
@@ -699,13 +700,16 @@ async function load_stats() {
         const data = await res.json();
         get_el("charts").hidden = false;
         registrations = data.registrations;
-        posts_per_day = data.posts_per_day;
+        per_day.posts = data.posts_per_day;
+        per_day.comments = data.comments_per_day;
         words = { posts: data.words_posts, comments: data.words_comments };
         stats_loaded = true;
         render_total(data.total);
         render_registrations("month");
         render_total(data.posts_total, "chart-posts-total");
-        render_posts_per_day("month");
+        render_per_day("posts", "month");
+        render_total(data.comments_total, "chart-comments-total");
+        render_per_day("comments", "month");
         render_words("posts");
         render_followers_distribution(data.followers_distribution);
         render_followers_by_age(data.followers_by_age);
@@ -725,7 +729,8 @@ async function load_stats() {
 document.addEventListener("DOMContentLoaded", async () => {
     get_el("retry-button").addEventListener("click", load_stats);
     setup_tabs("chart-tabs", ({ unit }) => render_registrations(unit));
-    setup_tabs("posts-chart-tabs", ({ unit }) => render_posts_per_day(unit));
+    setup_tabs("posts-chart-tabs", ({ unit }) => render_per_day("posts", unit));
+    setup_tabs("comments-chart-tabs", ({ unit }) => render_per_day("comments", unit));
     setup_tabs("words-tabs", ({ source }) => render_words(source));
     await load_clan_names();
     await load_stats();

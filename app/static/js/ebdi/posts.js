@@ -48,10 +48,6 @@ function format_date(value) {
         .replace(" г.", "");
 }
 
-function format_short_date(value) {
-    return new Date(value).toLocaleDateString("ru-RU");
-}
-
 function profile_url(user) {
     return `${ITD}/@${user.username}`;
 }
@@ -149,21 +145,30 @@ function render_poll(post) {
     return poll;
 }
 
+function render_stat(post, key, title) {
+    const item = create("div", "post-stat");
+    item.title = title;
+    // icons are constants from this file, never data from the api
+    item.innerHTML = ICONS[key];
+    item.append(create("span", null, format_number(post[`${key}_count`])));
+    return item;
+}
+
+// likes comments reposts ........ clan views
 function render_stats(post) {
     const stats = create("div", "post-stats");
-    for (const [key, title] of [
-        ["likes", "Лайки"],
-        ["comments", "Комментарии"],
-        ["reposts", "Репосты"],
-        ["views", "Просмотры"],
-    ]) {
-        const item = create("div", "post-stat");
-        item.title = title;
-        // icons are constants from this file, never data from the api
-        item.innerHTML = ICONS[key];
-        item.append(create("span", null, format_number(post[`${key}_count`])));
-        stats.append(item);
+    stats.append(render_stat(post, "likes", "Лайки"));
+    stats.append(render_stat(post, "comments", "Комментарии"));
+    stats.append(render_stat(post, "reposts", "Репосты"));
+
+    const right = create("div", "post-stats-right");
+    if (post.dominant) {
+        const clan = create("div", "post-dominant", post.dominant + "\uFE0F");
+        clan.title = "Доминирующий клан";
+        right.append(clan);
     }
+    right.append(render_stat(post, "views", "Просмотры"));
+    stats.append(right);
     return stats;
 }
 
@@ -188,12 +193,7 @@ function render_badges(post) {
         box.append(badge);
     }
     if (post.edited_at) {
-        const badge = create("span", "post-badge", `Изменён ${format_short_date(post.edited_at)}`);
-        badge.title = format_date(post.edited_at);
-        box.append(badge);
-    }
-    if (post.dominant) {
-        box.append(create("span", "post-badge", `Доминирующий клан ${post.dominant}\uFE0F`));
+        box.append(create("span", "post-badge", `Изменён ${format_date(post.edited_at)}`));
     }
     return box;
 }

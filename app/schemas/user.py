@@ -22,7 +22,7 @@ class User(Base):
     display_name: Mapped[str]
     followers_count: Mapped[int]
     following_count: Mapped[int]
-    posts_count: Mapped[int]
+    posts_count: Mapped[int] = mapped_column(index=True)
     verified: Mapped[bool]
     has_itdp: Mapped[bool] = mapped_column(default=False)
     following: Mapped[list[UUID]] = mapped_column(ARRAY(PG_UUID(as_uuid=True)))

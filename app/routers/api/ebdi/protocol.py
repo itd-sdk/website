@@ -106,8 +106,6 @@ class PostBody(BaseModel):
     red_pens: list[dict] = []
     red_pen_authors: list[str] = []
     correctors: list[dict] = []
-    # the reposted post as the api embeds it, stored without its comments
-    original_post: "PostBody | None" = None
 
 
 class UpdateTarget(BaseModel):

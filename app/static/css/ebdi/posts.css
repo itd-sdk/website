@@ -185,6 +185,18 @@
     gap: 6px;
 }
 
+.post-stats-right {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-left: auto;
+}
+
+.post-dominant {
+    font-size: 16px;
+    cursor: default;
+}
+
 .post-stat svg {
     width: 18px;
     height: 18px;
