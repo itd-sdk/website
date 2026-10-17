@@ -160,8 +160,8 @@ function merge_options(overrides) {
     };
 }
 
-function render_total(data) {
-    new Chart(get_el("chart-total"), {
+function render_total(data, canvas_id = "chart-total") {
+    new Chart(get_el(canvas_id), {
         data: {
             labels: data.map((row) => format_month(row.month)),
             datasets: [
@@ -188,6 +188,7 @@ function render_total(data) {
 
 let registrations = null;
 let registrations_chart = null;
+let stats_loaded = false;
 
 function bucket_start(date, unit) {
     const d = new Date(date);
@@ -200,8 +201,8 @@ function bucket_start(date, unit) {
     return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 }
 
-function rollup(rows, unit) {
-    const field = unit === "month" ? "count_all" : "count";
+// registrations drop month-only dates except for the monthly view, posts pass "count"
+function rollup(rows, unit, field = unit === "month" ? "count_all" : "count") {
     const totals = new Map();
     for (const row of rows) {
         if (!row[field]) {
@@ -257,18 +258,98 @@ function render_registrations(unit) {
     });
 }
 
-function setup_registration_tabs() {
-    const tabs = get_el("chart-tabs");
+function setup_tabs(id, on_select) {
+    const tabs = get_el(id);
     tabs.addEventListener("click", (event) => {
         const button = event.target.closest(".chart-tab");
-        if (!button || !registrations) {
+        if (!button || !stats_loaded) {
             return;
         }
         for (const tab of tabs.children) {
             tab.classList.toggle("chart-tab-active", tab === button);
         }
-        render_registrations(button.dataset.unit);
+        on_select(button.dataset);
     });
+}
+
+let posts_per_day = null;
+let posts_per_day_chart = null;
+
+function render_posts_per_day(unit) {
+    posts_per_day_chart?.destroy();
+    posts_per_day_chart = new Chart(get_el("chart-posts-per-day"), {
+        type: "bar",
+        data: {
+            datasets: [
+                {
+                    label: "Постов",
+                    data: rollup(posts_per_day, unit, "count"),
+                    backgroundColor: ACCENT,
+                    pointStyle: "line",
+                },
+            ],
+        },
+        options: merge_options({
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    ...base_options.plugins.tooltip,
+                    callbacks: {
+                        title: (items) =>
+                            unit === "month"
+                                ? format_month(items[0].parsed.x)
+                                : format_date(items[0].parsed.x),
+                    },
+                },
+            },
+            scales: {
+                x: {
+                    type: "time",
+                    time: { unit },
+                    grid: { color: GRID },
+                    ticks: { color: TEXT, maxRotation: 0, autoSkipPadding: 20 },
+                },
+                y: base_options.scales.y,
+            },
+        }),
+    });
+}
+
+let words = null;
+
+// stable pseudo-random order, so big words are spread over the cloud
+function word_hash(word) {
+    let hash = 0;
+    for (const char of word) {
+        hash = (hash * 31 + char.codePointAt(0)) | 0;
+    }
+    return hash;
+}
+
+function render_words(source) {
+    const cloud = get_el("word-cloud");
+    cloud.replaceChildren();
+    const rows = words[source];
+    if (!rows.length) {
+        cloud.textContent = "Пока нет данных";
+        return;
+    }
+    // log scale, otherwise a couple of top words dwarf everything else
+    const counts = rows.map((row) => Math.log(row.count));
+    const min = Math.min(...counts);
+    const range = Math.max(...counts) - min || 1;
+    const sorted = [...rows].sort((a, b) => word_hash(a.word) - word_hash(b.word));
+    for (const row of sorted) {
+        const weight = (Math.log(row.count) - min) / range;
+        const node = document.createElement("span");
+        node.className = "word";
+        node.textContent = row.word;
+        node.title = `${row.word}: ${format_number(row.count)}`;
+        node.style.fontSize = `${13 + weight * 37}px`;
+        node.style.fontWeight = weight > 0.6 ? 700 : weight > 0.3 ? 500 : 400;
+        node.style.color = weight > 0.75 ? ACCENT : weight > 0.4 ? COLORS[1] : TEXT;
+        cloud.append(node);
+    }
 }
 
 function render_followers_distribution(data) {
@@ -618,8 +699,14 @@ async function load_stats() {
         const data = await res.json();
         get_el("charts").hidden = false;
         registrations = data.registrations;
+        posts_per_day = data.posts_per_day;
+        words = { posts: data.words_posts, comments: data.words_comments };
+        stats_loaded = true;
         render_total(data.total);
         render_registrations("month");
+        render_total(data.posts_total, "chart-posts-total");
+        render_posts_per_day("month");
+        render_words("posts");
         render_followers_distribution(data.followers_distribution);
         render_followers_by_age(data.followers_by_age);
         render_posts_vs_followers(data.posts_vs_followers);
@@ -637,7 +724,9 @@ async function load_stats() {
 
 document.addEventListener("DOMContentLoaded", async () => {
     get_el("retry-button").addEventListener("click", load_stats);
-    setup_registration_tabs();
+    setup_tabs("chart-tabs", ({ unit }) => render_registrations(unit));
+    setup_tabs("posts-chart-tabs", ({ unit }) => render_posts_per_day(unit));
+    setup_tabs("words-tabs", ({ source }) => render_words(source));
     await load_clan_names();
     await load_stats();
 });

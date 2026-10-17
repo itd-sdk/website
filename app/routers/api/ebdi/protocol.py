@@ -94,6 +94,7 @@ class PostBody(BaseModel):
     attachments: list[str] = []
     likes_count: int = 0
     comments_count: int = 0
+    reposts_count: int = 0
     views_count: int = 0
     poll_question: str | None = None
     poll_options: list[str] | None = None

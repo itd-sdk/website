@@ -3,9 +3,9 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import Response
 from pydantic import BaseModel
-from sqlalchemy import and_, case, desc, extract, func, literal, not_
+from sqlalchemy import and_, case, desc, extract, func, literal, not_, text
 
-from app.schemas import User
+from app.schemas import Post, User
 from app.services.db import Session, get_db
 from app.services.limiter import get_limiter
 
@@ -282,6 +282,87 @@ def get_follow_ratio(db: Session) -> list[Bucket]:
     return [Bucket(bucket=value, count=count) for value, count in rows]
 
 
+def get_posts_total(db: Session) -> list[Total]:
+    rows = (
+        db.query(
+            func.date_trunc("month", Post.created_at).label("month"),
+            func.count(Post.id)
+        )
+        .where(Post.created_at.isnot(None))
+        .group_by("month")
+        .order_by("month")
+        .all()
+    )
+    result = []
+    total = 0
+    for value, count in rows:
+        total += count
+        result.append(Total(month=value, total=total))
+    return result
+
+
+class PostsPerDay(BaseModel):
+    date: datetime
+    count: int
+
+
+def get_posts_per_day(db: Session) -> list[PostsPerDay]:
+    day = func.date_trunc("day", Post.created_at).label("day")
+    rows = (
+        db.query(day, func.count(Post.id))
+        .where(Post.created_at.isnot(None))
+        .group_by("day")
+        .order_by("day")
+        .all()
+    )
+    return [PostsPerDay(date=value, count=count) for value, count in rows]
+
+
+class WordCount(BaseModel):
+    word: str
+    count: int
+
+
+STOPWORDS = sorted(set("""
+    без был была были было быть вам вас ведь весь вот все всё всего всех всем вообще
+    где даже для его если есть еще ещё жду или как какой кого когда кто куда
+    лишь между меня мне мной мое моё может можно мой моя надо нас него нее неё
+    нет нибудь них ничего ну оба она они оно опять очень пока почему потом
+    потому при про раз сам свой свою себе себя сейчас так такой там тебе тебя
+    тем теперь то тоже только том тот три тут ты уже хоть хотя чего чем через
+    что чтобы чтоб эта эти это этого этой этом этот эту будет будут буду была
+    было вы мы он она где-то кстати вроде типа просто реально вообще прям
+    чуть сколько свои своих своей нам ним ней них его ее её им их тех тот
+    the and you for that this with are not but have was what all your can
+    just from they will about like http https www com
+""".split()))
+WORDS_SQL = """
+    select word, count(*) as count
+    from (
+        select regexp_split_to_table(
+            translate(
+                lower(regexp_replace(content, 'https?://\\S+|@\\w+', ' ', 'g')),
+                'АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ',
+                'абвгдеёжзийклмнопрстуфхцчшщъыьэюя'
+            ),
+            '[^a-zа-яё]+'
+        ) as word
+        from {table}
+        where content <> ''
+    ) words
+    where length(word) between 3 and 30 and word <> all(:stopwords)
+    group by word
+    order by count desc
+    limit 120
+"""
+
+
+def get_top_words(db: Session, table: str) -> list[WordCount]:
+    # uppercase cyrillic is mapped by hand, lower() depends on the database locale
+    rows = db.execute(text(WORDS_SQL.format(table=table)), {"stopwords": STOPWORDS})
+    return [WordCount(word=word, count=count) for word, count in rows]
+
+
 class StatsResponse(BaseModel):
     total: list[Total]
     registrations: list[Registrations]
@@ -292,6 +373,10 @@ class StatsResponse(BaseModel):
     last_seen: list[LastSeenShare]
     cohorts: list[Cohort]
     follow_ratio: list[Bucket]
+    posts_total: list[Total]
+    posts_per_day: list[PostsPerDay]
+    words_posts: list[WordCount]
+    words_comments: list[WordCount]
 
 
 @router.get("/", response_model=StatsResponse)
@@ -307,7 +392,11 @@ def api_get_ebdi_stats(request: Request, db: Session = Depends(get_db)):
             clans_over_time=get_clans_over_time(db),
             last_seen=get_last_seen(db),
             cohorts=get_cohorts(db),
-            follow_ratio=get_follow_ratio(db)
+            follow_ratio=get_follow_ratio(db),
+            posts_total=get_posts_total(db),
+            posts_per_day=get_posts_per_day(db),
+            words_posts=get_top_words(db, "posts"),
+            words_comments=get_top_words(db, "comments")
         ).model_dump_json()
         request.app.state.stats_updated_at = datetime.now()
     return Response(content=request.app.state.stats, media_type="application/json")

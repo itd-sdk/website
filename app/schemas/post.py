@@ -18,9 +18,9 @@ class Post(Base):
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     post_id: Mapped[UUID] = mapped_column(unique=True)
     author_id: Mapped[UUID] = mapped_column(index=True)
-    created_at: Mapped[datetime | None]
+    created_at: Mapped[datetime | None] = mapped_column(index=True)
     edited_at: Mapped[datetime | None]
-    found_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    found_at: Mapped[datetime] = mapped_column(server_default=func.now(), index=True)
     updated_at: Mapped[datetime] = mapped_column(
         server_default=func.now(), onupdate=func.now()
     )
@@ -30,9 +30,11 @@ class Post(Base):
     correctors: Mapped[list] = mapped_column(JSONB, default=list)
     spans: Mapped[list] = mapped_column(JSONB, default=list)
     attachments: Mapped[list] = mapped_column(JSONB, default=list)
-    likes_count: Mapped[int] = mapped_column(default=0)
-    comments_count: Mapped[int] = mapped_column(default=0)
-    views_count: Mapped[int] = mapped_column(default=0)
+    # indexed for the popular feed sorts
+    likes_count: Mapped[int] = mapped_column(default=0, index=True)
+    comments_count: Mapped[int] = mapped_column(default=0, index=True)
+    reposts_count: Mapped[int] = mapped_column(default=0, index=True)
+    views_count: Mapped[int] = mapped_column(default=0, index=True)
     poll_question: Mapped[str | None] = mapped_column(Text)
     poll_options: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
     poll_multiple: Mapped[bool | None]

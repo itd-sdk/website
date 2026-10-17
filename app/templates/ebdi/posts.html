@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block head %}
+<link rel="stylesheet" href="/static/css/ebdi/style.css">
+<link rel="stylesheet" href="/static/css/ebdi/posts.css">
+<script src="/static/js/ebdi/posts.js"></script>
+<meta name="description" content="Единая База Данных ИТД: лента постов, самые популярные посты по лайкам, репостам, комментариям и просмотрам">
+{% endblock %}
+
+{% block content %}
+<div id="landing">
+    <img id="banner" src="/static/images/ebdi.png">
+    <div id="landing-description">Единая База Данных ИТД</div>
+</div>
+
+<div id="content">
+    <div id="feedback">
+        <img src="/static/icons/vote.svg">
+        <div id="feedback-content">
+            <div id="feedback-title">Обратная связь</div>
+            <div id="feedback-description">Предложите идеи для ЕБДИ или сообщите о баге.</div>
+        </div>
+        <button onclick="location.href='https://github.com/itd-sdk/website/issues/new'">Перейти <img src="/static/icons/arrow.svg"></button>
+    </div>
+    <nav id="tabs">
+        <a href="/ebdi/users" class="tab">Пользователи</a>
+        <a href="/ebdi/clans" class="tab">Кланы</a>
+        <a href="/ebdi/posts" class="tab tab-active">Посты</a>
+        <a href="/ebdi/stats" class="tab">Статистика</a>
+    </nav>
+
+    <h2>Посты ИТД</h2>
+
+    <div id="total-objects" hidden>Всего в базе данных <span id="total-objects-value">0</span> постов</div>
+
+    <div id="controls-box">
+        <div id="controls">
+            <div id="filters">
+                <div class="filter-group" id="sort-group">
+                    <label><input type="radio" name="sort" value="new" checked>Новые</label>
+                    <label><input type="radio" name="sort" value="likes">Лайки</label>
+                    <label><input type="radio" name="sort" value="reposts">Репосты</label>
+                    <label><input type="radio" name="sort" value="comments">Комментарии</label>
+                    <label><input type="radio" name="sort" value="views">Просмотры</label>
+                </div>
+                <div class="filter-group" id="period-group" hidden>
+                    <label><input type="radio" name="period" value="all" checked>Всё время</label>
+                    <label><input type="radio" name="period" value="month">Месяц</label>
+                    <label><input type="radio" name="period" value="week">Неделя</label>
+                    <label><input type="radio" name="period" value="day">День</label>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="posts"></div>
+    <div id="list-empty" hidden>Постов пока нет</div>
+    <div id="list-error" hidden>
+        <div id="error-text"></div>
+        <button id="retry-button">Попробовать снова</button>
+    </div>
+    <div class="row" id="list-loader" hidden>
+        <div class="loader-spinner"></div>
+    </div>
+    <div id="sentinel-bottom" class="sentinel"></div>
+</div>
+{% endblock %}

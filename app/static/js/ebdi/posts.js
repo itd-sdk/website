@@ -1,0 +1,305 @@
+const PAGE_SIZE = 20;
+const ITD = "https://итд.com";
+const IMAGE_RE = /\.(jpe?g|png|gif|webp|avif)(\?|$)/i;
+
+let state = { sort: "new", period: "all" };
+let offset = 0;
+let has_more = true;
+let loading = false;
+let request_token = 0;
+
+function get_el(id) {
+    return document.getElementById(id);
+}
+
+function create(tag, class_name, text) {
+    const node = document.createElement(tag);
+    if (class_name) {
+        node.className = class_name;
+    }
+    if (text != undefined) {
+        node.textContent = text;
+    }
+    return node;
+}
+
+function format_number(value) {
+    return new Intl.NumberFormat("ru-RU").format(value);
+}
+
+function format_date(value) {
+    if (!value) {
+        return "";
+    }
+    return new Date(value)
+        .toLocaleString("ru-RU", {
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+        })
+        .replace(" г.", "");
+}
+
+function read_url_state() {
+    const params = new URLSearchParams(location.search);
+    state.sort = params.get("sort") || "new";
+    state.period = params.get("period") || "all";
+}
+
+function write_url_state() {
+    const params = new URLSearchParams();
+    if (state.sort != "new") {
+        params.set("sort", state.sort);
+        if (state.period != "all") {
+            params.set("period", state.period);
+        }
+    }
+    const query = params.toString();
+    history.replaceState(null, "", query ? `?${query}` : location.pathname);
+}
+
+function apply_state_to_controls() {
+    for (const input of document.querySelectorAll("#filters input")) {
+        input.checked = state[input.name] == input.value;
+    }
+    // "new" is ordered by when the post was found, a period makes no sense there
+    get_el("period-group").hidden = state.sort == "new";
+}
+
+function render_author(post) {
+    const author = post.author;
+    const header = create("div", "post-header");
+    const avatar = create("div", "row-avatar", author ? author.avatar + "️" : "?");
+    header.append(avatar);
+
+    const names = create("div", "post-names");
+    const name = create("a", "post-display-name");
+    name.target = "_blank";
+    name.href = `${ITD}/@${author ? author.username : post.author_id}`;
+    name.append(create("span", null, author ? author.display_name : "Неизвестный автор"));
+    if (author?.verified) {
+        const icon = create("img", "post-verified");
+        icon.src = "/static/icons/verified.svg";
+        name.append(icon);
+    }
+    names.append(name);
+    if (author) {
+        names.append(create("div", "post-username", "@" + author.username));
+    }
+    header.append(names);
+
+    const date = create("a", "post-date", format_date(post.created_at || post.found_at));
+    date.target = "_blank";
+    date.href = `${ITD}/@${author ? author.username : post.author_id}/post/${post.post_id}`;
+    date.title = "Открыть в ИТД";
+    header.append(date);
+    return header;
+}
+
+function render_attachments(urls) {
+    const box = create("div", "post-attachments");
+    for (const url of urls) {
+        if (!/^https?:\/\//.test(url)) {
+            continue;
+        }
+        if (IMAGE_RE.test(url)) {
+            const link = create("a");
+            link.href = url;
+            link.target = "_blank";
+            const image = create("img", "post-image");
+            image.loading = "lazy";
+            image.src = url;
+            link.append(image);
+            box.append(link);
+        } else {
+            const link = create("a", "post-file", "Вложение");
+            link.href = url;
+            link.target = "_blank";
+            box.append(link);
+        }
+    }
+    return box;
+}
+
+function render_poll(post) {
+    const poll = create("div", "post-poll");
+    poll.append(create("div", "post-poll-question", post.poll_question));
+    for (const option of post.poll_options || []) {
+        poll.append(create("div", "post-poll-option", option));
+    }
+    if (post.poll_multiple) {
+        poll.append(create("div", "post-poll-note", "Можно выбрать несколько"));
+    }
+    return poll;
+}
+
+function render_stats(post) {
+    const stats = create("div", "post-stats");
+    for (const [label, value] of [
+        ["Лайки", post.likes_count],
+        ["Комментарии", post.comments_count],
+        ["Репосты", post.reposts_count],
+        ["Просмотры", post.views_count],
+    ]) {
+        const item = create("div", "post-stat");
+        item.append(create("span", "post-stat-label", label));
+        item.append(create("b", null, format_number(value)));
+        stats.append(item);
+    }
+    return stats;
+}
+
+function render_post(post) {
+    const card = create("article", "post-card");
+    if (post.author && !post.author.exists) {
+        card.classList.add("post-deleted-author");
+    }
+    card.append(render_author(post));
+
+    const badges = [];
+    if (post.original_post_id) {
+        badges.push("Репост");
+    }
+    if (post.wall_recipient_id && post.wall_recipient_id != post.author_id) {
+        badges.push("Пост на чужой стене");
+    }
+    if (post.edited_at) {
+        badges.push("Изменён");
+    }
+    if (badges.length) {
+        const box = create("div", "post-badges");
+        for (const badge of badges) {
+            box.append(create("span", "post-badge", badge));
+        }
+        card.append(box);
+    }
+
+    if (post.content) {
+        card.append(create("div", "post-content", post.content));
+    }
+    if (post.attachments.length) {
+        card.append(render_attachments(post.attachments));
+    }
+    if (post.poll_question) {
+        card.append(render_poll(post));
+    }
+    card.append(render_stats(post));
+    return card;
+}
+
+function show_error(message) {
+    get_el("error-text").textContent = message;
+    get_el("list-error").hidden = false;
+}
+
+async function load_page() {
+    if (loading || !has_more) {
+        return;
+    }
+    loading = true;
+    const token = request_token;
+    get_el("list-loader").hidden = false;
+    get_el("list-error").hidden = true;
+    try {
+        const params = new URLSearchParams({
+            sort: state.sort,
+            period: state.sort == "new" ? "all" : state.period,
+            offset,
+            limit: PAGE_SIZE,
+        });
+        const res = await fetch("/api/ebdi/posts?" + params);
+        if (token != request_token) {
+            return;
+        }
+        if (res.status == 429) {
+            show_error("Слишком много запросов, подождите немного");
+            return;
+        }
+        if (!res.ok) {
+            show_error(`Ошибка получения постов: ${res.status}`);
+            return;
+        }
+        const posts = await res.json();
+        if (token != request_token) {
+            return;
+        }
+        const list = get_el("posts");
+        for (const post of posts) {
+            list.append(render_post(post));
+        }
+        offset += posts.length;
+        has_more = posts.length == PAGE_SIZE;
+        get_el("list-empty").hidden = offset > 0;
+        // the observer only fires on changes, a short page keeps the sentinel visible
+        requestAnimationFrame(load_if_visible);
+    } catch (error) {
+        console.warn("posts request failed", error);
+        if (token == request_token) {
+            show_error("Не удалось связаться с сервером");
+        }
+    } finally {
+        if (token == request_token) {
+            loading = false;
+            get_el("list-loader").hidden = true;
+        }
+    }
+}
+
+function load_if_visible() {
+    const rect = get_el("sentinel-bottom").getBoundingClientRect();
+    if (rect.top < window.innerHeight + 800) {
+        load_page();
+    }
+}
+
+function reload() {
+    // responses of the previous filter are dropped by the token check
+    request_token += 1;
+    loading = false;
+    offset = 0;
+    has_more = true;
+    get_el("posts").replaceChildren();
+    get_el("list-empty").hidden = true;
+    load_page();
+}
+
+async function load_count() {
+    try {
+        const res = await fetch("/api/ebdi/posts/count");
+        if (!res.ok) {
+            return;
+        }
+        const json = await res.json();
+        get_el("total-objects-value").textContent = format_number(json.count);
+        get_el("total-objects").hidden = false;
+    } catch (error) {
+        console.warn("posts count request failed", error);
+    }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+    read_url_state();
+    apply_state_to_controls();
+
+    get_el("filters").addEventListener("change", (event) => {
+        state[event.target.name] = event.target.value;
+        apply_state_to_controls();
+        write_url_state();
+        reload();
+    });
+    get_el("retry-button").addEventListener("click", load_page);
+
+    new IntersectionObserver(
+        (entries) => {
+            if (entries.some((entry) => entry.isIntersecting)) {
+                load_page();
+            }
+        },
+        { rootMargin: "800px" },
+    ).observe(get_el("sentinel-bottom"));
+
+    load_count();
+    load_page();
+});

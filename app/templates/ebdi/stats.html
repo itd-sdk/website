@@ -28,6 +28,7 @@
     <nav id="tabs">
         <a href="/ebdi/users" class="tab">Пользователи</a>
         <a href="/ebdi/clans" class="tab">Кланы</a>
+        <a href="/ebdi/posts" class="tab">Посты</a>
         <a href="/ebdi/stats" class="tab tab-active">Статистика</a>
     </nav>
 
@@ -60,6 +61,38 @@
                 <div class="chart-tab chart-tab-active" data-unit="month">По месяцам</div>
             </div>
             <div class="chart-box"><canvas id="chart-registrations"></canvas></div>
+        </div>
+
+        <div class="chart-card">
+            <div class="chart-title">Всего постов</div>
+            <div class="chart-description">
+                Количество постов в базе по дате публикации
+            </div>
+            <div class="chart-box"><canvas id="chart-posts-total"></canvas></div>
+        </div>
+        <div class="chart-card">
+            <div class="chart-title">Новые посты</div>
+            <div class="chart-description">
+                Сколько постов публиковалось каждый период
+            </div>
+            <div class="chart-tabs" id="posts-chart-tabs">
+                <div class="chart-tab" data-unit="day">По дням</div>
+                <div class="chart-tab" data-unit="week">По неделям</div>
+                <div class="chart-tab chart-tab-active" data-unit="month">По месяцам</div>
+            </div>
+            <div class="chart-box"><canvas id="chart-posts-per-day"></canvas></div>
+        </div>
+
+        <div class="chart-card" id="words-card">
+            <div class="chart-title">Частые слова</div>
+            <div class="chart-description">
+                Самые частые слова: чем чаще слово встречается, тем оно больше
+            </div>
+            <div class="chart-tabs" id="words-tabs">
+                <div class="chart-tab chart-tab-active" data-source="posts">В постах</div>
+                <div class="chart-tab" data-source="comments">В комментариях</div>
+            </div>
+            <div id="word-cloud"></div>
         </div>
 
         <div class="chart-card">
