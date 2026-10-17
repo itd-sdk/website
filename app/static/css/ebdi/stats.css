@@ -38,7 +38,8 @@
     margin-right: auto;
 }
 
-#chart-tabs {
+#chart-tabs,
+.chart-tabs {
     display: flex;
     flex-direction: row;
     justify-content: center;
@@ -67,6 +68,29 @@
     background-color: #3e3b37;
     color: #fbeadb;
     border-bottom: #eb5e1b solid 2px;
+}
+
+#words-card {
+    grid-column: 1 / -1;
+}
+
+#word-cloud {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    gap: 4px 14px;
+    padding: 12px 0;
+    line-height: 1.1;
+}
+
+.word {
+    cursor: default;
+    transition: color 0.2s;
+}
+
+.word:hover {
+    color: #fbeadb !important;
 }
 
 canvas {

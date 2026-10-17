@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-from sqlalchemy import ARRAY, Text, func
+from sqlalchemy import ARRAY, Index, Text, func, true
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -14,13 +14,21 @@ if TYPE_CHECKING:
 
 class Post(Base):
     __tablename__ = "posts"
+    __table_args__ = (
+        Index(
+            "ix_posts_content_trgm",
+            "content",
+            postgresql_using="gin",
+            postgresql_ops={"content": "gin_trgm_ops"}
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     post_id: Mapped[UUID] = mapped_column(unique=True)
     author_id: Mapped[UUID] = mapped_column(index=True)
-    created_at: Mapped[datetime | None]
+    created_at: Mapped[datetime | None] = mapped_column(index=True)
     edited_at: Mapped[datetime | None]
-    found_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    found_at: Mapped[datetime] = mapped_column(server_default=func.now(), index=True)
     updated_at: Mapped[datetime] = mapped_column(
         server_default=func.now(), onupdate=func.now()
     )
@@ -30,9 +38,11 @@ class Post(Base):
     correctors: Mapped[list] = mapped_column(JSONB, default=list)
     spans: Mapped[list] = mapped_column(JSONB, default=list)
     attachments: Mapped[list] = mapped_column(JSONB, default=list)
-    likes_count: Mapped[int] = mapped_column(default=0)
-    comments_count: Mapped[int] = mapped_column(default=0)
-    views_count: Mapped[int] = mapped_column(default=0)
+    # indexed for the popular feed sorts
+    likes_count: Mapped[int] = mapped_column(default=0, index=True)
+    comments_count: Mapped[int] = mapped_column(default=0, index=True)
+    reposts_count: Mapped[int] = mapped_column(default=0, index=True)
+    views_count: Mapped[int] = mapped_column(default=0, index=True)
     poll_question: Mapped[str | None] = mapped_column(Text)
     poll_options: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
     poll_multiple: Mapped[bool | None]
@@ -41,6 +51,7 @@ class Post(Base):
         index=True
     )  # posts.post_id, for reposts
     wall_recipient_id: Mapped[UUID | None] = mapped_column(index=True)
+    exists: Mapped[bool] = mapped_column(default=True, server_default=true())
 
     # top-level comments only, replies are available via Comment.replies
     comments: Mapped[list["Comment"]] = relationship(
