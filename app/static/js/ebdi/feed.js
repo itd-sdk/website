@@ -13,13 +13,19 @@ const FEEDS = {
     posts: {
         api: "/api/ebdi/posts",
         error: "постов",
-        defaults: { deleted: false },
+        defaults: { deleted: false, photo: true, video: true, audio: true },
         render: (item) => render_post(item),
     },
     comments: {
         api: "/api/ebdi/comments",
         error: "комментариев",
-        defaults: { deleted: false, deleted_posts: false },
+        defaults: {
+            deleted: false,
+            deleted_posts: false,
+            photo: true,
+            video: true,
+            audio: true,
+        },
         render: (item) => render_comment(item),
     },
 };
@@ -60,24 +66,94 @@ function escape_regexp(text) {
     return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-// text with the matches of the content search wrapped in <mark>
-function highlighted(text) {
+// id of a post or a user that is not in the database
+function missing_id(id) {
+    const node = create("span", "missing-id", id);
+    node.title = "Нет в базе ЕБДИ";
+    return node;
+}
+
+// text with red pens, correctors and content search matches; offsets of the
+// marks are utf-16 units, the same as javascript string indices
+function render_text(text, { red_pens = [], correctors = [] } = {}) {
+    text = text || "";
+    const time = (value) => Date.parse(value) || 0;
+    // several pens on the same words: the newest one is shown
+    const pens = new Map();
+    for (const pen of red_pens) {
+        const key = `${pen.start}:${pen.end}`;
+        if (
+            !pens.has(key) ||
+            time(pen.created_at) > time(pens.get(key).created_at)
+        ) {
+            pens.set(key, pen);
+        }
+    }
+    const ranges = [];
+    for (const mark of correctors) {
+        // a later red pen on the same words replaces the corrector, like on the site
+        const pen = pens.get(`${mark.start}:${mark.end}`);
+        if (!pen || time(mark.created_at) > time(pen.created_at)) {
+            ranges.push({
+                start: mark.start,
+                end: mark.end,
+                type: "corrector",
+            });
+        }
+    }
+    for (const pen of pens.values()) {
+        ranges.push({
+            start: pen.start,
+            end: pen.end,
+            type: "red-pen-old",
+            pen,
+        });
+    }
+    if (state.q) {
+        for (const match of text.matchAll(
+            new RegExp(escape_regexp(state.q), "giu"),
+        )) {
+            const end = match.index + match[0].length;
+            ranges.push({ start: match.index, end, type: "search-match" });
+        }
+    }
+    const valid = ranges
+        .map((range) => ({
+            ...range,
+            start: Math.max(0, range.start),
+            end: Math.min(text.length, range.end),
+        }))
+        .filter((range) => range.start < range.end);
+
+    // the text is cut at every mark border, each piece gets the classes covering it
+    const points = [
+        0,
+        text.length,
+        ...valid.flatMap((range) => [range.start, range.end]),
+    ];
+    const borders = [...new Set(points)].sort((a, b) => a - b);
     const fragment = document.createDocumentFragment();
-    if (!state.q || !text) {
-        fragment.append(text || "");
-        return fragment;
-    }
-    let last = 0;
-    for (const match of text.matchAll(
-        new RegExp(escape_regexp(state.q), "giu"),
-    )) {
-        fragment.append(
-            text.slice(last, match.index),
-            create("mark", "search-match", match[0]),
+    for (let i = 0; i < borders.length - 1; i++) {
+        const [from, to] = [borders[i], borders[i + 1]];
+        const covering = valid.filter(
+            (range) => range.start <= from && range.end >= to,
         );
-        last = match.index + match[0].length;
+        const piece = text.slice(from, to);
+        if (!covering.length) {
+            fragment.append(piece);
+        } else {
+            const types = [...new Set(covering.map((range) => range.type))];
+            const tag = types.includes("search-match") ? "mark" : "span";
+            fragment.append(create(tag, types.join(" "), piece));
+        }
+        for (const range of valid) {
+            if (range.pen && range.end == to) {
+                fragment.append(
+                    create("span", "red-pen-new", range.pen.replacement),
+                );
+            }
+        }
     }
-    fragment.append(text.slice(last));
     return fragment;
 }
 
@@ -160,7 +236,7 @@ function profile_url(user) {
 }
 
 function toggles() {
-    return document.querySelectorAll("#feed-controls input[data-state]");
+    return document.querySelectorAll("#controls-box input[data-state]");
 }
 
 function read_url_state() {
@@ -171,8 +247,8 @@ function read_url_state() {
     state.sort = known ? sort : DEFAULT_STATE.sort;
     state.q = params.get("q") || "";
     state.user = (params.get("user") || "").replace(/^@/, "");
-    for (const key of Object.keys(FEED.defaults)) {
-        state[key] = params.get(key) == "true";
+    for (const [key, value] of Object.entries(FEED.defaults)) {
+        state[key] = params.has(key) ? params.get(key) == "true" : value;
     }
 }
 
@@ -225,11 +301,9 @@ function render_header(author, author_id, date, url) {
     name.target = "_blank";
     name.href = `https://итд.com/@${author ? author.username : author_id}`;
     name.append(
-        create(
-            "span",
-            null,
-            author ? author.display_name : "Неизвестный автор",
-        ),
+        author
+            ? create("span", null, author.display_name)
+            : missing_id(author_id),
     );
     if (author?.verified) {
         const icon = create("img", "post-verified");
@@ -649,7 +723,7 @@ function render_badges(post) {
             link.target = "_blank";
             badge.append(link);
         } else {
-            badge.append("другого пользователя");
+            badge.append(missing_id(post.wall_recipient_id));
         }
         box.append(badge);
     }
@@ -686,7 +760,7 @@ function render_post(post, nested = false, in_dialog = false) {
     }
     if (post.content) {
         const content = create("div", "post-content");
-        content.append(highlighted(post.content));
+        content.append(render_text(post.content, post));
         card.append(content);
     }
     if (post.attachments.length) {
@@ -699,13 +773,13 @@ function render_post(post, nested = false, in_dialog = false) {
         if (post.original) {
             card.append(render_post(post.original, true, in_dialog));
         } else {
-            card.append(
-                create(
-                    "div",
-                    "post-original post-original-missing",
-                    "Оригинальный пост не сохранён в базе",
-                ),
+            const missing = create(
+                "div",
+                "post-original post-original-missing",
+                "Оригинальный пост не сохранён в базе: ",
             );
+            missing.append(missing_id(post.original_post_id));
+            card.append(missing);
         }
     }
     card.append(render_stats(post));
@@ -840,8 +914,10 @@ function render_comment_body(comment, show_replies) {
         link.href = profile_url(comment.reply_to);
         link.target = "_blank";
         text.append(link, " ");
+    } else if (comment.parent_id && comment.reply_to_id) {
+        text.append(missing_id(comment.reply_to_id), " ");
     }
-    text.append(highlighted(comment.content));
+    text.append(render_text(comment.content));
 
     const side = create("div", "comment-side");
     if (show_replies) {
@@ -864,14 +940,18 @@ function render_context(label, preview, on_click) {
     make_clickable(box, on_click);
     const head = create("div", "comment-context-head", label);
     if (preview.author) {
-        head.append(
-            " ",
+        const author = create("span", "comment-context-author");
+        author.append(
             create(
                 "span",
-                "comment-context-author",
-                "@" + preview.author.username,
+                "comment-context-avatar",
+                preview.author.avatar + "\uFE0F",
             ),
+            create("span", "comment-context-name", preview.author.display_name),
         );
+        head.append(author);
+    } else {
+        head.append(missing_id(preview.author_id));
     }
     const text = preview.content
         ? preview.content + (preview.truncated ? "…" : "")

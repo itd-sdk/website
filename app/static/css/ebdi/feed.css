@@ -106,6 +106,18 @@
     cursor: pointer;
 }
 
+.feed-kinds {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 12px;
+}
+
+.feed-kinds-label {
+    font-size: 14px;
+    color: #bbb;
+}
+
 .feed-toggle:hover {
     color: #fff;
 }
@@ -379,9 +391,10 @@
     padding-bottom: 4px;
 }
 
+/* fixed height, the width follows the picture so nothing is cropped */
 .attachment {
     flex: 0 0 auto;
-    width: 220px;
+    max-width: 100%;
     height: 160px;
     box-sizing: border-box;
     scroll-snap-align: start;
@@ -397,9 +410,10 @@
 
 .attachment-image {
     display: block;
-    width: 100%;
+    width: auto;
+    max-width: 100%;
     height: 100%;
-    object-fit: cover;
+    object-fit: contain;
     transition: transform 0.2s;
 }
 
@@ -835,10 +849,6 @@
     color: #999;
 }
 
-.comment-context-author {
-    color: #fbeadb;
-}
-
 .comment-context-text {
     color: #ccc;
     white-space: pre-wrap;
@@ -868,4 +878,46 @@
 .audio-error {
     font-size: 13px;
     color: #bbb;
+}
+
+.missing-id {
+    color: #85827e;
+    font-style: italic;
+    font-weight: normal;
+    overflow-wrap: anywhere;
+}
+
+.post-display-name .missing-id {
+    color: #85827e;
+    font-size: 13px;
+}
+
+.comment-context-author {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: 4px;
+    color: #fbeadb;
+}
+
+.comment-context-avatar {
+    font-size: 14px;
+}
+
+/* red pen: the old word struck out in red, the replacement right after it */
+.red-pen-old {
+    text-decoration: line-through;
+    text-decoration-color: #e05340;
+    text-decoration-thickness: 2px;
+}
+
+.red-pen-new {
+    margin-left: 4px;
+    color: #e05340;
+}
+
+/* corrector: white paint over the words, the words stay readable */
+.corrector {
+    background-color: #fff;
+    color: #1e1c1a;
 }
