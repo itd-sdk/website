@@ -353,6 +353,10 @@ async def handle_post(conn: Connection, request: PostRequest):
     }
     if row["reposts_count"] is None:
         del row["reposts_count"]
+    if conn.task.since is None:
+        # a full rescan (posts_updated_at was reset) brings the posts back as
+        # if they were just found, regular passes keep the first found_at
+        row["found_at"] = func.now()
     upsert(conn.db, Post, "post_id", [row])
     deleted = save_comments(
         conn.db, post.post_id, post.comments, post.comments_complete
