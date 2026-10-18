@@ -496,6 +496,10 @@ emoji-picker {
     #content {
         padding: 0 10px;
     }
+    /* the full width bar follows the narrower page padding */
+    #controls-box {
+        margin-left: -10px;
+    }
     #landing {
         height: 20vh;
         margin-bottom: 25px;
