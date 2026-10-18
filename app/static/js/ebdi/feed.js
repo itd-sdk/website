@@ -3,9 +3,6 @@ const ITD = "https://итд.com";
 const IMAGE_RE = /\.(jpe?g|png|gif|webp|avif)(\?|$)/i;
 const VIDEO_RE = /\.(mp4|webm|mov|m4v)(\?|$)/i;
 const AUDIO_RE = /\.(ogg|oga|opus|wav|mp3|m4a|aac|flac)(\?|$)/i;
-const OGG_RE = /\.(ogg|oga|opus)(\?|$)/i;
-const OPUS_DECODER_URL =
-    "https://cdn.jsdelivr.net/npm/ogg-opus-decoder@1.7.5/dist/ogg-opus-decoder.min.js";
 
 // posts and comments tabs share this file, the script tag tells which one it is
 const KIND = document.currentScript.dataset.kind;
@@ -282,7 +279,8 @@ function placeholder_peaks(url) {
 let audio_decoder = null;
 
 // peaks of the loudest sample per bucket, enough for the drawn bars
-function audio_peaks(data, buckets = 600) {
+function audio_peaks(buffer, buckets = 600) {
+    const data = buffer.getChannelData(0);
     const size = Math.max(1, Math.floor(data.length / buckets));
     const peaks = new Float32Array(Math.ceil(data.length / size));
     for (let i = 0; i < peaks.length; i++) {
@@ -299,101 +297,18 @@ function audio_peaks(data, buckets = 600) {
     return peaks;
 }
 
-let opus_decoder = null;
-
-function load_opus_decoder() {
-    opus_decoder ??= new Promise((resolve, reject) => {
-        const script = create("script");
-        script.src = OPUS_DECODER_URL;
-        script.charset = "UTF-8";
-        script.onload = () =>
-            resolve(window["ogg-opus-decoder"].OggOpusDecoder);
-        script.onerror = () => {
-            opus_decoder = null;
-            reject(new Error("opus decoder did not load"));
-        };
-        document.head.append(script);
-    });
-    return opus_decoder;
-}
-
-// libopus in wasm, for ogg files the browser rejects: Firefox refuses streams
-// whose first page implies a negative start time, which ffmpeg and phones accept
-async function decode_opus(bytes) {
-    const OggOpusDecoder = await load_opus_decoder();
-    const decoder = new OggOpusDecoder();
-    await decoder.ready;
-    try {
-        const { channelData, samplesDecoded, sampleRate } =
-            await decoder.decodeFile(new Uint8Array(bytes));
-        if (!samplesDecoded) {
-            throw new Error("not an opus stream");
-        }
-        return {
-            samples: channelData[0].subarray(0, samplesDecoded),
-            sampleRate,
-        };
-    } finally {
-        decoder.free();
-    }
-}
-
-// 16-bit mono wav, which every browser plays
-function to_wav(samples, sample_rate) {
-    const view = new DataView(new ArrayBuffer(44 + samples.length * 2));
-    const text = (offset, value) =>
-        [...value].forEach((char, i) =>
-            view.setUint8(offset + i, char.charCodeAt(0)),
-        );
-    text(0, "RIFF");
-    view.setUint32(4, 36 + samples.length * 2, true);
-    text(8, "WAVEfmt ");
-    view.setUint32(16, 16, true);
-    view.setUint16(20, 1, true);
-    view.setUint16(22, 1, true);
-    view.setUint32(24, sample_rate, true);
-    view.setUint32(28, sample_rate * 2, true);
-    view.setUint16(32, 2, true);
-    view.setUint16(34, 16, true);
-    text(36, "data");
-    view.setUint32(40, samples.length * 2, true);
-    for (let i = 0; i < samples.length; i++) {
-        const sample = Math.max(-1, Math.min(1, samples[i]));
-        view.setInt16(
-            44 + i * 2,
-            sample < 0 ? sample * 0x8000 : sample * 0x7fff,
-            true,
-        );
-    }
-    return new Blob([view], { type: "audio/wav" });
-}
-
 async function decode_audio(url) {
     const res = await fetch(url);
     if (!res.ok) {
         throw new Error(`status ${res.status}`);
     }
     const blob = await res.blob();
-    const bytes = await blob.arrayBuffer();
     // an offline context decodes without the autoplay restrictions
     audio_decoder ??= new OfflineAudioContext(1, 1, 44100);
-    try {
-        // decoding detaches the buffer, the opus fallback needs the bytes
-        const buffer = await audio_decoder.decodeAudioData(bytes.slice(0));
-        const samples = buffer.getChannelData(0);
-        return { blob, peaks: audio_peaks(samples), duration: buffer.duration };
-    } catch (error) {
-        if (!OGG_RE.test(url)) {
-            throw error;
-        }
-        console.warn("browser cannot decode, trying libopus", url, error);
-        const { samples, sampleRate } = await decode_opus(bytes);
-        return {
-            blob: to_wav(samples, sampleRate),
-            peaks: audio_peaks(samples),
-            duration: samples.length / sampleRate,
-        };
-    }
+    const buffer = await audio_decoder.decodeAudioData(
+        await blob.arrayBuffer(),
+    );
+    return { blob, peaks: audio_peaks(buffer), duration: buffer.duration };
 }
 
 function show_audio_error(tile, url) {
