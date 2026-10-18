@@ -434,8 +434,9 @@
 }
 
 .audio-play {
-    width: 36px;
-    height: 36px;
+    padding: 8px;
+    background: #ed6a2d;
+    border-radius: 36px;
     flex-shrink: 0;
     cursor: pointer;
 }
@@ -444,6 +445,7 @@
     flex: 1;
     min-width: 0;
     height: 44px;
+    cursor: pointer;
 }
 
 .audio-time {
@@ -842,6 +844,7 @@
     white-space: pre-wrap;
     overflow-wrap: anywhere;
     display: -webkit-box;
+    line-clamp: 3;
     -webkit-line-clamp: 3;
     -webkit-box-orient: vertical;
     overflow: hidden;
