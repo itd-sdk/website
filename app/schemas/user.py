@@ -29,6 +29,7 @@ class User(Base):
     followers: Mapped[list[UUID]] = mapped_column(ARRAY(PG_UUID(as_uuid=True)))
     avatar: Mapped[str] = mapped_column(default="?")
     exists: Mapped[bool] = mapped_column(default=True)
+    deleted_at: Mapped[datetime | None]  # when exists became false
     bio: Mapped[str | None]
     banner: Mapped[str | None]
     last_seen: Mapped[str | None]

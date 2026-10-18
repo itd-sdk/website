@@ -38,6 +38,7 @@ class Comment(Base):
     likes_count: Mapped[int] = mapped_column(default=0, index=True)
     replies_count: Mapped[int] = mapped_column(default=0, index=True)
     exists: Mapped[bool] = mapped_column(default=True, server_default=true())
+    deleted_at: Mapped[datetime | None]  # when exists became false
 
     replies: Mapped[list["Comment"]] = relationship(
         order_by="Comment.created_at", viewonly=True

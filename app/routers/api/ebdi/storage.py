@@ -3,10 +3,11 @@
 from collections.abc import Iterator
 from uuid import UUID
 
+from sqlalchemy import func
 from sqlalchemy.dialects.postgresql import insert
 
 from app.routers.api.ebdi.protocol import CommentBody
-from app.schemas import Comment, Post
+from app.schemas import Comment, Post, User
 from app.services.db import Session
 
 
@@ -51,7 +52,7 @@ def save_comments(
     # with duplicate keys fails, so keep the first occurrence
     rows: dict[UUID, dict] = {}
     for row in flatten_comments(comments, post_id):
-        rows.setdefault(row["comment_id"], {**row, "exists": True})
+        rows.setdefault(row["comment_id"], {**row, "exists": True, "deleted_at": None})
     upsert(db, Comment, "comment_id", list(rows.values()))
     if not complete:
         return 0
@@ -60,7 +61,10 @@ def save_comments(
         .where(Comment.post_id == post_id)
         .where(Comment.exists.is_(True))
         .where(Comment.comment_id.not_in(rows.keys()))
-        .update({Comment.exists: False}, synchronize_session=False)
+        .update(
+            {Comment.exists: False, Comment.deleted_at: func.now()},
+            synchronize_session=False
+        )
     )
 
 
@@ -71,5 +75,19 @@ def delete_user_comments(db: Session, user_id: UUID) -> int:
         db.query(Comment)
         .where(Comment.author_id == user_id)
         .where(Comment.exists.is_(True))
-        .update({Comment.exists: False}, synchronize_session=False)
+        .update(
+            {Comment.exists: False, Comment.deleted_at: func.now()},
+            synchronize_session=False
+        )
     )
+
+
+def set_user_exists(db: Session, user: User, exists: bool) -> None:
+    """Keeps deleted_at with exists, a missing user loses their comments"""
+    if exists:
+        user.deleted_at = None
+    else:
+        if user.exists:
+            user.deleted_at = func.now()
+        delete_user_comments(db, user.user_id)
+    user.exists = exists

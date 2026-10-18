@@ -35,7 +35,7 @@ from app.routers.api.ebdi.protocol import (
     UpdateTaskResponse,
     client_message
 )
-from app.routers.api.ebdi.storage import delete_user_comments, save_comments, upsert
+from app.routers.api.ebdi.storage import save_comments, set_user_exists, upsert
 from app.schemas import App, Post, User
 from app.services.db import Session, get_db
 from app.services.settings import get_settings
@@ -290,11 +290,10 @@ async def handle_update(conn: Connection, request: UpdateRequest):
             if i == "avatar":
                 continue
             setattr(user, i, getattr(request.target, i))
-        user.exists = True
+        set_user_exists(conn.db, user, True)
     else:
         l.debug("(%s) < not exists", conn.app.name)
-        user.exists = False
-        delete_user_comments(conn.db, user.user_id)
+        set_user_exists(conn.db, user, False)
     user.updated_at = datetime.now()
 
     conn.app.refreshed += 1
@@ -347,7 +346,11 @@ async def handle_post(conn: Connection, request: PostRequest):
     l.debug("(%s) < post %s", conn.app.name, post.post_id)
     assert conn.task is not None
     conn.task.seen_posts.add(post.post_id)
-    row = {**post.model_dump(exclude={"comments", "comments_complete"}), "exists": True}
+    row = {
+        **post.model_dump(exclude={"comments", "comments_complete"}),
+        "exists": True,
+        "deleted_at": None
+    }
     if row["reposts_count"] is None:
         del row["reposts_count"]
     upsert(conn.db, Post, "post_id", [row])
@@ -380,7 +383,9 @@ def mark_deleted_posts(db: Session, task: Task | None, user: User) -> None:
     if task.since is not None:
         # margin covers a timezone mismatch between the app and the database
         query = query.where(Post.created_at > task.since + POSTS_DELETE_MARGIN)
-    deleted = query.update({Post.exists: False}, synchronize_session=False)
+    deleted = query.update(
+        {Post.exists: False, Post.deleted_at: func.now()}, synchronize_session=False
+    )
     if deleted:
         l.debug("(%s) %s posts deleted", user.username, deleted)
 
@@ -393,8 +398,7 @@ async def handle_posts_done(conn: Connection, request: PostsDoneRequest):
     l.debug("(%s) < posts done %s", conn.app.name, user.username)
     user.posts_updated_at = datetime.now()
     if not request.target_exists:
-        user.exists = False
-        delete_user_comments(conn.db, user.user_id)
+        set_user_exists(conn.db, user, False)
     else:
         mark_deleted_posts(conn.db, conn.task, user)
     conn.app.refreshed += 1

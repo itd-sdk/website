@@ -52,6 +52,7 @@ class Post(Base):
     )  # posts.post_id, for reposts
     wall_recipient_id: Mapped[UUID | None] = mapped_column(index=True)
     exists: Mapped[bool] = mapped_column(default=True, server_default=true())
+    deleted_at: Mapped[datetime | None]  # when exists became false
 
     # top-level comments only, replies are available via Comment.replies
     comments: Mapped[list["Comment"]] = relationship(

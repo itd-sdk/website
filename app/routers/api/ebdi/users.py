@@ -13,7 +13,7 @@ from pydantic import BaseModel
 from sqlalchemy import and_, desc, func, or_, text
 
 from app.routers.api.ebdi.protocol import NewUserBody
-from app.routers.api.ebdi.storage import delete_user_comments
+from app.routers.api.ebdi.storage import set_user_exists
 from app.schemas import User
 from app.services.db import Session, get_db, new_session
 from app.services.limiter import get_limiter
@@ -223,10 +223,9 @@ def api_post_ebdi_users_refresh(
             else:
                 setattr(db_user, i, getattr(user, i))
     except (NotFoundError, TargetUserBannedError):
-        db_user.exists = False
-        delete_user_comments(db, db_user.user_id)
+        set_user_exists(db, db_user, False)
     else:
-        db_user.exists = True
+        set_user_exists(db, db_user, True)
     finally:
         db_user.updated_at = datetime.now()
         db.commit()

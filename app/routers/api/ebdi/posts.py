@@ -7,7 +7,8 @@ from itd.enums import ALL
 from itd import Post as ItdPost
 from itd.exceptions import NotFoundError, TargetUserBannedError
 from pydantic import BaseModel
-from sqlalchemy import desc, exists, false, func, or_, select
+from sqlalchemy import and_, cast, desc, exists, false, func, or_, select
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import aliased
 
 from app.logger import get_logger
@@ -118,9 +119,12 @@ class Corrector(BaseModel):
     created_at: datetime | None = None
 
 
-def event_marks(model: type[RedPen] | type[Corrector], marks: list | None) -> list:
-    # ids and actors stay on the server, the page needs only the ranges
-    return [model.model_validate(mark) for mark in marks or []]
+def event_marks(model: type[RedPen] | type[Corrector], marks) -> list:
+    # ids and actors stay on the server, the page needs only the ranges;
+    # some posts hold an object instead of a list, it is no marks
+    if not isinstance(marks, list):
+        return []
+    return [model.model_validate(mark) for mark in marks]
 
 
 class PostResponse(BaseModel):
@@ -221,8 +225,14 @@ def api_get_ebdi_posts(
     if marks:
         query = query.where(
             or_(
-                func.jsonb_array_length(Post.red_pens) > 0,
-                func.jsonb_array_length(Post.correctors) > 0
+                and_(
+                    func.jsonb_typeof(Post.red_pens) == "array",
+                    Post.red_pens != cast([], JSONB)
+                ),
+                and_(
+                    func.jsonb_typeof(Post.correctors) == "array",
+                    Post.correctors != cast([], JSONB)
+                )
             )
         )
     for condition in attachment_filter(Post.attachments, text, photo, video, audio):
@@ -355,6 +365,7 @@ def api_post_ebdi_post_refresh(
             for c in itd_post.correctors
         ]
         post.exists = True
+        post.deleted_at = None
         # comments are refetched only when the counter moved, like the scraper does
         if comments_changed:
             deleted = save_comments(db, post_id, fetch_comment_tree(itd_post), True)
@@ -362,6 +373,8 @@ def api_post_ebdi_post_refresh(
     except (NotFoundError, TargetUserBannedError):
         db.rollback()
         post = db.query(Post).where(Post.post_id == post_id).one()
+        if post.exists:
+            post.deleted_at = func.now()
         post.exists = False
     except Exception as error:
         db.rollback()
