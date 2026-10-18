@@ -113,8 +113,18 @@ function text_links(text) {
     return links;
 }
 
-function render_text(text, { red_pens = [], correctors = [] } = {}) {
+function mark_user_name({ user, user_id }) {
+    return user ? `${user.display_name} (@${user.username})` : user_id;
+}
+
+function render_text(
+    text,
+    { red_pens = [], correctors = [], corrector_authors = [] } = {},
+) {
     text = text || "";
+    const authors = new Map(
+        corrector_authors.map((author) => [author.user_id, author]),
+    );
     const time = (value) => Date.parse(value) || 0;
     // several pens on the same words: the newest one is shown
     const pens = new Map();
@@ -132,10 +142,12 @@ function render_text(text, { red_pens = [], correctors = [] } = {}) {
         // a later red pen on the same words replaces the corrector, like on the site
         const pen = pens.get(`${mark.start}:${mark.end}`);
         if (!pen || time(mark.created_at) > time(pen.created_at)) {
+            const author = authors.get(mark.actor);
             ranges.push({
                 start: mark.start,
                 end: mark.end,
                 type: "corrector",
+                title: author && "Замазано " + mark_user_name(author),
             });
         }
     }
@@ -196,6 +208,12 @@ function render_text(text, { red_pens = [], correctors = [] } = {}) {
         if (types.length) {
             const tag = types.includes("search-match") ? "mark" : "span";
             node = create(tag, types.join(" "), piece);
+            const titles = [
+                ...new Set(covering.map((range) => range.title).filter(Boolean)),
+            ];
+            if (titles.length) {
+                node.title = titles.join("\n");
+            }
         }
         if (!link) {
             anchor = null;
@@ -808,6 +826,48 @@ function render_badges(post) {
     return box;
 }
 
+function render_mark_author(author) {
+    const link = create("a", "post-mark-author");
+    link.target = "_blank";
+    link.href = `https://итд.com/@${author.user?.username ?? author.user_id}`;
+    if (author.user) {
+        link.append(
+            create("span", "post-mark-avatar", author.user.avatar + "️"),
+            create("span", null, author.user.display_name),
+        );
+        link.title = "@" + author.user.username;
+    } else {
+        link.append(missing_id(author.user_id));
+    }
+    return link;
+}
+
+// who used red pens and correctors on the post
+function render_mark_authors(post) {
+    const groups = [
+        ["Исправлено", post.red_pen_authors],
+        ["Замазано", post.corrector_authors],
+    ].filter(([, authors]) => authors?.length);
+    if (!groups.length) {
+        return null;
+    }
+    const box = create("div", "post-marks");
+    for (const [label, authors] of groups) {
+        const line = create("div", "post-marks-line");
+        line.append(create("span", "post-marks-label", label + ":"));
+        authors.forEach((author, i) => {
+            const item = create("span", "post-mark-item");
+            item.append(render_mark_author(author));
+            if (i < authors.length - 1) {
+                item.append(",");
+            }
+            line.append(item);
+        });
+        box.append(line);
+    }
+    return box;
+}
+
 function render_post(post, nested = false, in_dialog = false) {
     const card = create(
         "article",
@@ -831,6 +891,10 @@ function render_post(post, nested = false, in_dialog = false) {
         const content = create("div", "post-content");
         content.append(render_text(post.content, post));
         card.append(content);
+    }
+    const marks = render_mark_authors(post);
+    if (marks) {
+        card.append(marks);
     }
     const attachments = render_attachments(post.attachments);
     if (attachments) {

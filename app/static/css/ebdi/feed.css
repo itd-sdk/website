@@ -966,7 +966,46 @@
 /* corrector: white paint over the words, the words stay readable */
 .corrector {
     background-color: #fff;
-    color: #1e1c1a;
+    color: #a39d96;
+}
+
+.post-marks {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 13px;
+    color: #bbb;
+}
+
+.post-marks-line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 6px;
+}
+
+.post-marks-label {
+    color: #85827e;
+}
+
+.post-mark-item {
+    display: inline-flex;
+    align-items: center;
+}
+
+.post-mark-author {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.post-mark-author,
+.post-mark-author * {
+    color: #fbeadb;
+}
+
+.post-mark-avatar {
+    font-size: 13px;
 }
 
 .text-link,

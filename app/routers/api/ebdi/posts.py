@@ -116,12 +116,40 @@ class Corrector(BaseModel):
 
     start: int
     end: int
+    actor: UUID | None = None
     created_at: datetime | None = None
 
 
+class MarkAuthor(BaseModel):
+    user_id: UUID
+    user: PostAuthor | None  # None if the user is not in the database
+
+
 def event_marks(model: type[RedPen] | type[Corrector], marks: list | None) -> list:
-    # ids and actors stay on the server, the page needs only the ranges
     return [model.model_validate(mark) for mark in marks or []]
+
+
+def mark_actors(post: Post) -> set[str]:
+    actors = set(post.red_pen_authors or [])
+    actors.update(mark["actor"] for mark in post.correctors or [] if mark.get("actor"))
+    return actors
+
+
+def mark_users(db: Session, posts: list[Post]) -> dict[str, User]:
+    """Users who left red pens or correctors on the posts, in one query"""
+    ids = set().union(*(mark_actors(post) for post in posts))
+    if not ids:
+        return {}
+    users = db.query(User).where(User.user_id.in_([UUID(i) for i in ids]))
+    return {str(user.user_id): user for user in users}
+
+
+def mark_authors(ids: list[str], users: dict[str, User]) -> list[MarkAuthor]:
+    # one entry per user, in the order of their first mark
+    return [
+        MarkAuthor(user_id=i, user=to_author(users.get(i)))
+        for i in dict.fromkeys(ids)
+    ]
 
 
 class PostResponse(BaseModel):
@@ -147,6 +175,8 @@ class PostResponse(BaseModel):
     exists: bool
     red_pens: list[RedPen]
     correctors: list[Corrector]
+    red_pen_authors: list[MarkAuthor]
+    corrector_authors: list[MarkAuthor]
     original: "PostResponse | None" = None  # the reposted post, if it is stored
 
 
@@ -158,6 +188,7 @@ def to_response(
     post: Post,
     author: User | None,
     recipient: User | None,
+    users: dict[str, User],
     original: PostResponse | None = None
 ) -> PostResponse:
     return PostResponse(
@@ -185,6 +216,11 @@ def to_response(
         exists=post.exists,
         red_pens=event_marks(RedPen, post.red_pens),
         correctors=event_marks(Corrector, post.correctors),
+        red_pen_authors=mark_authors(post.red_pen_authors or [], users),
+        corrector_authors=mark_authors(
+            [mark["actor"] for mark in post.correctors or [] if mark.get("actor")],
+            users
+        ),
         original=original
     )
 
@@ -246,15 +282,21 @@ def api_get_ebdi_posts(
     original_ids = {
         post.original_post_id for post, _, _ in rows if post.original_post_id
     }
-    originals = {}
+    original_rows = []
     if original_ids:
-        for post, author, recipient in posts_with_users(db).where(
+        original_rows = posts_with_users(db).where(
             Post.post_id.in_(original_ids)
-        ):
-            originals[post.post_id] = to_response(post, author, recipient)
+        ).all()
+    users = mark_users(db, [row[0] for row in rows + original_rows])
+    originals = {
+        post.post_id: to_response(post, author, recipient, users)
+        for post, author, recipient in original_rows
+    }
 
     return [
-        to_response(post, author, recipient, originals.get(post.original_post_id))
+        to_response(
+            post, author, recipient, users, originals.get(post.original_post_id)
+        )
         for post, author, recipient in rows
     ]
 
@@ -277,14 +319,14 @@ def get_post_response(db: Session, post_id: UUID) -> PostResponse:
     if row is None:
         raise HTTPException(404, "post not found")
     post, author, recipient = row
-    original = None
+    found = None
     if post.original_post_id:
         found = (
             posts_with_users(db).where(Post.post_id == post.original_post_id).first()
         )
-        if found:
-            original = to_response(*found)
-    return to_response(post, author, recipient, original)
+    users = mark_users(db, [post, found[0]] if found else [post])
+    original = to_response(*found, users) if found else None
+    return to_response(post, author, recipient, users, original)
 
 
 @router.get("/{post_id}", response_model=PostResponse)
