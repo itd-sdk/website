@@ -22,13 +22,20 @@
 </div>
 
 <div id="content">
-    <div id="feedback">
+    <div class="feedback">
         <img src="/static/icons/vote.svg">
-        <div id="feedback-content">
-            <div id="feedback-title">Обратная связь</div>
-            <div id="feedback-description">Предложите идеи для ЕБДИ или сообщите о баге.</div>
+        <div class="feedback-content">
+            <div class="feedback-title">Обратная связь</div>
+            <div class="feedback-description">Предложите идеи для ЕБДИ или сообщите о баге.</div>
         </div>
         <button onclick="location.href='https://github.com/itd-sdk/website/issues/new'">Перейти <img src="/static/icons/arrow.svg"></button>
+    </div>
+    <div class="feedback">
+        <img src="/static/images/claude.png">
+        <div class="feedback-content">
+            <div class="feedback-title">Осторожно, вайбкод</div>
+            <div class="feedback-description">Почти весь сайт ЕБДИ написан ИИ. Тратить много сил на такой большой проект нет смысла: ИТД постепенно загинается, и заходить сюда будет всё меньше людей.</div>
+        </div>
     </div>
     <nav id="tabs">
         {% for name, title, shown in tabs if shown or name == active_tab %}

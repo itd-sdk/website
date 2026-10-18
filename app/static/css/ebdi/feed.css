@@ -255,7 +255,7 @@
 #list-empty,
 #list-error,
 #list-loader {
-    width: min(700px, 100%);
+    width: fit-content;
     margin: 0 auto;
     box-sizing: border-box;
 }
@@ -403,7 +403,6 @@
     display: flex;
     gap: 6px;
     overflow-x: auto;
-    scroll-snap-type: x proximity;
     padding-bottom: 4px;
 }
 
@@ -417,7 +416,7 @@
     scroll-snap-align: start;
     background-color: #1e1c1a;
     overflow: hidden;
-    cursor: zoom-in;
+    cursor: pointer;
 }
 
 .attachment:focus-visible {
@@ -433,11 +432,6 @@
     max-width: min(668px, calc(100vw - 52px));
     height: 160px;
     object-fit: contain;
-    transition: transform 0.2s;
-}
-
-.attachment:hover .attachment-image {
-    transform: scale(1.03);
 }
 
 /* videos and voice messages keep their own size */

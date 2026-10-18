@@ -1,9 +1,8 @@
 const PAGE_SIZE = 20;
-const ITD = "https://итд.com";
 const IMAGE_RE = /\.(jpe?g|png|gif|webp|avif)(\?|$)/i;
 const VIDEO_RE = /\.(mp4|webm|mov|m4v)(\?|$)/i;
 const AUDIO_RE = /\.(ogg|oga|opus|wav|mp3|m4a|aac|flac)(\?|$)/i;
-// the ITD CDN sends no CORS headers and some of its ogg files are rejected by
+// the ИТД CDN sends no CORS headers and some of its ogg files are rejected by
 // Firefox, voice messages come through the site with the container rebuilt
 const ITD_AUDIO_RE = /^https:\/\/cdn\.(xn--d1ah4a|итд)\.com\/audio\/([^/?#]+)$/;
 
@@ -355,7 +354,7 @@ function comment_url(comment) {
     return `${post}?comment=${comment.comment_id}`;
 }
 
-// avatar, name, @username, the date and a button opening the item in ITD
+// avatar, name, @username, the date and a button opening the item in итд
 function render_header(author, author_id, date, url) {
     const header = create("div", "post-header");
     const avatar = create(
@@ -1171,7 +1170,7 @@ function open_comment_dialog(comment) {
             `Ответы (${format_number(comment.replies_count)})`,
         ),
     );
-    // replies count from ITD may be 0 while some replies are stored, so ask anyway
+    // replies count from итд may be 0 while some replies are stored, so ask anyway
     scroll.append(
         render_replies(comment, { total: Infinity, auto: true, root: scroll }),
     );
@@ -1411,9 +1410,7 @@ async function load_page() {
     // with every kind unchecked nothing can match, no request is made
     if (!["text", "photo", "video", "audio"].some((kind) => state[kind])) {
         has_more = false;
-        show_empty(
-            "Не выбран ни один тип: отметьте текст, фото, видео или голосовые",
-        );
+        show_empty("Не выбран ни один тип");
         return;
     }
     loading = true;
