@@ -339,7 +339,9 @@ function render_words(source) {
     const counts = rows.map((row) => Math.log(row.count));
     const min = Math.min(...counts);
     const range = Math.max(...counts) - min || 1;
-    const sorted = [...rows].sort((a, b) => word_hash(a.word) - word_hash(b.word));
+    const sorted = [...rows].sort(
+        (a, b) => word_hash(a.word) - word_hash(b.word),
+    );
     for (const row of sorted) {
         const weight = (Math.log(row.count) - min) / range;
         const node = document.createElement("span");
@@ -348,7 +350,8 @@ function render_words(source) {
         node.title = `${row.word}: ${format_number(row.count)}`;
         node.style.fontSize = `${13 + weight * 37}px`;
         node.style.fontWeight = weight > 0.6 ? 700 : weight > 0.3 ? 500 : 400;
-        node.style.color = weight > 0.75 ? ACCENT : weight > 0.4 ? COLORS[1] : TEXT;
+        node.style.color =
+            weight > 0.75 ? ACCENT : weight > 0.4 ? COLORS[1] : TEXT;
         cloud.append(node);
     }
 }
@@ -730,7 +733,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     get_el("retry-button").addEventListener("click", load_stats);
     setup_tabs("chart-tabs", ({ unit }) => render_registrations(unit));
     setup_tabs("posts-chart-tabs", ({ unit }) => render_per_day("posts", unit));
-    setup_tabs("comments-chart-tabs", ({ unit }) => render_per_day("comments", unit));
+    setup_tabs("comments-chart-tabs", ({ unit }) =>
+        render_per_day("comments", unit),
+    );
     setup_tabs("words-tabs", ({ source }) => render_words(source));
     await load_clan_names();
     await load_stats();

@@ -179,6 +179,7 @@ def api_get_ebdi_post_comments(
         .add_columns(ranked.c.total)
     ):
         reply = to_response(row)
+        assert reply.parent_id
         previews.setdefault(reply.parent_id, []).append(reply)
         totals[reply.parent_id] = total
 

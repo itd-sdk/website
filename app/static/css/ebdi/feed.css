@@ -6,7 +6,7 @@
     margin: 0 auto;
 }
 
-#feed-controls {
+#controls-box {
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -47,7 +47,6 @@
 
 #sort-button img {
     transform: rotate(90deg);
-    transition: transform 0.2s;
 }
 
 #sort-button[aria-expanded="true"] img {
@@ -149,36 +148,17 @@
     -webkit-appearance: none;
 }
 
-.feed-search-clear {
-    flex-shrink: 0;
-    width: 28px;
-    height: 28px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0;
-    background: none;
-    opacity: 0.8;
-    transition: opacity 0.2s;
-}
-
 .feed-search-clear::after,
 #post-dialog-close::after,
+.feed-search-clear::after,
 .audio-play::after {
     display: none;
 }
 
-/* keeps the field width when there is nothing to clear */
-.feed-search-clear-empty {
-    visibility: hidden;
-}
-
-.feed-search-clear:hover {
-    opacity: 1;
-}
-
-.feed-search-clear img {
-    width: 24px;
+.feed-search-clear {
+    width: 36px;
+    height: 36px;
+    justify-content: center;
 }
 
 .feed-candidates {
@@ -322,12 +302,6 @@
 
 .post-open {
     display: flex;
-    opacity: 0.6;
-    transition: opacity 0.2s;
-}
-
-.post-open:hover {
-    opacity: 1;
 }
 
 .post-open img {
@@ -486,13 +460,20 @@
     flex-wrap: wrap;
     gap: 6px 20px;
     font-size: 14px;
-    color: #bbb;
 }
 
 .post-stat {
     display: flex;
     align-items: center;
     gap: 6px;
+}
+.post-stat span {
+    color: #85827e;
+    font-size: 14px;
+}
+.comment-side > .post-stat img {
+    width: 14px;
+    height: 14px;
 }
 
 .post-stats-right {
@@ -515,7 +496,7 @@
 
 .comment-body {
     display: flex;
-    align-items: flex-start;
+    align-items: flex-end;
     gap: 12px;
 }
 
@@ -530,15 +511,6 @@
     flex-shrink: 0;
     font-size: 13px;
     color: #bbb;
-}
-
-.comment-side .post-stat {
-    gap: 4px;
-}
-
-.comment-side .post-stat svg {
-    width: 14px;
-    height: 14px;
 }
 
 .clickable {
@@ -593,11 +565,6 @@
 
 .comment-replies-more:hover {
     background-color: #494037;
-}
-
-.comment-replies-more:disabled {
-    opacity: 0.6;
-    cursor: default;
 }
 
 .comment-replies-loader {

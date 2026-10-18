@@ -3,6 +3,7 @@
 {% block head %}
 <link rel="stylesheet" href="/static/css/ebdi/style.css">
 <link rel="stylesheet" href="/static/css/ebdi/feed.css">
+<script src="https://unpkg.com/wavesurfer.js@8"></script>
 <script src="/static/js/ebdi/feed.js" data-kind="posts"></script>
 <meta name="description" content="Единая База Данных ИТД: лента постов, самые популярные посты по лайкам, репостам, комментариям и просмотрам">
 {% endblock %}
@@ -34,14 +35,14 @@
 
     <div id="total-objects" hidden>Всего в базе данных <span id="total-objects-value">0</span> постов</div>
 
-    <div id="feed-controls">
+    <div id="controls-box">
         <div id="feed-controls-row">
             <div id="sort-dropdown">
                 <span id="sort-label">Сортировка</span>
                 <div id="sort-picker">
                     <button type="button" id="sort-button" aria-haspopup="listbox" aria-expanded="false">
                         <span id="sort-value"></span>
-                        <img src="/static/icons/arrow.svg" alt="">
+                        <img src="/static/icons/arrow.svg">
                     </button>
                     <div id="sort-options" role="listbox" hidden>
                         <div role="option" data-value="created">Дата создания</div>

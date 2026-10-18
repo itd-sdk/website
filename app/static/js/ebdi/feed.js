@@ -3,15 +3,6 @@ const ITD = "https://итд.com";
 const IMAGE_RE = /\.(jpe?g|png|gif|webp|avif)(\?|$)/i;
 const VIDEO_RE = /\.(mp4|webm|mov|m4v)(\?|$)/i;
 const AUDIO_RE = /\.(ogg|oga|opus|wav|mp3|m4a|aac|flac)(\?|$)/i;
-const WAVESURFER_URL = "https://cdn.jsdelivr.net/npm/wavesurfer.js@7.12.12/dist/wavesurfer.esm.js";
-const ICONS = {
-    likes: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="none" width="20" height="20"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 4.6a3.7 3.7 0 0 0-5.2-.9C3.2 5 2.4 7.6 3.6 10.2 4.8 12.7 10 17 10 17s5.3-4.3 6.5-6.8c1.2-2.6 0-5.2-1.6-6.5s-4-.8-4.9.9"></path></svg>',
-    comments: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 20" width="20" height="20"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.0" d="M10 17a7 7 0 1 0-6.2-3.7L3 17l3.7-.8a7 7 0 0 0 3.3.8"></path></svg>',
-    reposts: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 20" width="20" height="20"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.0" d="M4 9V8a3 3 0 0 1 3-3h9m-3 3 3-3-3-3M16 11v1a3 3 0 0 1-3 3H4m3-3-3 3 3 3"></path></svg>',
-    views: '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 20 20"><path stroke="currentColor" stroke-width="1.5" d="M2 10s2.91-6 8-6 8 6 8 6-2.91 6-8 6-8-6-8-6Z"></path><path stroke="currentColor" stroke-width="1.5" d="M10 12a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"></path></svg>',
-    play: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" width="18" height="18"><path fill="currentColor" d="M6 4.2v11.6a.8.8 0 0 0 1.2.7l9.2-5.8a.8.8 0 0 0 0-1.4L7.2 3.5a.8.8 0 0 0-1.2.7"></path></svg>',
-    pause: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" width="18" height="18"><rect fill="currentColor" x="5" y="4" width="3.5" height="12" rx="1"></rect><rect fill="currentColor" x="11.5" y="4" width="3.5" height="12" rx="1"></rect></svg>',
-};
 
 // posts and comments tabs share this file, the script tag tells which one it is
 const KIND = document.currentScript.dataset.kind;
@@ -55,16 +46,6 @@ function create(tag, class_name, text) {
     return node;
 }
 
-// icons are constants from this file, never data from the api
-function icon_button(class_name, icon, title) {
-    const button = create("button", class_name);
-    button.type = "button";
-    button.title = title;
-    button.setAttribute("aria-label", title);
-    button.innerHTML = ICONS[icon];
-    return button;
-}
-
 function icon_image(name) {
     const image = create("img");
     image.src = `/static/icons/${name}.svg`;
@@ -84,8 +65,13 @@ function highlighted(text) {
         return fragment;
     }
     let last = 0;
-    for (const match of text.matchAll(new RegExp(escape_regexp(state.q), "giu"))) {
-        fragment.append(text.slice(last, match.index), create("mark", "search-match", match[0]));
+    for (const match of text.matchAll(
+        new RegExp(escape_regexp(state.q), "giu"),
+    )) {
+        fragment.append(
+            text.slice(last, match.index),
+            create("mark", "search-match", match[0]),
+        );
         last = match.index + match[0].length;
     }
     fragment.append(text.slice(last));
@@ -120,7 +106,7 @@ function format_duration(seconds) {
 }
 
 function profile_url(user) {
-    return `${ITD}/@${user.username}`;
+    return `https://итд.com/@${user.username}`;
 }
 
 function toggles() {
@@ -151,40 +137,50 @@ function write_url_state() {
     history.replaceState(null, "", query ? `?${query}` : location.pathname);
 }
 
-function user_input_text() {
-    return state.user ? "@" + state.user : "";
-}
-
 function apply_state_to_controls() {
     update_sort_dropdown();
     for (const toggle of toggles()) {
         toggle.checked = state[toggle.dataset.state];
     }
-    get_el("user-input").value = user_input_text();
+    get_el("user-input").value = state.user;
     get_el("query-input").value = state.q;
     update_clear_buttons();
 }
 
 function post_url(post_id, author, author_id) {
-    return `${ITD}/@${author ? author.username : author_id}/post/${post_id}`;
+    return `https://итд.com/@${author ? author.username : author_id}/post/${post_id}`;
 }
 
 function comment_url(comment) {
-    const post = post_url(comment.post_id, comment.post_author, comment.post_author?.user_id);
+    const post = post_url(
+        comment.post_id,
+        comment.post_author,
+        comment.post_author?.user_id,
+    );
     return `${post}?comment=${comment.comment_id}`;
 }
 
 // avatar, name, @username, the date and a button opening the item in ITD
 function render_header(author, author_id, date, url) {
     const header = create("div", "post-header");
-    const avatar = create("div", "row-avatar", author ? author.avatar + "️" : "?");
+    const avatar = create(
+        "div",
+        "row-avatar",
+        author ? author.avatar + "️" : "?",
+    );
     header.append(avatar);
 
     const names = create("div", "post-names");
     const name = create("a", "post-display-name");
     name.target = "_blank";
-    name.href = `${ITD}/@${author ? author.username : author_id}`;
-    name.append(create("span", null, author ? author.display_name : "Неизвестный автор"));
+    name.href = `https://итд.com/@${author ? author.username : author_id}`;
+    name.append(
+        create(
+            "span",
+            null,
+            author ? author.display_name : "Неизвестный автор",
+        ),
+    );
     if (author?.verified) {
         const icon = create("img", "post-verified");
         icon.src = "/static/icons/verified.svg";
@@ -238,19 +234,6 @@ async function init_waveform(tile) {
     const wave = tile.querySelector(".audio-wave");
     const play = tile.querySelector(".audio-play");
     const time = tile.querySelector(".audio-time");
-    let WaveSurfer;
-    try {
-        WaveSurfer = (await import(WAVESURFER_URL)).default;
-    } catch (error) {
-        // without the library the native player still plays the file
-        console.warn("wavesurfer import failed", error);
-        const audio = create("audio", "audio-native");
-        audio.controls = true;
-        audio.preload = "none";
-        audio.src = url;
-        tile.replaceChildren(audio);
-        return;
-    }
     const player = WaveSurfer.create({
         container: wave,
         height: 44,
@@ -262,18 +245,23 @@ async function init_waveform(tile) {
         barRadius: 2,
         normalize: true,
     });
-    const set_icon = (name) => (play.innerHTML = ICONS[name]);
-    player.on("ready", (duration) => (time.textContent = format_duration(duration)));
-    player.on("timeupdate", (current) => (time.textContent = format_duration(current)));
+    player.on(
+        "ready",
+        (duration) => (time.textContent = format_duration(duration)),
+    );
+    player.on(
+        "timeupdate",
+        (current) => (time.textContent = format_duration(current)),
+    );
     player.on("play", () => {
         if (playing && playing != player) {
             playing.pause();
         }
         playing = player;
-        set_icon("pause");
+        play.src = "/static/icons/pause.svg";
     });
-    player.on("pause", () => set_icon("play"));
-    player.on("finish", () => set_icon("play"));
+    player.on("pause", () => (play.src = "/static/icons/play.svg"));
+    player.on("finish", () => (play.src = "/static/icons/play.svg"));
     play.addEventListener("click", () => player.playPause());
     play.disabled = false;
     try {
@@ -308,9 +296,14 @@ function stop_playing() {
 function render_audio(url) {
     const tile = create("div", "attachment attachment-audio");
     tile.dataset.url = url;
-    const play = icon_button("audio-play", "play", "Воспроизвести");
+    const play = create("img", "audio-play");
+    play.src = "/static/icons/play.svg";
     play.disabled = true;
-    tile.append(play, create("div", "audio-wave"), create("span", "audio-time", "0:00"));
+    tile.append(
+        play,
+        create("div", "audio-wave"),
+        create("span", "audio-time", "0:00"),
+    );
     observe_waveform(tile);
     return tile;
 }
@@ -361,28 +354,28 @@ function render_poll(post) {
     return poll;
 }
 
-function render_stat(value, icon, title) {
+function render_stat(value, name) {
     const item = create("div", "post-stat");
-    item.title = title;
-    item.innerHTML = ICONS[icon];
+    const icon = create("img");
+    icon.src = `/static/icons/${name}.svg`;
+    item.append(icon);
     item.append(create("span", null, format_number(value)));
     return item;
 }
 
-// likes comments reposts ........ clan views
 function render_stats(post) {
     const stats = create("div", "post-stats");
-    stats.append(render_stat(post.likes_count, "likes", "Лайки"));
-    stats.append(render_stat(post.comments_count, "comments", "Комментарии"));
-    stats.append(render_stat(post.reposts_count, "reposts", "Репосты"));
+    stats.append(render_stat(post.likes_count, "like"));
+    stats.append(render_stat(post.comments_count, "comment"));
+    stats.append(render_stat(post.reposts_count, "repost"));
 
     const right = create("div", "post-stats-right");
     if (post.dominant) {
         const clan = create("div", "post-dominant", post.dominant + "️");
-        clan.title = "Доминирующий клан";
+        clan.title = "Пост захвачен";
         right.append(clan);
     }
-    right.append(render_stat(post.views_count, "views", "Просмотры"));
+    right.append(render_stat(post.views_count, "view"));
     stats.append(right);
     return stats;
 }
@@ -408,13 +401,22 @@ function render_badges(post) {
         box.append(badge);
     }
     if (post.edited_at) {
-        box.append(create("span", "post-badge", `Изменён ${format_date(post.edited_at)}`));
+        box.append(
+            create(
+                "span",
+                "post-badge",
+                `Изменён ${format_date(post.edited_at)}`,
+            ),
+        );
     }
     return box;
 }
 
 function render_post(post, nested = false, in_dialog = false) {
-    const card = create("article", nested ? "post-card post-original" : "post-card");
+    const card = create(
+        "article",
+        nested ? "post-card post-original" : "post-card",
+    );
     if (!in_dialog) {
         make_clickable(card, () => open_post_dialog(post));
     }
@@ -442,7 +444,13 @@ function render_post(post, nested = false, in_dialog = false) {
         if (post.original) {
             card.append(render_post(post.original, true, in_dialog));
         } else {
-            card.append(create("div", "post-original post-original-missing", "Оригинальный пост не сохранён в базе"));
+            card.append(
+                create(
+                    "div",
+                    "post-original post-original-missing",
+                    "Оригинальный пост не сохранён в базе",
+                ),
+            );
         }
     }
     card.append(render_stats(post));
@@ -454,7 +462,12 @@ function make_clickable(card, on_click) {
     card.classList.add("clickable");
     card.addEventListener("click", (event) => {
         const target = event.target;
-        if (target.closest("a, button, video, audio, .attachment, .comment-replies") || target.closest(".clickable") != card) {
+        if (
+            target.closest(
+                "a, button, video, audio, .attachment, .comment-replies",
+            ) ||
+            target.closest(".clickable") != card
+        ) {
             return;
         }
         if (window.getSelection().toString()) {
@@ -466,8 +479,14 @@ function make_clickable(card, on_click) {
 
 // replies of a comment, loaded by THREAD_BATCH; under a comment of the post
 // dialog with a button, in the comment dialog automatically while scrolling
-function render_replies(comment, { preview = [], total = comment.replies_count, auto = false, root = null }) {
-    const box = create("div", auto ? "comment-replies comment-replies-flat" : "comment-replies");
+function render_replies(
+    comment,
+    { preview = [], total = comment.replies_count, auto = false, root = null },
+) {
+    const box = create(
+        "div",
+        auto ? "comment-replies comment-replies-flat" : "comment-replies",
+    );
     const list = create("div", "comment-replies-list");
     box.append(list);
     let loaded = 0;
@@ -485,7 +504,7 @@ function render_replies(comment, { preview = [], total = comment.replies_count, 
     const sentinel = create("div", "sentinel");
     const loader = create("div", "loader-spinner comment-replies-loader");
     loader.hidden = true;
-    const empty = create("div", "post-dialog-empty", "Ответов в базе нет");
+    const empty = create("div", "post-dialog-empty", "Нет ответов");
     empty.hidden = true;
     const update = () => {
         const left = total - loaded;
@@ -503,8 +522,13 @@ function render_replies(comment, { preview = [], total = comment.replies_count, 
         more.disabled = true;
         loader.hidden = false;
         try {
-            const params = new URLSearchParams({ offset: loaded, limit: THREAD_BATCH });
-            const res = await fetch(`/api/ebdi/comments/${comment.comment_id}/replies?${params}`);
+            const params = new URLSearchParams({
+                offset: loaded,
+                limit: THREAD_BATCH,
+            });
+            const res = await fetch(
+                `/api/ebdi/comments/${comment.comment_id}/replies?${params}`,
+            );
             if (!res.ok) {
                 throw new Error(`status ${res.status}`);
             }
@@ -538,7 +562,8 @@ function render_replies(comment, { preview = [], total = comment.replies_count, 
     if (auto) {
         box.append(sentinel);
         observer = new IntersectionObserver(
-            (entries) => entries.some((entry) => entry.isIntersecting) && load(),
+            (entries) =>
+                entries.some((entry) => entry.isIntersecting) && load(),
             { root, rootMargin: "400px" },
         );
         observer.observe(sentinel);
@@ -547,12 +572,15 @@ function render_replies(comment, { preview = [], total = comment.replies_count, 
     return box;
 }
 
-// @reply_to text .............. likes
 function render_comment_body(comment, show_replies) {
     const body = create("div", "comment-body");
     const text = create("div", "post-content comment-text");
     if (comment.parent_id && comment.reply_to) {
-        const link = create("a", "comment-reply-to", "@" + comment.reply_to.username);
+        const link = create(
+            "a",
+            "comment-reply-to",
+            "@" + comment.reply_to.username,
+        );
         link.href = profile_url(comment.reply_to);
         link.target = "_blank";
         text.append(link, " ");
@@ -561,10 +589,10 @@ function render_comment_body(comment, show_replies) {
     body.append(text);
 
     const side = create("div", "comment-side");
-    side.append(render_stat(comment.likes_count, "likes", "Лайки"));
     if (show_replies) {
-        side.append(render_stat(comment.replies_count, "comments", "Ответы"));
+        side.append(render_stat(comment.replies_count, "comment", "Ответы"));
     }
+    side.append(render_stat(comment.likes_count, "like", "Лайки"));
     body.append(side);
     return body;
 }
@@ -579,14 +607,25 @@ function render_comment(comment, in_thread = false, in_dialog = false) {
     if (comment.author && !comment.author.exists) {
         card.classList.add("post-deleted-author");
     }
-    card.append(render_header(comment.author, comment.author_id, comment.created_at || comment.found_at, comment_url(comment)));
+    card.append(
+        render_header(
+            comment.author,
+            comment.author_id,
+            comment.created_at || comment.found_at,
+            comment_url(comment),
+        ),
+    );
 
     const badges = create("div", "post-badges");
     if (!comment.exists) {
-        badges.append(create("span", "post-badge post-badge-deleted", "Удалён"));
+        badges.append(
+            create("span", "post-badge post-badge-deleted", "Удалён"),
+        );
     }
     if (!comment.post_exists && !in_thread) {
-        badges.append(create("span", "post-badge post-badge-deleted", "Пост удалён"));
+        badges.append(
+            create("span", "post-badge post-badge-deleted", "Пост удалён"),
+        );
     }
     if (badges.children.length) {
         card.append(badges);
@@ -656,16 +695,30 @@ function open_dialog() {
 function open_comment_dialog(comment) {
     const { scroll } = open_dialog();
     scroll.append(render_comment(comment, false, true));
-    scroll.append(create("div", "dialog-section-title", `Ответы (${format_number(comment.replies_count)})`));
+    scroll.append(
+        create(
+            "div",
+            "dialog-section-title",
+            `Ответы (${format_number(comment.replies_count)})`,
+        ),
+    );
     // replies count from ITD may be 0 while some replies are stored, so ask anyway
-    scroll.append(render_replies(comment, { total: Infinity, auto: true, root: scroll }));
+    scroll.append(
+        render_replies(comment, { total: Infinity, auto: true, root: scroll }),
+    );
     scroll.scrollTop = 0;
 }
 
 function open_post_dialog(post) {
     const { scroll, token } = open_dialog();
     scroll.append(render_post(post, false, true));
-    scroll.append(create("div", "dialog-section-title", `Комментарии (${format_number(post.comments_count)})`));
+    scroll.append(
+        create(
+            "div",
+            "dialog-section-title",
+            `Комментарии (${format_number(post.comments_count)})`,
+        ),
+    );
     const list = create("div", "post-dialog-comments");
     const empty = create("div", "post-dialog-empty", "Комментариев в базе нет");
     empty.hidden = true;
@@ -684,7 +737,9 @@ function open_post_dialog(post) {
         loader.hidden = false;
         try {
             const params = new URLSearchParams({ offset, limit: THREAD_BATCH });
-            const res = await fetch(`/api/ebdi/comments/post/${post.post_id}?${params}`);
+            const res = await fetch(
+                `/api/ebdi/comments/post/${post.post_id}?${params}`,
+            );
             if (!res.ok) {
                 throw new Error(`status ${res.status}`);
             }
@@ -695,7 +750,12 @@ function open_post_dialog(post) {
             for (const comment of comments) {
                 const card = render_comment(comment, true);
                 if (comment.replies_total) {
-                    card.append(render_replies(comment, { preview: comment.replies, total: comment.replies_total }));
+                    card.append(
+                        render_replies(comment, {
+                            preview: comment.replies,
+                            total: comment.replies_total,
+                        }),
+                    );
                 }
                 list.append(card);
             }
@@ -716,10 +776,13 @@ function open_post_dialog(post) {
             observer.observe(sentinel);
         }
     };
-    const observer = new IntersectionObserver((entries) => entries.some((entry) => entry.isIntersecting) && load(), {
-        root: scroll,
-        rootMargin: "600px",
-    });
+    const observer = new IntersectionObserver(
+        (entries) => entries.some((entry) => entry.isIntersecting) && load(),
+        {
+            root: scroll,
+            rootMargin: "600px",
+        },
+    );
     dialog_observers.push(observer);
     scroll.scrollTop = 0;
     observer.observe(sentinel);
@@ -739,7 +802,11 @@ async function load_page() {
     get_el("list-loader").hidden = false;
     get_el("list-error").hidden = true;
     try {
-        const params = new URLSearchParams({ ...state, offset, limit: PAGE_SIZE });
+        const params = new URLSearchParams({
+            ...state,
+            offset,
+            limit: PAGE_SIZE,
+        });
         const res = await fetch(`${FEED.api}?${params}`);
         if (token != request_token) {
             return;
@@ -885,7 +952,8 @@ function setup_sort_dropdown() {
 
 function update_clear_buttons() {
     for (const box of document.querySelectorAll(".feed-search-box")) {
-        box.querySelector(".feed-search-clear").classList.toggle("feed-search-clear-empty", !box.querySelector("input").value);
+        box.querySelector(".feed-search-clear").hidden =
+            !box.querySelector("input").value;
     }
 }
 
@@ -905,7 +973,7 @@ function hide_candidates() {
 
 function set_user(username) {
     hide_candidates();
-    get_el("user-input").value = username ? "@" + username : "";
+    get_el("user-input").value = username;
     update_clear_buttons();
     if (username != state.user) {
         state.user = username;
@@ -918,7 +986,13 @@ function render_candidates(users) {
     const box = get_el("user-candidates");
     box.replaceChildren();
     if (!users.length) {
-        box.append(create("div", "feed-candidate feed-candidate-empty", "Никого не найдено"));
+        box.append(
+            create(
+                "div",
+                "feed-candidate feed-candidate-empty",
+                "Никого не найдено",
+            ),
+        );
     }
     for (const user of users) {
         const item = create("div", "feed-candidate");
@@ -941,7 +1015,9 @@ function render_candidates(users) {
 async function fetch_candidates(query) {
     const token = ++candidates_token;
     try {
-        const res = await fetch("/api/ebdi/users/search?" + new URLSearchParams({ query }));
+        const res = await fetch(
+            "/api/ebdi/users/search?" + new URLSearchParams({ query }),
+        );
         if (!res.ok) {
             console.warn(`user search failed status=${res.status}`);
             return;
@@ -965,7 +1041,10 @@ function setup_user_search() {
             set_user("");
             return;
         }
-        candidates_timer = setTimeout(() => fetch_candidates(query), SEARCH_DELAY);
+        candidates_timer = setTimeout(
+            () => fetch_candidates(query),
+            SEARCH_DELAY,
+        );
     });
     input.addEventListener("keydown", (event) => {
         if (event.key == "Enter" && candidates.length) {
@@ -978,7 +1057,7 @@ function setup_user_search() {
         if (!get_el("user-search-box").contains(event.target)) {
             // text that was typed but not picked does not stay in the field
             hide_candidates();
-            input.value = user_input_text();
+            input.value = state.user;
             update_clear_buttons();
         }
     });

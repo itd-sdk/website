@@ -150,9 +150,7 @@ def api_get_ebdi_posts(
     if not deleted:
         query = query.where(Post.exists.is_(True))
     if q.strip():
-        query = query.where(
-            Post.content.ilike(ilike_pattern(q.strip()), escape="\\")
-        )
+        query = query.where(Post.content.ilike(ilike_pattern(q.strip()), escape="\\"))
     if user.strip():
         query = query.where(Post.author_id.in_(matching_users(user)))
     rows = (
@@ -163,7 +161,9 @@ def api_get_ebdi_posts(
     )
 
     # reposted posts of the whole page in one query
-    original_ids = {post.original_post_id for post, _, _ in rows if post.original_post_id}
+    original_ids = {
+        post.original_post_id for post, _, _ in rows if post.original_post_id
+    }
     originals = {}
     if original_ids:
         for post, author, recipient in posts_with_users(db).where(
