@@ -9,6 +9,7 @@ from sqlalchemy.orm import aliased
 
 from app.routers.api.ebdi.posts import (
     PostAuthor,
+    attachment_filter,
     attachment_urls,
     ilike_pattern,
     matching_users,
@@ -42,7 +43,8 @@ PREVIEW_LENGTH = 250
 class Preview(BaseModel):
     """Short view of the post or the parent comment a comment belongs to"""
 
-    author: PostAuthor | None
+    author_id: UUID
+    author: PostAuthor | None  # None if the author is not in the database
     content: str  # first PREVIEW_LENGTH characters
     truncated: bool
 
@@ -53,6 +55,7 @@ class CommentResponse(BaseModel):
     parent_id: UUID | None  # set for replies
     author_id: UUID
     author: PostAuthor | None
+    reply_to_id: UUID | None
     reply_to: PostAuthor | None  # user being replied to
     post_author: PostAuthor | None  # for the link to the post
     post_exists: bool
@@ -88,6 +91,7 @@ def to_response(row) -> CommentResponse:
         parent_id=comment.parent_id,
         author_id=comment.author_id,
         author=to_author(author),
+        reply_to_id=comment.reply_to_id,
         reply_to=to_author(reply_to),
         post_author=to_author(post_author),
         post_exists=post_exists,
@@ -110,6 +114,9 @@ def api_get_ebdi_comments(
     user: str = Query("", max_length=100),  # author's username
     deleted: bool = False,  # deleted comments
     deleted_posts: bool = False,  # comments under deleted posts
+    photo: bool = True,  # comments with attachments of these kinds
+    video: bool = True,
+    audio: bool = True,
     offset: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=50),
     db: Session = Depends(get_db)
@@ -119,6 +126,8 @@ def api_get_ebdi_comments(
         query = query.where(Comment.exists.is_(True))
     if not deleted_posts:
         query = query.where(Post.exists.is_(True))
+    for condition in attachment_filter(Comment.attachments, photo, video, audio):
+        query = query.where(condition)
     if q.strip():
         query = query.where(
             Comment.content.ilike(ilike_pattern(q.strip()), escape="\\")
@@ -142,6 +151,7 @@ def previews(db: Session, model: type[Post] | type[Comment], key, ids: set[UUID]
     rows = (
         db.query(
             key,
+            model.author_id,
             func.left(model.content, PREVIEW_LENGTH),
             func.length(model.content) > PREVIEW_LENGTH,
             User
@@ -150,8 +160,13 @@ def previews(db: Session, model: type[Post] | type[Comment], key, ids: set[UUID]
         .where(key.in_(ids))
     )
     return {
-        id: Preview(author=to_author(author), content=content, truncated=truncated)
-        for id, content, truncated, author in rows
+        id: Preview(
+            author_id=author_id,
+            author=to_author(author),
+            content=content,
+            truncated=truncated
+        )
+        for id, author_id, content, truncated, author in rows
     }
 
 

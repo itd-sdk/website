@@ -7,7 +7,9 @@ from itd.enums import ALL
 from itd import Post as ItdPost
 from itd.exceptions import NotFoundError, TargetUserBannedError
 from pydantic import BaseModel
-from sqlalchemy import desc, func, select
+from sqlalchemy import column as sql_column
+from sqlalchemy import desc, exists, func, literal_column, select
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import aliased
 
 from app.logger import get_logger
@@ -45,6 +47,37 @@ def ilike_pattern(text: str) -> str:
     return f"%{escaped}%"
 
 
+# attachments are urls, their kind is told by the extension like on the page
+ATTACHMENT_KINDS = {
+    "photo": r"\.(jpe?g|png|gif|webp|avif)(\?|$)",
+    "video": r"\.(mp4|webm|mov|m4v)(\?|$)",
+    "audio": r"\.(ogg|oga|opus|wav|mp3|m4a|aac|flac)(\?|$)"
+}
+
+
+def attachment_filter(column, photo: bool, video: bool, audio: bool) -> list:
+    """Conditions hiding items with attachments of the unchecked kinds"""
+    conditions = []
+    for kind, shown in (("photo", photo), ("video", video), ("audio", audio)):
+        if shown:
+            continue
+        items = func.jsonb_array_elements(column).table_valued(
+            sql_column("value", JSONB)
+        )
+        # older posts kept whole attachment objects instead of urls
+        url = func.coalesce(
+            items.c.value["url"].astext, items.c.value.op("#>>")(literal_column("'{}'"))
+        )
+        conditions.append(
+            ~exists(
+                select(1)
+                .select_from(items)
+                .where(url.regexp_match(ATTACHMENT_KINDS[kind], "i"))
+            )
+        )
+    return conditions
+
+
 def matching_users(username: str):
     """user_id of users with this username, deleted accounts may share it"""
     return select(User.user_id).where(
@@ -60,6 +93,37 @@ class PostAuthor(BaseModel):
     avatar: str
     verified: bool
     exists: bool
+
+
+class RedPen(BaseModel):
+    """Word struck out and replaced, offsets are utf-16 like in javascript"""
+
+    start: int
+    end: int
+    replacement: str
+    created_at: datetime | None
+
+
+class Corrector(BaseModel):
+    """Word painted over"""
+
+    start: int
+    end: int
+    created_at: datetime | None
+
+
+def event_marks(model: type[RedPen] | type[Corrector], marks: list) -> list:
+    # stored as the scraper got them, camelCase from the api or snake_case
+    result = []
+    for mark in marks or []:
+        if not isinstance(mark, dict):
+            continue
+        created_at = mark.get("created_at", mark.get("createdAt"))
+        try:
+            result.append(model.model_validate({**mark, "created_at": created_at}))
+        except ValueError:
+            continue
+    return result
 
 
 class PostResponse(BaseModel):
@@ -83,6 +147,8 @@ class PostResponse(BaseModel):
     wall_recipient_id: UUID | None
     wall_recipient: PostAuthor | None  # owner of the wall the post was left on
     exists: bool
+    red_pens: list[RedPen]
+    correctors: list[Corrector]
     original: "PostResponse | None" = None  # the reposted post, if it is stored
 
 
@@ -128,6 +194,8 @@ def to_response(
         if post.wall_recipient_id != post.author_id
         else None,
         exists=post.exists,
+        red_pens=event_marks(RedPen, post.red_pens),
+        correctors=event_marks(Corrector, post.correctors),
         original=original
     )
 
@@ -149,6 +217,9 @@ def api_get_ebdi_posts(
     q: str = Query("", max_length=200),  # text in the content
     user: str = Query("", max_length=100),  # author's username
     deleted: bool = False,
+    photo: bool = True,  # posts with attachments of these kinds
+    video: bool = True,
+    audio: bool = True,
     offset: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=50),
     db: Session = Depends(get_db)
@@ -156,6 +227,8 @@ def api_get_ebdi_posts(
     query = posts_with_users(db)
     if not deleted:
         query = query.where(Post.exists.is_(True))
+    for condition in attachment_filter(Post.attachments, photo, video, audio):
+        query = query.where(condition)
     if q.strip():
         query = query.where(Post.content.ilike(ilike_pattern(q.strip()), escape="\\"))
     if user.strip():
