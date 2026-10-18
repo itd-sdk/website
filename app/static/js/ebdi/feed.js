@@ -234,6 +234,15 @@ async function init_waveform(tile) {
     const wave = tile.querySelector(".audio-wave");
     const play = tile.querySelector(".audio-play");
     const time = tile.querySelector(".audio-time");
+    if (typeof WaveSurfer == "undefined") {
+        // the library did not load, the native player still plays the file
+        const audio = create("audio", "audio-native");
+        audio.controls = true;
+        audio.preload = "metadata";
+        audio.src = url;
+        tile.replaceChildren(audio);
+        return;
+    }
     const player = WaveSurfer.create({
         container: wave,
         height: 44,
@@ -294,52 +303,165 @@ function stop_playing() {
 }
 
 function render_audio(url) {
-    const tile = create("div", "attachment attachment-audio");
-    tile.dataset.url = url;
+    const player = create("div", "audio-player");
+    player.dataset.url = url;
     const play = create("img", "audio-play");
     play.src = "/static/icons/play.svg";
-    play.disabled = true;
-    tile.append(
+    player.append(
         play,
         create("div", "audio-wave"),
         create("span", "audio-time", "0:00"),
     );
-    observe_waveform(tile);
-    return tile;
+    observe_waveform(player);
+    return player;
 }
 
-// every attachment is a tile of the same size in one horizontally scrolled row
+// images make one row of equal tiles opening the viewer,
+// videos, voice messages and other files follow at their own size
 function render_attachments(urls) {
     const box = create("div", "post-attachments");
+    const images = create("div", "post-images");
+    const media = create("div", "post-media");
+    urls = urls.filter((url) => /^https?:\/\//.test(url));
+    const image_urls = urls.filter((url) => IMAGE_RE.test(url));
     for (const url of urls) {
-        if (!/^https?:\/\//.test(url)) {
-            continue;
-        }
         if (IMAGE_RE.test(url)) {
-            const link = create("a", "attachment");
-            link.href = url;
-            link.target = "_blank";
+            const index = images.children.length;
+            const tile = create("div", "attachment");
+            tile.tabIndex = 0;
+            tile.setAttribute("role", "button");
+            tile.title = "Открыть изображение";
             const image = create("img", "attachment-image");
             image.loading = "lazy";
+            image.alt = "";
             image.src = url;
-            link.append(image);
-            box.append(link);
+            tile.append(image);
+            tile.addEventListener("click", () =>
+                open_lightbox(image_urls, index),
+            );
+            tile.addEventListener("keydown", (event) => {
+                if (event.key == "Enter" || event.key == " ") {
+                    event.preventDefault();
+                    open_lightbox(image_urls, index);
+                }
+            });
+            images.append(tile);
         } else if (VIDEO_RE.test(url)) {
-            const video = create("video", "attachment attachment-video");
+            const video = create("video", "post-video");
             video.controls = true;
+            video.playsInline = true;
             video.preload = "metadata";
             video.src = url;
-            box.append(video);
+            // a codec the browser cannot play leaves a link instead of a dead player
+            video.addEventListener("error", () => {
+                const link = create("a", "post-file", "Открыть видео");
+                link.href = url;
+                link.target = "_blank";
+                video.replaceWith(link);
+            });
+            media.append(video);
         } else if (AUDIO_RE.test(url)) {
-            box.append(render_audio(url));
+            media.append(render_audio(url));
         } else {
-            const link = create("a", "attachment attachment-file", "Вложение");
+            const link = create("a", "post-file", "Вложение");
             link.href = url;
             link.target = "_blank";
-            box.append(link);
+            media.append(link);
+        }
+    }
+    for (const part of [images, media]) {
+        if (part.children.length) {
+            box.append(part);
         }
     }
     return box;
+}
+
+let lightbox_urls = [];
+let lightbox_index = 0;
+
+function build_lightbox() {
+    const box = create("dialog");
+    box.id = "lightbox";
+    const image = create("img");
+    image.id = "lightbox-image";
+    image.alt = "";
+    image.draggable = false;
+    const button = (class_name, icon, title, on_click) => {
+        const node = create("button", class_name);
+        node.type = "button";
+        node.title = title;
+        node.setAttribute("aria-label", title);
+        node.append(icon_image(icon));
+        node.addEventListener("click", on_click);
+        return node;
+    };
+    const counter = create("div");
+    counter.id = "lightbox-counter";
+    box.append(
+        image,
+        button("lightbox-nav lightbox-prev", "arrow", "Предыдущее", () =>
+            show_lightbox(lightbox_index - 1),
+        ),
+        button("lightbox-nav lightbox-next", "arrow", "Следующее", () =>
+            show_lightbox(lightbox_index + 1),
+        ),
+        button("lightbox-close", "close", "Закрыть", () => box.close()),
+        counter,
+    );
+    box.addEventListener("click", (event) => {
+        if (event.target == box) {
+            box.close();
+        }
+    });
+    box.addEventListener("keydown", (event) => {
+        if (event.key == "ArrowLeft" || event.key == "ArrowRight") {
+            event.preventDefault();
+            show_lightbox(
+                lightbox_index + (event.key == "ArrowRight" ? 1 : -1),
+            );
+        }
+    });
+    // horizontal swipe flips the images on touch screens
+    let swipe_x = null;
+    image.addEventListener("pointerdown", (event) => (swipe_x = event.clientX));
+    image.addEventListener("pointerup", (event) => {
+        const dx = swipe_x == null ? 0 : event.clientX - swipe_x;
+        swipe_x = null;
+        if (Math.abs(dx) > 50) {
+            show_lightbox(lightbox_index + (dx < 0 ? 1 : -1));
+        }
+    });
+    box.addEventListener("close", () => {
+        if (!get_el("post-dialog")?.open) {
+            document.body.style.overflow = "";
+        }
+    });
+    document.body.append(box);
+    return box;
+}
+
+function show_lightbox(index) {
+    const count = lightbox_urls.length;
+    lightbox_index = (index + count) % count;
+    get_el("lightbox-image").src = lightbox_urls[lightbox_index];
+    get_el("lightbox-counter").textContent = `${lightbox_index + 1} / ${count}`;
+    get_el("lightbox").classList.toggle("lightbox-single", count < 2);
+    // neighbours are fetched ahead so flipping does not wait for the network
+    for (const step of [-1, 1]) {
+        new Image().src =
+            lightbox_urls[(lightbox_index + step + count) % count];
+    }
+}
+
+function open_lightbox(urls, index) {
+    lightbox_urls = urls;
+    const box = get_el("lightbox") || build_lightbox();
+    show_lightbox(index);
+    if (!box.open) {
+        document.body.style.overflow = "hidden";
+        box.showModal();
+    }
 }
 
 function render_poll(post) {
@@ -418,7 +540,9 @@ function render_post(post, nested = false, in_dialog = false) {
         nested ? "post-card post-original" : "post-card",
     );
     if (!in_dialog) {
-        make_clickable(card, () => open_post_dialog(post));
+        make_clickable(card, () =>
+            open_post_dialog(post, { card: nested ? null : card }),
+        );
     }
     if (post.author && !post.author.exists) {
         card.classList.add("post-deleted-author");
@@ -464,7 +588,7 @@ function make_clickable(card, on_click) {
         const target = event.target;
         if (
             target.closest(
-                "a, button, video, audio, .attachment, .comment-replies",
+                "a, button, video, audio, .attachment, .post-media, .comment-replies",
             ) ||
             target.closest(".clickable") != card
         ) {
@@ -597,8 +721,30 @@ function render_comment_body(comment, show_replies) {
     return body;
 }
 
+function render_context(label, preview, on_click) {
+    const box = create("div", "comment-context");
+    make_clickable(box, on_click);
+    const head = create("div", "comment-context-head", label);
+    if (preview.author) {
+        head.append(
+            " ",
+            create(
+                "span",
+                "comment-context-author",
+                "@" + preview.author.username,
+            ),
+        );
+    }
+    const text = preview.content
+        ? preview.content + (preview.truncated ? "…" : "")
+        : "Без текста";
+    box.append(head, create("div", "comment-context-text", text));
+    return box;
+}
+
 function render_comment(comment, in_thread = false, in_dialog = false) {
     const card = create("article", "post-card comment-card");
+    card.dataset.commentId = comment.comment_id;
     const top_level = !comment.parent_id;
     // in the main list a comment opens a dialog with its replies
     if (!in_thread && !in_dialog && top_level) {
@@ -630,6 +776,25 @@ function render_comment(comment, in_thread = false, in_dialog = false) {
     if (badges.children.length) {
         card.append(badges);
     }
+    // in the feed a comment shows what it answers
+    if (!in_thread && !in_dialog) {
+        if (comment.post_preview) {
+            card.append(
+                render_context("Пост", comment.post_preview, () =>
+                    open_post_by_id(comment.post_id),
+                ),
+            );
+        }
+        if (comment.parent_preview) {
+            card.append(
+                render_context(
+                    "Ответ на комментарий",
+                    comment.parent_preview,
+                    () => open_post_by_id(comment.post_id, comment.parent_id),
+                ),
+            );
+        }
+    }
     card.append(render_comment_body(comment, top_level && !in_thread));
     if (comment.attachments.length) {
         card.append(render_attachments(comment.attachments));
@@ -654,8 +819,16 @@ function build_dialog() {
     close.setAttribute("aria-label", "Закрыть");
     close.append(icon_image("close"));
     close.addEventListener("click", close_dialog);
+    const refresh = create("button");
+    refresh.type = "button";
+    refresh.id = "post-dialog-refresh";
+    refresh.title = "Обновить пост";
+    refresh.setAttribute("aria-label", "Обновить пост");
+    refresh.append(icon_image("refresh"));
+    const status = create("span");
+    status.id = "post-dialog-status";
     const header = create("div", "post-dialog-header");
-    header.append(close);
+    header.append(status, refresh, close);
     const scroll = create("div");
     scroll.id = "post-dialog-scroll";
     dialog.append(header, scroll);
@@ -675,7 +848,7 @@ function build_dialog() {
 }
 
 // empties the dialog, drops loaders of the previous content and shows it
-function open_dialog() {
+function open_dialog(on_refresh = null) {
     const dialog = get_el("post-dialog") || build_dialog();
     const token = ++dialog_token;
     for (const observer of dialog_observers) {
@@ -685,6 +858,11 @@ function open_dialog() {
     stop_playing();
     const scroll = get_el("post-dialog-scroll");
     scroll.replaceChildren();
+    const refresh = get_el("post-dialog-refresh");
+    refresh.hidden = !on_refresh;
+    refresh.disabled = false;
+    refresh.onclick = on_refresh;
+    get_el("post-dialog-status").textContent = "";
     if (!dialog.open) {
         document.body.style.overflow = "hidden";
         dialog.showModal();
@@ -709,8 +887,69 @@ function open_comment_dialog(comment) {
     scroll.scrollTop = 0;
 }
 
-function open_post_dialog(post) {
+async function refresh_post(post, card) {
+    const token = dialog_token;
+    const button = get_el("post-dialog-refresh");
+    const status = get_el("post-dialog-status");
+    button.disabled = true;
+    status.textContent = "Обновление...";
+    try {
+        const res = await fetch(`/api/ebdi/posts/${post.post_id}/refresh`, {
+            method: "POST",
+        });
+        if (res.status == 429) {
+            throw new Error("Слишком много обновлений, подождите минуту");
+        }
+        if (!res.ok) {
+            throw new Error(`Не удалось обновить пост: ${res.status}`);
+        }
+        const fresh = await res.json();
+        let fresh_card = null;
+        if (card?.isConnected) {
+            fresh_card = render_post(fresh);
+            card.replaceWith(fresh_card);
+        }
+        if (token == dialog_token) {
+            open_post_dialog(fresh, { card: fresh_card });
+        }
+    } catch (error) {
+        console.warn("post refresh failed", error);
+        if (token == dialog_token) {
+            status.textContent =
+                error instanceof TypeError
+                    ? "Не удалось связаться с сервером"
+                    : error.message;
+            button.disabled = false;
+        }
+    }
+}
+
+async function open_post_by_id(post_id, focus = null) {
     const { scroll, token } = open_dialog();
+    scroll.append(create("div", "loader-spinner comment-replies-loader"));
+    try {
+        const res = await fetch(`/api/ebdi/posts/${post_id}`);
+        if (!res.ok) {
+            throw new Error(`status ${res.status}`);
+        }
+        const post = await res.json();
+        if (token == dialog_token) {
+            open_post_dialog(post, { focus });
+        }
+    } catch (error) {
+        console.warn("post request failed", error);
+        if (token == dialog_token) {
+            scroll.replaceChildren(
+                create("div", "post-dialog-empty", "Не удалось загрузить пост"),
+            );
+        }
+    }
+}
+
+// comments are loaded by THREAD_BATCH while scrolling down; with a focused comment
+// the thread starts from its batch, scrolls to it and loads earlier batches upwards
+function open_post_dialog(post, { card = null, focus = null } = {}) {
+    const { scroll, token } = open_dialog(() => refresh_post(post, card));
     scroll.append(render_post(post, false, true));
     scroll.append(
         create(
@@ -719,49 +958,59 @@ function open_post_dialog(post) {
             `Комментарии (${format_number(post.comments_count)})`,
         ),
     );
+    const top_sentinel = create("div", "sentinel");
     const list = create("div", "post-dialog-comments");
     const empty = create("div", "post-dialog-empty", "Комментариев в базе нет");
     empty.hidden = true;
     const loader = create("div", "loader-spinner comment-replies-loader");
     const sentinel = create("div", "sentinel");
-    scroll.append(list, empty, loader, sentinel);
+    scroll.append(top_sentinel, list, empty, loader, sentinel);
 
-    let offset = 0;
+    let first = 0; // offset of the first loaded comment
+    let next = 0; // offset of the next batch
     let has_more = true;
     let loading = false;
-    const load = async () => {
+    let ready = false;
+
+    const fetch_batch = async (from, limit) => {
+        const params = new URLSearchParams({ offset: from, limit });
+        const res = await fetch(
+            `/api/ebdi/comments/post/${post.post_id}?${params}`,
+        );
+        if (!res.ok) {
+            throw new Error(`status ${res.status}`);
+        }
+        return res.json();
+    };
+    const render_thread = (comments) =>
+        comments.map((comment) => {
+            const item = render_comment(comment, true);
+            if (comment.replies_total) {
+                item.append(
+                    render_replies(comment, {
+                        preview: comment.replies,
+                        total: comment.replies_total,
+                    }),
+                );
+            }
+            return item;
+        });
+
+    const load_next = async () => {
         if (loading || !has_more || token != dialog_token) {
             return;
         }
         loading = true;
         loader.hidden = false;
         try {
-            const params = new URLSearchParams({ offset, limit: THREAD_BATCH });
-            const res = await fetch(
-                `/api/ebdi/comments/post/${post.post_id}?${params}`,
-            );
-            if (!res.ok) {
-                throw new Error(`status ${res.status}`);
-            }
-            const comments = await res.json();
+            const comments = await fetch_batch(next, THREAD_BATCH);
             if (token != dialog_token) {
                 return;
             }
-            for (const comment of comments) {
-                const card = render_comment(comment, true);
-                if (comment.replies_total) {
-                    card.append(
-                        render_replies(comment, {
-                            preview: comment.replies,
-                            total: comment.replies_total,
-                        }),
-                    );
-                }
-                list.append(card);
-            }
-            offset += comments.length;
+            list.append(...render_thread(comments));
+            next += comments.length;
             has_more = comments.length == THREAD_BATCH;
-            empty.hidden = offset > 0;
+            empty.hidden = next > 0;
         } catch (error) {
             console.warn("post comments request failed", error);
             has_more = false;
@@ -771,21 +1020,86 @@ function open_post_dialog(post) {
             loading = false;
             loader.hidden = true;
         }
-        if (has_more && token == dialog_token) {
+        if (ready && has_more && token == dialog_token) {
             observer.unobserve(sentinel);
             observer.observe(sentinel);
         }
     };
+
+    const load_previous = async () => {
+        if (loading || first == 0 || token != dialog_token) {
+            return;
+        }
+        loading = true;
+        try {
+            const from = Math.max(0, first - THREAD_BATCH);
+            const comments = await fetch_batch(from, first - from);
+            if (token != dialog_token) {
+                return;
+            }
+            const height = scroll.scrollHeight;
+            list.prepend(...render_thread(comments));
+            // the comments in view stay where they were
+            scroll.scrollTop += scroll.scrollHeight - height;
+            first = from;
+        } catch (error) {
+            console.warn("post comments request failed", error);
+            first = 0;
+        } finally {
+            loading = false;
+        }
+        if (first > 0 && token == dialog_token) {
+            observer.unobserve(top_sentinel);
+            observer.observe(top_sentinel);
+        }
+    };
+
     const observer = new IntersectionObserver(
-        (entries) => entries.some((entry) => entry.isIntersecting) && load(),
-        {
-            root: scroll,
-            rootMargin: "600px",
+        (entries) => {
+            for (const entry of entries) {
+                if (entry.isIntersecting) {
+                    (entry.target == sentinel ? load_next : load_previous)();
+                }
+            }
         },
+        { root: scroll, rootMargin: "600px" },
     );
     dialog_observers.push(observer);
     scroll.scrollTop = 0;
-    observer.observe(sentinel);
+
+    const start = async () => {
+        let thread_id = null;
+        if (focus) {
+            try {
+                const res = await fetch(`/api/ebdi/comments/${focus}/place`);
+                if (res.ok) {
+                    const place = await res.json();
+                    first = next =
+                        Math.floor(place.offset / THREAD_BATCH) * THREAD_BATCH;
+                    thread_id = place.comment_id;
+                }
+            } catch (error) {
+                console.warn("comment place request failed", error);
+            }
+        }
+        await load_next();
+        if (token != dialog_token) {
+            return;
+        }
+        if (focus) {
+            const target =
+                list.querySelector(`[data-comment-id="${focus}"]`) ||
+                list.querySelector(`[data-comment-id="${thread_id}"]`);
+            if (target) {
+                target.scrollIntoView({ block: "center" });
+                target.classList.add("comment-focus");
+            }
+        }
+        ready = true;
+        observer.observe(sentinel);
+        observer.observe(top_sentinel);
+    };
+    start();
 }
 
 function show_error(message) {
