@@ -242,23 +242,17 @@ def task_response(db: Session, task: Task) -> BaseModel:
         case TaskType.posts:
             user = task.targets[0]
             since = None
-            known_comments = {}
+            known = db.query(Post.post_id, Post.comments_count).where(
+                or_(Post.author_id == user.user_id, Post.wall_recipient_id == user.user_id)
+            )
             if user.posts_updated_at is not None:
                 since_local = user.posts_updated_at - POSTS_OVERLAP
-                known_comments = {
-                    post_id: count
-                    for post_id, count in db.query(Post.post_id, Post.comments_count)
-                    .where(
-                        or_(
-                            Post.author_id == user.user_id,
-                            Post.wall_recipient_id == user.user_id
-                        )
-                    )
-                    .where(Post.created_at > since_local)
-                }
+                known = known.where(Post.created_at > since_local)
                 task.since = since_local
                 # naive local time -> aware utc, client compares it with post dates
                 since = since_local.astimezone(timezone.utc)
+            # a full rescan also refetches comments only where the count changed
+            known_comments = dict(known.all())
             return PostsTaskResponse(
                 target=PostsTarget(
                     id=user.user_id,
@@ -380,12 +374,10 @@ async def handle_post(conn: Connection, request: PostRequest):
     l.debug("(%s) < post %s", conn.app.name, post.post_id)
     assert conn.task is not None
     conn.task.seen_posts.add(post.post_id)
-    upsert(
-        conn.db,
-        Post,
-        "post_id",
-        [{**post.model_dump(exclude={"comments", "comments_complete"}), "exists": True}]
-    )
+    row = {**post.model_dump(exclude={"comments", "comments_complete"}), "exists": True}
+    if row["reposts_count"] is None:
+        del row["reposts_count"]
+    upsert(conn.db, Post, "post_id", [row])
     # same comment can come twice (pagination shifts), one insert
     # with duplicate keys fails, so keep the first occurrence
     comments: dict[UUID, dict] = {}
