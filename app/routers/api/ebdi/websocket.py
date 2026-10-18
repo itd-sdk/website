@@ -1,5 +1,4 @@
 from asyncio import wait_for
-from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from random import randint
@@ -9,7 +8,6 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, WebSocket
 from pydantic import BaseModel, ValidationError
 from sqlalchemy import and_, case, desc, func, or_
-from sqlalchemy.dialects.postgresql import insert
 from starlette.websockets import WebSocketDisconnect
 from websockets.exceptions import ConnectionClosedError
 
@@ -17,7 +15,6 @@ from app.logger import get_logger
 from app.routers.api.ebdi.protocol import (
     PROTOCOL_VERSION,
     CloseCode,
-    CommentBody,
     CreatedResponse,
     CreateRequest,
     CreateTaskResponse,
@@ -38,7 +35,8 @@ from app.routers.api.ebdi.protocol import (
     UpdateTaskResponse,
     client_message
 )
-from app.schemas import App, Comment, Post, User
+from app.routers.api.ebdi.storage import delete_user_comments, save_comments, upsert
+from app.schemas import App, Post, User
 from app.services.db import Session, get_db
 from app.services.settings import get_settings
 
@@ -107,35 +105,6 @@ def increment_prefix(prefix: str) -> str:
         chars[i] = ALPHABET[0]
     # wrapped around, start the cycle over
     return ALPHABET[0] * len(prefix)
-
-
-def flatten_comments(
-    comments: list[CommentBody], post_id: UUID, parent_id: UUID | None = None
-) -> Iterator[dict]:
-    # parents always go before their replies so the parent_id fk is satisfied
-    for comment in comments:
-        replies_count = comment.replies_count
-        if replies_count is None:
-            replies_count = len(comment.replies)
-        yield {
-            **comment.model_dump(exclude={"replies"}),
-            "replies_count": replies_count,
-            "post_id": post_id,
-            "parent_id": parent_id
-        }
-        yield from flatten_comments(comment.replies, post_id, comment.comment_id)
-
-
-def upsert(db: Session, model: type[Post] | type[Comment], key: str, rows: list[dict]):
-    # chunks keep a single statement below the postgres bind parameters limit
-    for i in range(0, len(rows), 1000):
-        stmt = insert(model).values(rows[i : i + 1000])
-        db.execute(
-            stmt.on_conflict_do_update(
-                index_elements=[key],
-                set_={c: stmt.excluded[c] for c in rows[0] if c != key}
-            )
-        )
 
 
 def refresh_interval():
@@ -243,7 +212,10 @@ def task_response(db: Session, task: Task) -> BaseModel:
             user = task.targets[0]
             since = None
             known = db.query(Post.post_id, Post.comments_count).where(
-                or_(Post.author_id == user.user_id, Post.wall_recipient_id == user.user_id)
+                or_(
+                    Post.author_id == user.user_id,
+                    Post.wall_recipient_id == user.user_id
+                )
             )
             if user.posts_updated_at is not None:
                 since_local = user.posts_updated_at - POSTS_OVERLAP
@@ -322,6 +294,7 @@ async def handle_update(conn: Connection, request: UpdateRequest):
     else:
         l.debug("(%s) < not exists", conn.app.name)
         user.exists = False
+        delete_user_comments(conn.db, user.user_id)
     user.updated_at = datetime.now()
 
     conn.app.refreshed += 1
@@ -378,22 +351,13 @@ async def handle_post(conn: Connection, request: PostRequest):
     if row["reposts_count"] is None:
         del row["reposts_count"]
     upsert(conn.db, Post, "post_id", [row])
-    # same comment can come twice (pagination shifts), one insert
-    # with duplicate keys fails, so keep the first occurrence
-    comments: dict[UUID, dict] = {}
-    for row in flatten_comments(post.comments, post.post_id):
-        comments.setdefault(row["comment_id"], {**row, "exists": True})
-    upsert(conn.db, Comment, "comment_id", list(comments.values()))
-    if post.comments_complete:
-        deleted = (
-            conn.db.query(Comment)
-            .where(Comment.post_id == post.post_id)
-            .where(Comment.exists.is_(True))
-            .where(Comment.comment_id.not_in(comments.keys()))
-            .update({Comment.exists: False}, synchronize_session=False)
+    deleted = save_comments(
+        conn.db, post.post_id, post.comments, post.comments_complete
+    )
+    if deleted:
+        l.debug(
+            "(%s) post %s: %s comments deleted", conn.app.name, post.post_id, deleted
         )
-        if deleted:
-            l.debug("(%s) post %s: %s comments deleted", conn.app.name, post.post_id, deleted)
     conn.db.commit()
     await conn.send(PostSavedResponse())
 
@@ -430,6 +394,7 @@ async def handle_posts_done(conn: Connection, request: PostsDoneRequest):
     user.posts_updated_at = datetime.now()
     if not request.target_exists:
         user.exists = False
+        delete_user_comments(conn.db, user.user_id)
     else:
         mark_deleted_posts(conn.db, conn.task, user)
     conn.app.refreshed += 1

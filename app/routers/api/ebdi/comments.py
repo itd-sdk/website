@@ -2,9 +2,9 @@ from datetime import datetime, timedelta
 from enum import Enum
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
-from sqlalchemy import desc, func, select
+from sqlalchemy import and_, desc, func, or_, select
 from sqlalchemy.orm import aliased
 
 from app.routers.api.ebdi.posts import (
@@ -36,6 +36,17 @@ SORT_COLUMNS = {
 }
 
 
+PREVIEW_LENGTH = 250
+
+
+class Preview(BaseModel):
+    """Short view of the post or the parent comment a comment belongs to"""
+
+    author: PostAuthor | None
+    content: str  # first PREVIEW_LENGTH characters
+    truncated: bool
+
+
 class CommentResponse(BaseModel):
     comment_id: UUID
     post_id: UUID
@@ -52,6 +63,8 @@ class CommentResponse(BaseModel):
     attachments: list[str]
     likes_count: int
     replies_count: int
+    post_preview: Preview | None = None  # only in the comments feed
+    parent_preview: Preview | None = None
 
 
 def comments_with_users(db: Session):
@@ -118,7 +131,40 @@ def api_get_ebdi_comments(
         .limit(limit)
         .all()
     )
-    return [to_response(row) for row in rows]
+    comments = [to_response(row) for row in rows]
+    add_previews(db, comments)
+    return comments
+
+
+def previews(db: Session, model: type[Post] | type[Comment], key, ids: set[UUID]):
+    if not ids:
+        return {}
+    rows = (
+        db.query(
+            key,
+            func.left(model.content, PREVIEW_LENGTH),
+            func.length(model.content) > PREVIEW_LENGTH,
+            User
+        )
+        .outerjoin(User, User.user_id == model.author_id)
+        .where(key.in_(ids))
+    )
+    return {
+        id: Preview(author=to_author(author), content=content, truncated=truncated)
+        for id, content, truncated, author in rows
+    }
+
+
+def add_previews(db: Session, comments: list[CommentResponse]) -> None:
+    # previews of the whole page in two queries
+    posts = previews(db, Post, Post.post_id, {c.post_id for c in comments})
+    parents = previews(
+        db, Comment, Comment.comment_id, {c.parent_id for c in comments if c.parent_id}
+    )
+    for comment in comments:
+        comment.post_preview = posts.get(comment.post_id)
+        if comment.parent_id:
+            comment.parent_preview = parents.get(comment.parent_id)
 
 
 THREAD_BATCH = 100
@@ -209,6 +255,48 @@ def api_get_ebdi_comment_replies(
         .all()
     )
     return [to_response(row) for row in rows]
+
+
+class CommentPlace(BaseModel):
+    post_id: UUID
+    comment_id: UUID  # top-level comment of the thread
+    offset: int  # its index among the top-level comments of the post
+
+
+@router.get("/{comment_id}/place", response_model=CommentPlace)
+@get_limiter().limit("60/minute")
+def api_get_ebdi_comment_place(
+    request: Request, comment_id: UUID, db: Session = Depends(get_db)
+):
+    comment = db.query(Comment).where(Comment.comment_id == comment_id).first()
+    if comment is not None and comment.parent_id:
+        comment = (
+            db.query(Comment).where(Comment.comment_id == comment.parent_id).first()
+        )
+    if comment is None:
+        raise HTTPException(404, "comment not found")
+
+    # same order as the post thread: created_at with nulls last, then id
+    if comment.created_at is None:
+        before = or_(
+            Comment.created_at.is_not(None),
+            and_(Comment.created_at.is_(None), Comment.id < comment.id)
+        )
+    else:
+        before = or_(
+            Comment.created_at < comment.created_at,
+            and_(Comment.created_at == comment.created_at, Comment.id < comment.id)
+        )
+    offset = (
+        db.query(func.count(Comment.id))
+        .where(Comment.post_id == comment.post_id)
+        .where(Comment.parent_id.is_(None))
+        .where(before)
+        .scalar()
+    )
+    return CommentPlace(
+        post_id=comment.post_id, comment_id=comment.comment_id, offset=offset
+    )
 
 
 comments_count: int | None = None
