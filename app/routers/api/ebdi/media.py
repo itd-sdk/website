@@ -1,21 +1,13 @@
-"""Same-origin copies of ITD voice messages.
-
-The ITD CDN sends no CORS headers, so the page cannot read the files to draw
-waveforms. Phone recordings also start at a negative time (the first ogg page
-holds fewer samples than its granule position says), which Firefox rejects;
-ffmpeg rebuilds the container without touching the audio.
-"""
-
-import asyncio
-import os
-import shutil
-import time
+from asyncio import to_thread, wait_for
+from asyncio.subprocess import PIPE, create_subprocess_exec
+from os import getenv
 from pathlib import Path as FilePath
+from time import time
 from uuid import uuid4
 
-import httpx
 from fastapi import APIRouter, HTTPException, Path, Request
 from fastapi.responses import FileResponse
+from httpx import AsyncClient, HTTPError
 
 from app.logger import get_logger
 from app.services.limiter import get_limiter
@@ -43,24 +35,20 @@ MAX_AUDIO_SIZE = 20 * 1024 * 1024
 # files nobody played for this long are removed, played ones get a new term
 CACHE_TTL = 7 * 24 * 3600
 CLEANUP_INTERVAL = 3600
-FFMPEG = shutil.which("ffmpeg")
 
-client: httpx.AsyncClient | None = None
+client: AsyncClient | None = None
 last_cleanup = 0.0
-
-if FFMPEG is None:
-    l.warning("ffmpeg not found, ogg voice messages are served as is")
 
 
 def cache_dir() -> FilePath:
     # read on use, .env is loaded after the routers are imported
-    path = FilePath(os.getenv("AUDIO_CACHE_DIR", "cache/audio"))
+    path = FilePath(getenv("AUDIO_CACHE_DIR", "cache/audio"))
     path.mkdir(parents=True, exist_ok=True)
     return path
 
 
 def remove_stale(directory: FilePath) -> None:
-    deadline = time.time() - CACHE_TTL
+    deadline = time() - CACHE_TTL
     removed = 0
     for file in directory.iterdir():
         try:
@@ -75,7 +63,7 @@ def remove_stale(directory: FilePath) -> None:
 
 async def download(name: str) -> bytes:
     global client
-    client = client or httpx.AsyncClient(timeout=15)
+    client = client or AsyncClient(timeout=15)
     async with client.stream("GET", AUDIO_SOURCE + name) as res:
         if res.status_code != 200:
             raise HTTPException(404 if res.status_code == 404 else 502)
@@ -89,15 +77,23 @@ async def download(name: str) -> bytes:
 
 async def remux_ogg(content: bytes) -> bytes:
     # stream copy: the container is written anew, the audio is not re-encoded
-    process = await asyncio.create_subprocess_exec(
-        FFMPEG, "-loglevel", "error", "-i", "pipe:0", "-c", "copy", "-f", "ogg",
+    process = await create_subprocess_exec(
+        "ffmpeg",
+        "-loglevel",
+        "error",
+        "-i",
+        "pipe:0",
+        "-c",
+        "copy",
+        "-f",
+        "ogg",
         "pipe:1",
-        stdin=asyncio.subprocess.PIPE,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE
+        stdin=PIPE,
+        stdout=PIPE,
+        stderr=PIPE
     )
     try:
-        output, error = await asyncio.wait_for(process.communicate(content), 10)
+        output, error = await wait_for(process.communicate(content), 10)
     except TimeoutError:
         process.kill()
         raise
@@ -107,25 +103,25 @@ async def remux_ogg(content: bytes) -> bytes:
 
 
 @router.get("/audio/{name}")
-@get_limiter().limit("120/minute")
+@get_limiter().limit("60/minute")
 async def api_get_ebdi_audio(request: Request, name: str = Path(pattern=AUDIO_NAME)):
     global last_cleanup
     directory = cache_dir()
-    if time.time() - last_cleanup > CLEANUP_INTERVAL:
-        last_cleanup = time.time()
-        await asyncio.to_thread(remove_stale, directory)
+    if time() - last_cleanup > CLEANUP_INTERVAL:
+        last_cleanup = time()
+        await to_thread(remove_stale, directory)
 
     file = directory / name
     if file.exists():
         file.touch()
     else:
-        # only files of the ITD CDN by name, the endpoint is not an open proxy
+        # only files of the итд CDN by name, the endpoint is not an open proxy
         try:
             content = await download(name)
-        except httpx.HTTPError as error:
+        except HTTPError as error:
             l.warning("audio %s fetch failed: %r", name, error)
             raise HTTPException(502, "ITD request failed") from error
-        if FFMPEG and name.endswith(OGG_SUFFIXES):
+        if name.endswith(OGG_SUFFIXES):
             try:
                 content = await remux_ogg(content)
             except Exception as error:
