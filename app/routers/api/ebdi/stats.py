@@ -360,6 +360,26 @@ def get_top_words(db: Session, table: str) -> list[WordCount]:
     return [WordCount(word=word, count=count) for word, count in rows]
 
 
+class ClanCount(BaseModel):
+    clan: str
+    count: int
+
+
+def get_post_captures(db: Session) -> list[ClanCount]:
+    # emoji may come with or without the variation selector
+    clan = func.replace(Post.dominant, "\ufe0f", "")
+    rows = (
+        db.query(clan, func.count())
+        .where(Post.exists.is_(True))
+        .where(Post.dominant.is_not(None))
+        .where(Post.dominant != "")
+        .group_by(clan)
+        .order_by(desc(func.count()))
+        .limit(30)
+    )
+    return [ClanCount(clan=clan, count=count) for clan, count in rows]
+
+
 class StatsResponse(BaseModel):
     total: list[Total]
     registrations: list[Registrations]
@@ -376,6 +396,7 @@ class StatsResponse(BaseModel):
     comments_per_day: list[PerDay]
     words_posts: list[WordCount]
     words_comments: list[WordCount]
+    post_captures: list[ClanCount]  # posts each clan holds as the dominant one
 
 
 @router.get("/", response_model=StatsResponse)
@@ -397,7 +418,8 @@ def api_get_ebdi_stats(request: Request, db: Session = Depends(get_db)):
             comments_total=get_running_total(db, Comment.created_at),
             comments_per_day=get_per_day(db, Comment.created_at),
             words_posts=get_top_words(db, "posts"),
-            words_comments=get_top_words(db, "comments")
+            words_comments=get_top_words(db, "comments"),
+            post_captures=get_post_captures(db)
         ).model_dump_json()
         request.app.state.stats_updated_at = datetime.now()
     return Response(content=request.app.state.stats, media_type="application/json")

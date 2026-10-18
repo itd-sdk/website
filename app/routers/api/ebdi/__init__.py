@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from app.routers.api.ebdi import (
     clans,
     comments,
+    hashtags,
     media,
     posts,
     stats,
@@ -18,3 +19,4 @@ router.include_router(stats.router)
 router.include_router(posts.router)
 router.include_router(comments.router)
 router.include_router(media.router)
+router.include_router(hashtags.router)
