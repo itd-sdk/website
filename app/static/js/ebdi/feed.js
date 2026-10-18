@@ -1041,26 +1041,30 @@ function close_dialog() {
 function build_dialog() {
     const dialog = create("dialog");
     dialog.id = "post-dialog";
-    const close = create("button");
+    const close = create("button", "dialog-action");
     close.type = "button";
     close.id = "post-dialog-close";
     close.title = "Закрыть";
     close.setAttribute("aria-label", "Закрыть");
     close.append(icon_image("close"));
     close.addEventListener("click", close_dialog);
-    const refresh = create("button");
+    const refresh = create("button", "dialog-action");
     refresh.type = "button";
     refresh.id = "post-dialog-refresh";
     refresh.title = "Обновить пост";
     refresh.setAttribute("aria-label", "Обновить пост");
     refresh.append(icon_image("refresh"));
-    const status = create("span");
+    const status = create("div", null, "Обновление...");
     status.id = "post-dialog-status";
+    status.hidden = true;
     const header = create("div", "post-dialog-header");
-    header.append(status, refresh, close);
+    header.append(refresh, close);
     const scroll = create("div");
     scroll.id = "post-dialog-scroll";
-    dialog.append(header, scroll);
+    // the modal focuses the scroll area like the user dialog, not the first button
+    scroll.tabIndex = -1;
+    scroll.autofocus = true;
+    dialog.append(status, header, scroll);
     // a click on the backdrop lands on the dialog element itself
     dialog.addEventListener("click", (event) => {
         if (event.target == dialog) {
@@ -1091,7 +1095,7 @@ function open_dialog(on_refresh = null) {
     refresh.hidden = !on_refresh;
     refresh.disabled = false;
     refresh.onclick = on_refresh;
-    get_el("post-dialog-status").textContent = "";
+    get_el("post-dialog-status").hidden = true;
     if (!dialog.open) {
         lock_scroll();
         dialog.showModal();
@@ -1116,21 +1120,24 @@ function open_comment_dialog(comment) {
     scroll.scrollTop = 0;
 }
 
+// same flow as the refresh of the user dialog
 async function refresh_post(post, card) {
     const token = dialog_token;
     const button = get_el("post-dialog-refresh");
     const status = get_el("post-dialog-status");
     button.disabled = true;
-    status.textContent = "Обновление...";
+    status.hidden = false;
     try {
         const res = await fetch(`/api/ebdi/posts/${post.post_id}/refresh`, {
             method: "POST",
         });
         if (res.status == 429) {
-            throw new Error("Слишком много обновлений, подождите минуту");
+            alert("Слишком частые обновления, подождите немного");
+            return;
         }
         if (!res.ok) {
-            throw new Error(`Не удалось обновить пост: ${res.status}`);
+            alert(`Ошибка обновления: ${res.status}`);
+            return;
         }
         const fresh = await res.json();
         let fresh_card = null;
@@ -1143,12 +1150,11 @@ async function refresh_post(post, card) {
         }
     } catch (error) {
         console.warn("post refresh failed", error);
+        alert("Не удалось обновить пост");
+    } finally {
         if (token == dialog_token) {
-            status.textContent =
-                error instanceof TypeError
-                    ? "Не удалось связаться с сервером"
-                    : error.message;
             button.disabled = false;
+            status.hidden = true;
         }
     }
 }

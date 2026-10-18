@@ -534,8 +534,7 @@
 }
 
 .lightbox-nav::after,
-.lightbox-close::after,
-#post-dialog-refresh::after {
+.lightbox-close::after {
     display: none;
 }
 
@@ -744,6 +743,7 @@
 }
 
 #post-dialog {
+    position: relative;
     padding: 0;
     border: #494037 1px solid;
     background-color: #1e1c1a;
@@ -768,53 +768,87 @@
     padding: 8px 8px 0;
 }
 
-#post-dialog-status {
-    margin-right: auto;
-    padding-left: 8px;
-    font-size: 13px;
-    color: #bbb;
-}
-
-#post-dialog-refresh {
-    width: 32px;
-    height: 32px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0;
-    background-color: #2c2a27;
-    border: #494037 1px solid;
-}
-
-#post-dialog-refresh:disabled img {
-    animation: loader-spin 0.8s linear infinite;
-}
-
-#post-dialog-refresh img {
-    width: 18px;
-}
-
 #post-dialog::backdrop {
     background-color: #000000b0;
 }
 
-#post-dialog-close {
+/* refresh and close look like the actions of the user dialog */
+.dialog-action {
     width: 32px;
     height: 32px;
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 0;
-    background-color: #2c2a27;
+    background-color: #1e1c1a;
     border: #494037 1px solid;
+    color: #fbeadb;
+    cursor: pointer;
+    transition:
+        background-color 0.2s,
+        border-color 0.2s;
 }
 
-#post-dialog-close img {
-    width: 22px;
+.dialog-action:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.dialog-action img {
+    width: 18px;
+    height: 18px;
+}
+
+#post-dialog-refresh img {
+    width: 14px;
+    height: 14px;
 }
 
 #post-dialog-close:focus-visible {
     outline: #ed6a2d 1px solid;
+}
+
+#post-dialog-status {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 2;
+    padding: 5px 12px;
+    text-align: center;
+    font-size: 13px;
+    font-weight: 600;
+    color: #fff;
+    text-shadow: 0 1px 2px #000;
+    background:
+        linear-gradient(
+                45deg,
+                #ed6a2d 25%,
+                transparent 25% 50%,
+                #ed6a2d 50% 75%,
+                transparent 75%
+            )
+            0 0 / 24px 24px,
+        #1e1c1a;
+    animation:
+        status-in 0.2s cubic-bezier(0.2, 0.8, 0.2, 1),
+        status-dashmove 1.6s linear infinite;
+}
+
+@keyframes status-in {
+    from {
+        translate: 0 -100%;
+    }
+}
+
+@keyframes status-dashmove {
+    to {
+        background-position: 24px 0;
+    }
+}
+
+#post-dialog-scroll:focus {
+    outline: none;
 }
 
 #post-dialog-scroll {
