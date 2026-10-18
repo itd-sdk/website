@@ -1,0 +1,38 @@
+{% extends "ebdi/base.html" %}
+{% set active_tab = "hashtags" %}
+
+{% block ebdi_head %}
+<link rel="stylesheet" href="/static/css/ebdi/hashtags.css">
+<script src="/static/js/ebdi/hashtags.js"></script>
+<meta name="description" content="Единая База Данных ИТД: топ хэштегов в постах и комментариях">
+{% endblock %}
+
+{% block ebdi_content %}
+
+    <h2>Хэштеги ИТД</h2>
+
+    <div id="controls-box">
+        <div id="controls">
+            <label class="hashtags-toggle"><input type="checkbox" id="comments-checkbox"><span>Учитывать комментарии</span></label>
+        </div>
+    </div>
+
+    <div id="rows">
+        <div class="row" id="rows-header">
+            <div class="row-left"></div>
+            <div class="row-right">
+                <div class="hashtag-count"><b>Посты</b></div>
+                <div class="hashtag-count hashtag-comments"><b>Комментарии</b></div>
+            </div>
+        </div>
+        <div id="hashtags"></div>
+        <div id="list-empty" hidden>Хэштегов пока нет</div>
+        <div id="list-error" hidden>
+            <div id="error-text"></div>
+            <button id="retry-button">Попробовать снова</button>
+        </div>
+        <div class="row" id="list-loader" hidden>
+            <div class="loader-spinner"></div>
+        </div>
+    </div>
+{% endblock %}

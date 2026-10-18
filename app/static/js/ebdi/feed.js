@@ -86,6 +86,34 @@ function missing_id(id) {
 
 // text with red pens, correctors and content search matches; offsets of the
 // marks are utf-16 units, the same as javascript string indices
+const URL_RE = /https?:\/\/[^\s<>"']+/g;
+// a tag starts after a space or punctuation, not inside a word or a url path
+const HASHTAG_RE = /(?<![\p{L}\p{N}_/#])#[\p{L}\p{N}_]+/gu;
+
+// links and hashtags of a text, a hashtag inside a link is part of the link
+function text_links(text) {
+    const links = [];
+    for (const match of text.matchAll(URL_RE)) {
+        // trailing punctuation belongs to the sentence, not to the address
+        const url = match[0].replace(/[.,!?:;)\]»"'…]+$/, "");
+        links.push({
+            start: match.index,
+            end: match.index + url.length,
+            href: url,
+            external: true,
+        });
+    }
+    for (const match of text.matchAll(HASHTAG_RE)) {
+        const end = match.index + match[0].length;
+        if (!links.some((link) => link.start < end && match.index < link.end)) {
+            const href =
+                `/ebdi/${KIND}?` + new URLSearchParams({ q: match[0] });
+            links.push({ start: match.index, end, href, hashtag: true });
+        }
+    }
+    return links;
+}
+
 function render_text(text, { red_pens = [], correctors = [] } = {}) {
     text = text || "";
     const time = (value) => Date.parse(value) || 0;
@@ -128,6 +156,12 @@ function render_text(text, { red_pens = [], correctors = [] } = {}) {
             ranges.push({ start: match.index, end, type: "search-match" });
         }
     }
+    for (const link of text_links(text)) {
+        ranges.push({
+            ...link,
+            type: link.hashtag ? "text-hashtag" : "text-link",
+        });
+    }
     const valid = ranges
         .map((range) => ({
             ...range,
@@ -144,18 +178,42 @@ function render_text(text, { red_pens = [], correctors = [] } = {}) {
     ];
     const borders = [...new Set(points)].sort((a, b) => a - b);
     const fragment = document.createDocumentFragment();
+    let anchor = null;
     for (let i = 0; i < borders.length - 1; i++) {
         const [from, to] = [borders[i], borders[i + 1]];
         const covering = valid.filter(
             (range) => range.start <= from && range.end >= to,
         );
         const piece = text.slice(from, to);
-        if (!covering.length) {
-            fragment.append(piece);
-        } else {
-            const types = [...new Set(covering.map((range) => range.type))];
+        const link = covering.find((range) => range.href);
+        const types = [
+            ...new Set(
+                covering
+                    .filter((range) => !range.href)
+                    .map((range) => range.type),
+            ),
+        ];
+        let node = piece;
+        if (types.length) {
             const tag = types.includes("search-match") ? "mark" : "span";
-            fragment.append(create(tag, types.join(" "), piece));
+            node = create(tag, types.join(" "), piece);
+        }
+        if (!link) {
+            anchor = null;
+            fragment.append(node);
+        } else {
+            // pieces of one link split by other marks stay in one anchor
+            if (anchor?.range != link) {
+                anchor = create("a", link.type);
+                anchor.range = link;
+                anchor.href = link.href;
+                if (link.external) {
+                    anchor.target = "_blank";
+                    anchor.rel = "noopener noreferrer";
+                }
+                fragment.append(anchor);
+            }
+            anchor.append(node);
         }
         for (const range of valid) {
             if (range.pen && range.end == to) {

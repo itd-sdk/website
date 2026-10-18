@@ -356,6 +356,46 @@ function render_words(source) {
     }
 }
 
+function render_post_captures(data) {
+    new Chart(get_el("chart-post-captures"), {
+        type: "bar",
+        data: {
+            labels: data.map((row) => display_emoji(row.clan)),
+            datasets: [
+                {
+                    label: "Постов",
+                    data: data.map((row) => row.count),
+                    backgroundColor: ACCENT,
+                    pointStyle: "line",
+                },
+            ],
+        },
+        options: merge_options({
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    ...base_options.plugins.tooltip,
+                    callbacks: {
+                        title: (items) =>
+                            clan_label(data[items[0].dataIndex].clan),
+                    },
+                },
+            },
+            scales: {
+                x: {
+                    grid: { color: GRID },
+                    ticks: { color: TEXT, font: { size: 16 } },
+                },
+                y: {
+                    grid: { color: GRID },
+                    ticks: { color: TEXT },
+                    title: { display: true, text: "Постов", color: TEXT },
+                },
+            },
+        }),
+    });
+}
+
 function render_followers_distribution(data) {
     new Chart(get_el("chart-followers-distribution"), {
         type: "bar",
@@ -714,6 +754,7 @@ async function load_stats() {
         render_total(data.comments_total, "chart-comments-total");
         render_per_day("comments", "month");
         render_words("posts");
+        render_post_captures(data.post_captures);
         render_followers_distribution(data.followers_distribution);
         render_followers_by_age(data.followers_by_age);
         render_posts_vs_followers(data.posts_vs_followers);

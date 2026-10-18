@@ -37,6 +37,11 @@ def get_ebdi_comments(request: Request):
     return templates.TemplateResponse(request, "ebdi/comments.html")
 
 
+@router.get("/hashtags")
+def get_ebdi_hashtags(request: Request):
+    return templates.TemplateResponse(request, "ebdi/hashtags.html")
+
+
 @router.get("/stats")
 def get_ebdi_stats(request: Request):
     return templates.TemplateResponse(request, "ebdi/stats.html")

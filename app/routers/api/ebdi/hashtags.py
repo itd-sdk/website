@@ -16,7 +16,7 @@ HASHTAGS_SQL = """
     select tag, count(distinct id) as count
     from (
         select id, translate(
-            lower((regexp_matches(content, '#([0-9A-Za-zА-Яа-яЁё_]+)', 'g'))[1]),
+            lower((regexp_matches(content, :pattern, 'g'))[2]),
             'АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ',
             'абвгдеёжзийклмнопрстуфхцчшщъыьэюя'
         ) as tag
@@ -27,6 +27,9 @@ HASHTAGS_SQL = """
     order by count desc
     limit 5000
 """
+# a tag starts after a space or punctuation, not inside a word or a url path,
+# the same rule as the highlighting on the page
+HASHTAG_PATTERN = "(^|[^0-9A-Za-zА-Яа-яЁё_/#])#([0-9A-Za-zА-Яа-яЁё_]+)"
 CACHE_TTL = timedelta(hours=1)
 
 
@@ -45,7 +48,11 @@ def get_counts(db: Session) -> dict[str, dict[str, int]]:
     global counts, counts_updated_at
     if datetime.now() - counts_updated_at > CACHE_TTL:
         counts = {
-            table: dict(db.execute(text(HASHTAGS_SQL.format(table=table))).all())
+            table: dict(
+                db.execute(
+                    text(HASHTAGS_SQL.format(table=table)), {"pattern": HASHTAG_PATTERN}
+                ).all()
+            )
             for table in ("posts", "comments")
         }
         counts_updated_at = datetime.now()

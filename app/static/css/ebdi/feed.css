@@ -974,3 +974,14 @@
     background-color: #fff;
     color: #1e1c1a;
 }
+
+.text-link,
+.text-link * {
+    color: #ff854d;
+    overflow-wrap: anywhere;
+}
+
+.text-hashtag,
+.text-hashtag * {
+    color: #e8a87c;
+}
