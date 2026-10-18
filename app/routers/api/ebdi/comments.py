@@ -209,21 +209,51 @@ def chronological(query):
     return query.order_by(Comment.created_at.asc().nulls_last(), Comment.id)
 
 
+class ThreadSort(Enum):
+    """Order of the top-level comments in the post dialog"""
+
+    new = "new"
+    likes = "likes"
+    replies = "replies"
+
+
+THREAD_COLUMNS = {
+    ThreadSort.new: Comment.created_at,
+    ThreadSort.likes: Comment.likes_count,
+    ThreadSort.replies: Comment.replies_count
+}
+
+
+def thread_order(sort: ThreadSort) -> tuple:
+    return THREAD_COLUMNS[sort].desc().nulls_last(), Comment.id.desc()
+
+
+def placed_before(sort: ThreadSort, comment: Comment):
+    """Condition for the comments thread_order puts before this one"""
+    column = THREAD_COLUMNS[sort]
+    value = getattr(comment, column.key)
+    if value is None:
+        return or_(
+            column.is_not(None), and_(column.is_(None), Comment.id > comment.id)
+        )
+    return or_(column > value, and_(column == value, Comment.id > comment.id))
+
+
 @router.get("/post/{post_id}", response_model=list[ThreadComment])
 @get_limiter().limit("60/minute")
 def api_get_ebdi_post_comments(
     request: Request,
     post_id: UUID,
+    sort: ThreadSort = ThreadSort.new,
     offset: int = Query(0, ge=0),
     limit: int = Query(THREAD_BATCH, ge=1, le=THREAD_BATCH),
     db: Session = Depends(get_db)
 ):
     rows = (
-        chronological(
-            comments_with_users(db)
-            .where(Comment.post_id == post_id)
-            .where(Comment.parent_id.is_(None))
-        )
+        comments_with_users(db)
+        .where(Comment.post_id == post_id)
+        .where(Comment.parent_id.is_(None))
+        .order_by(*thread_order(sort))
         .offset(offset)
         .limit(limit)
         .all()
@@ -295,7 +325,10 @@ class CommentPlace(BaseModel):
 @router.get("/{comment_id}/place", response_model=CommentPlace)
 @get_limiter().limit("60/minute")
 def api_get_ebdi_comment_place(
-    request: Request, comment_id: UUID, db: Session = Depends(get_db)
+    request: Request,
+    comment_id: UUID,
+    sort: ThreadSort = ThreadSort.new,
+    db: Session = Depends(get_db)
 ):
     comment = db.query(Comment).where(Comment.comment_id == comment_id).first()
     if comment is not None and comment.parent_id:
@@ -305,22 +338,11 @@ def api_get_ebdi_comment_place(
     if comment is None:
         raise HTTPException(404, "comment not found")
 
-    # same order as the post thread: created_at with nulls last, then id
-    if comment.created_at is None:
-        before = or_(
-            Comment.created_at.is_not(None),
-            and_(Comment.created_at.is_(None), Comment.id < comment.id)
-        )
-    else:
-        before = or_(
-            Comment.created_at < comment.created_at,
-            and_(Comment.created_at == comment.created_at, Comment.id < comment.id)
-        )
     offset = (
         db.query(func.count(Comment.id))
         .where(Comment.post_id == comment.post_id)
         .where(Comment.parent_id.is_(None))
-        .where(before)
+        .where(placed_before(sort, comment))
         .scalar()
     )
     return CommentPlace(

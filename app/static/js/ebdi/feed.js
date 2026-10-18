@@ -1240,6 +1240,30 @@ async function open_post_by_id(post_id, focus = null) {
 
 // comments are loaded by THREAD_BATCH while scrolling down; with a focused comment
 // the thread starts from its batch, scrolls to it and loads earlier batches upwards
+const THREAD_SORTS = {
+    new: "Новые",
+    likes: "По лайкам",
+    replies: "По ответам",
+};
+let thread_sort = "new";
+
+function render_thread_sort(on_change) {
+    const box = create("div", "thread-sort");
+    for (const [value, label] of Object.entries(THREAD_SORTS)) {
+        const tab = create("button", "thread-sort-tab", label);
+        tab.type = "button";
+        tab.classList.toggle("thread-sort-active", value == thread_sort);
+        tab.addEventListener("click", () => {
+            if (value != thread_sort) {
+                thread_sort = value;
+                on_change();
+            }
+        });
+        box.append(tab);
+    }
+    return box;
+}
+
 function open_post_dialog(post, { card = null, focus = null } = {}) {
     const { scroll, token } = open_dialog(() => refresh_post(post, card));
     scroll.append(render_post(post, false, true));
@@ -1250,6 +1274,8 @@ function open_post_dialog(post, { card = null, focus = null } = {}) {
             `Комментарии (${format_number(post.comments_count)})`,
         ),
     );
+    // another order starts the thread over from its top
+    scroll.append(render_thread_sort(() => open_post_dialog(post, { card })));
     const top_sentinel = create("div", "sentinel");
     const list = create("div", "post-dialog-comments");
     const empty = create("div", "post-dialog-empty", "Комментариев в базе нет");
@@ -1265,7 +1291,11 @@ function open_post_dialog(post, { card = null, focus = null } = {}) {
     let ready = false;
 
     const fetch_batch = async (from, limit) => {
-        const params = new URLSearchParams({ offset: from, limit });
+        const params = new URLSearchParams({
+            sort: thread_sort,
+            offset: from,
+            limit,
+        });
         const res = await fetch(
             `/api/ebdi/comments/post/${post.post_id}?${params}`,
         );
@@ -1363,7 +1393,10 @@ function open_post_dialog(post, { card = null, focus = null } = {}) {
         let thread_id = null;
         if (focus) {
             try {
-                const res = await fetch(`/api/ebdi/comments/${focus}/place`);
+                const params = new URLSearchParams({ sort: thread_sort });
+                const res = await fetch(
+                    `/api/ebdi/comments/${focus}/place?${params}`,
+                );
                 if (res.ok) {
                     const place = await res.json();
                     first = next =

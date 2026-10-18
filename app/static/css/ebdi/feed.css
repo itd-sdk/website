@@ -979,3 +979,30 @@
 .text-hashtag * {
     color: #e8a87c;
 }
+
+.thread-sort {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.thread-sort-tab {
+    padding: 4px 12px;
+    font-size: 13px;
+    background-color: #2c2a27;
+    border: #494037 1px solid;
+    color: #bbb;
+}
+
+.thread-sort-tab::after {
+    display: none;
+}
+
+.thread-sort-tab:hover {
+    color: #fff;
+}
+
+.thread-sort-active {
+    border-color: #ed6a2d;
+    color: #fbeadb;
+}
