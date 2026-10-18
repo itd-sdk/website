@@ -10,7 +10,6 @@ from sqlalchemy.orm import aliased
 from app.routers.api.ebdi.posts import (
     PostAuthor,
     attachment_filter,
-    attachment_urls,
     ilike_pattern,
     matching_users,
     to_author
@@ -99,7 +98,7 @@ def to_response(row) -> CommentResponse:
         created_at=comment.created_at,
         found_at=comment.found_at,
         content=comment.content,
-        attachments=attachment_urls(comment.attachments or []),
+        attachments=comment.attachments or [],
         likes_count=comment.likes_count,
         replies_count=comment.replies_count
     )

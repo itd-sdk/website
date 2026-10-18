@@ -7,9 +7,7 @@ from itd.enums import ALL
 from itd import Post as ItdPost
 from itd.exceptions import NotFoundError, TargetUserBannedError
 from pydantic import BaseModel
-from sqlalchemy import column as sql_column
-from sqlalchemy import desc, exists, func, literal_column, select
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import desc, exists, func, select
 from sqlalchemy.orm import aliased
 
 from app.logger import get_logger
@@ -61,18 +59,12 @@ def attachment_filter(column, photo: bool, video: bool, audio: bool) -> list:
     for kind, shown in (("photo", photo), ("video", video), ("audio", audio)):
         if shown:
             continue
-        items = func.jsonb_array_elements(column).table_valued(
-            sql_column("value", JSONB)
-        )
-        # older posts kept whole attachment objects instead of urls
-        url = func.coalesce(
-            items.c.value["url"].astext, items.c.value.op("#>>")(literal_column("'{}'"))
-        )
+        urls = func.jsonb_array_elements_text(column).table_valued("value")
         conditions.append(
             ~exists(
                 select(1)
-                .select_from(items)
-                .where(url.regexp_match(ATTACHMENT_KINDS[kind], "i"))
+                .select_from(urls)
+                .where(urls.c.value.regexp_match(ATTACHMENT_KINDS[kind], "i"))
             )
         )
     return conditions
@@ -101,7 +93,7 @@ class RedPen(BaseModel):
     start: int
     end: int
     replacement: str
-    created_at: datetime | None
+    created_at: datetime | None = None
 
 
 class Corrector(BaseModel):
@@ -109,21 +101,12 @@ class Corrector(BaseModel):
 
     start: int
     end: int
-    created_at: datetime | None
+    created_at: datetime | None = None
 
 
-def event_marks(model: type[RedPen] | type[Corrector], marks: list) -> list:
-    # stored as the scraper got them, camelCase from the api or snake_case
-    result = []
-    for mark in marks or []:
-        if not isinstance(mark, dict):
-            continue
-        created_at = mark.get("created_at", mark.get("createdAt"))
-        try:
-            result.append(model.model_validate({**mark, "created_at": created_at}))
-        except ValueError:
-            continue
-    return result
+def event_marks(model: type[RedPen] | type[Corrector], marks: list | None) -> list:
+    # ids and actors stay on the server, the page needs only the ranges
+    return [model.model_validate(mark) for mark in marks or []]
 
 
 class PostResponse(BaseModel):
@@ -152,15 +135,6 @@ class PostResponse(BaseModel):
     original: "PostResponse | None" = None  # the reposted post, if it is stored
 
 
-def attachment_urls(attachments: list) -> list[str]:
-    # posts scraped by older clients kept whole attachment objects
-    return [
-        a if isinstance(a, str) else a.get("url")
-        for a in attachments
-        if isinstance(a, str) or (isinstance(a, dict) and a.get("url"))
-    ]
-
-
 def to_author(user: User | None) -> PostAuthor | None:
     return PostAuthor.model_validate(user, from_attributes=True) if user else None
 
@@ -179,7 +153,7 @@ def to_response(
         edited_at=post.edited_at,
         found_at=post.found_at,
         content=post.content,
-        attachments=attachment_urls(post.attachments or []),
+        attachments=post.attachments or [],
         likes_count=post.likes_count,
         comments_count=post.comments_count,
         reposts_count=post.reposts_count,
@@ -337,6 +311,19 @@ def api_post_ebdi_post_refresh(
         post.edited_at = itd_post.edited_at
         post.dominant = itd_post.dominant
         post.attachments = [attachment.url for attachment in itd_post.attachments]
+        # same shape as the scraper stores
+        post.red_pens = [pen.model_dump(mode="json") for pen in itd_post.red_pens]
+        post.red_pen_authors = [str(c.actor.id) for c in itd_post.red_pen.claims]
+        post.correctors = [
+            {
+                "id": str(c.id),
+                "start": c.start,
+                "end": c.end,
+                "actor": str(c.actor.id),
+                "created_at": str(c.created_at)
+            }
+            for c in itd_post.correctors
+        ]
         post.exists = True
         # comments are refetched only when the counter moved, like the scraper does
         if comments_changed:
