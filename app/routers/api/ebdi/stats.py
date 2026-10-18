@@ -13,7 +13,7 @@ router = APIRouter(prefix="/stats")
 
 # log-scale buckets, upper bound is exclusive
 FOLLOWER_BUCKETS = [0, 1, 2, 10, 50, 100, 500, 1000, 5000]
-RATIO_BUCKETS = [0, 0.1, 0.5, 1, 2, 5, 10]
+RATIO_BUCKETS = [0, 0.1, 0.5, 1, 1.25, 1.5, 1.75, 2, 3, 5, 10]
 
 IMPRECISE_CREATED_AT = and_(
     extract("day", User.created_at) == 1,
@@ -133,7 +133,7 @@ def get_followers_by_age(db: Session) -> list[TimePoint]:
         )
         .where(User.exists.is_(True))
         .where(User.created_at.isnot(None))
-        .where(User.followers_count < 20_000)
+        .where(User.followers_count < 2000)
         .where(not_(IMPRECISE_CREATED_AT))
         .distinct()
         .order_by(desc(User.followers_count))
@@ -148,7 +148,7 @@ def get_posts_vs_followers(db: Session) -> list[ScatterPoint]:
         db.query(User.posts_count, User.followers_count)
         .where(User.exists.is_(True))
         .where(User.posts_count > 0)
-        .where(User.followers_count < 20_000)
+        .where(User.followers_count < 2000)
         .distinct()
         .order_by(desc(User.followers_count))
         .limit(5000)
@@ -320,7 +320,9 @@ class WordCount(BaseModel):
     count: int
 
 
-STOPWORDS = sorted(set("""
+STOPWORDS = sorted(
+    set(
+        """
     без был была были было быть вам вас ведь весь вот все всё всего всех всем вообще
     где даже для его если есть еще ещё жду или как какой кого когда кто куда
     лишь между меня мне мной мое моё может можно мой моя надо нас него нее неё
@@ -332,7 +334,9 @@ STOPWORDS = sorted(set("""
     чуть сколько свои своих своей нам ним ней них его ее её им их тех тот
     the and you for that this with are not but have was what all your can
     just from they will about like http https www com
-""".split()))
+""".split()
+    )
+)
 WORDS_SQL = """
     select word, count(*) as count
     from (
@@ -375,7 +379,7 @@ def get_post_captures(db: Session) -> list[ClanCount]:
         .where(Post.dominant != "")
         .group_by(clan)
         .order_by(desc(func.count()))
-        .limit(20)
+        .limit(10)
     )
     return [ClanCount(clan=clan, count=count) for clan, count in rows]
 
