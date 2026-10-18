@@ -36,28 +36,39 @@
 
     <div id="feed-controls">
         <div id="feed-controls-row">
-            <label id="sort-label">Сортировка
-                <select id="sort-select">
-                    <option value="created">Дата создания</option>
-                    <option value="found">Дата добавления в ЕБДИ</option>
-                    <option value="likes">Количество лайков</option>
-                    <option value="comments">Количество комментариев</option>
-                    <option value="reposts">Количество репостов</option>
-                    <option value="views">Количество просмотров</option>
-                </select>
-            </label>
+            <div id="sort-dropdown">
+                <span id="sort-label">Сортировка</span>
+                <div id="sort-picker">
+                    <button type="button" id="sort-button" aria-haspopup="listbox" aria-expanded="false">
+                        <span id="sort-value"></span>
+                        <img src="/static/icons/arrow.svg" alt="">
+                    </button>
+                    <div id="sort-options" role="listbox" hidden>
+                        <div role="option" data-value="created">Дата создания</div>
+                        <div role="option" data-value="found">Дата добавления в ЕБДИ</div>
+                        <div role="option" data-value="likes">Количество лайков</div>
+                        <div role="option" data-value="comments">Количество комментариев</div>
+                        <div role="option" data-value="reposts">Количество репостов</div>
+                        <div role="option" data-value="views">Количество просмотров</div>
+                    </div>
+                </div>
+            </div>
             <div class="feed-toggles">
                 <label class="feed-toggle"><input type="checkbox" data-state="deleted"><span>Показывать удалённые</span></label>
             </div>
         </div>
         <div class="feed-search-box" id="user-search-box">
-            <input id="user-input" class="feed-search" type="search" placeholder="Поиск по пользователю" autocomplete="off">
-            <button class="feed-search-clear" type="button" title="Очистить" aria-label="Очистить" hidden></button>
-            <div id="user-candidates" class="feed-candidates" hidden></div>
+            <div class="feed-search-field">
+                <input id="user-input" class="feed-search" type="search" placeholder="Поиск по пользователю" autocomplete="off">
+                <div id="user-candidates" class="feed-candidates" hidden></div>
+            </div>
+            <button class="feed-search-clear feed-search-clear-empty" type="button" title="Очистить" aria-label="Очистить"></button>
         </div>
         <div class="feed-search-box">
-            <input id="query-input" class="feed-search" type="search" placeholder="Поиск по содержанию" autocomplete="off">
-            <button class="feed-search-clear" type="button" title="Очистить" aria-label="Очистить" hidden></button>
+            <div class="feed-search-field">
+                <input id="query-input" class="feed-search" type="search" placeholder="Поиск по содержанию" autocomplete="off">
+            </div>
+            <button class="feed-search-clear feed-search-clear-empty" type="button" title="Очистить" aria-label="Очистить"></button>
         </div>
     </div>
 

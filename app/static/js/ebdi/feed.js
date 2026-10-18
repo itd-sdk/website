@@ -8,9 +8,7 @@ const ICONS = {
     likes: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="none" width="20" height="20"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 4.6a3.7 3.7 0 0 0-5.2-.9C3.2 5 2.4 7.6 3.6 10.2 4.8 12.7 10 17 10 17s5.3-4.3 6.5-6.8c1.2-2.6 0-5.2-1.6-6.5s-4-.8-4.9.9"></path></svg>',
     comments: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 20" width="20" height="20"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.0" d="M10 17a7 7 0 1 0-6.2-3.7L3 17l3.7-.8a7 7 0 0 0 3.3.8"></path></svg>',
     reposts: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 20" width="20" height="20"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.0" d="M4 9V8a3 3 0 0 1 3-3h9m-3 3 3-3-3-3M16 11v1a3 3 0 0 1-3 3H4m3-3-3 3 3 3"></path></svg>',
-    close: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="none" width="16" height="16"><path stroke="currentColor" stroke-linecap="round" stroke-width="2" d="m5 5 10 10M15 5 5 15"></path></svg>',
     views: '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 20 20"><path stroke="currentColor" stroke-width="1.5" d="M2 10s2.91-6 8-6 8 6 8 6-2.91 6-8 6-8-6-8-6Z"></path><path stroke="currentColor" stroke-width="1.5" d="M10 12a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"></path></svg>',
-    open: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="none" width="16" height="16"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M11 3h6v6M17 3l-8 8M15 12v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h3"></path></svg>',
     play: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" width="18" height="18"><path fill="currentColor" d="M6 4.2v11.6a.8.8 0 0 0 1.2.7l9.2-5.8a.8.8 0 0 0 0-1.4L7.2 3.5a.8.8 0 0 0-1.2.7"></path></svg>',
     pause: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" width="18" height="18"><rect fill="currentColor" x="5" y="4" width="3.5" height="12" rx="1"></rect><rect fill="currentColor" x="11.5" y="4" width="3.5" height="12" rx="1"></rect></svg>',
 };
@@ -67,6 +65,33 @@ function icon_button(class_name, icon, title) {
     return button;
 }
 
+function icon_image(name) {
+    const image = create("img");
+    image.src = `/static/icons/${name}.svg`;
+    image.alt = "";
+    return image;
+}
+
+function escape_regexp(text) {
+    return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// text with the matches of the content search wrapped in <mark>
+function highlighted(text) {
+    const fragment = document.createDocumentFragment();
+    if (!state.q || !text) {
+        fragment.append(text || "");
+        return fragment;
+    }
+    let last = 0;
+    for (const match of text.matchAll(new RegExp(escape_regexp(state.q), "giu"))) {
+        fragment.append(text.slice(last, match.index), create("mark", "search-match", match[0]));
+        last = match.index + match[0].length;
+    }
+    fragment.append(text.slice(last));
+    return fragment;
+}
+
 function format_number(value) {
     return new Intl.NumberFormat("ru-RU").format(value);
 }
@@ -106,7 +131,7 @@ function read_url_state() {
     const params = new URLSearchParams(location.search);
     const sort = params.get("sort");
     // links from older versions may carry sorts that no longer exist
-    const known = [...get_el("sort-select").options].some((o) => o.value == sort);
+    const known = sort_options().some((option) => option.dataset.value == sort);
     state.sort = known ? sort : DEFAULT_STATE.sort;
     state.q = params.get("q") || "";
     state.user = (params.get("user") || "").replace(/^@/, "");
@@ -131,7 +156,7 @@ function user_input_text() {
 }
 
 function apply_state_to_controls() {
-    get_el("sort-select").value = state.sort;
+    update_sort_dropdown();
     for (const toggle of toggles()) {
         toggle.checked = state[toggle.dataset.state];
     }
@@ -177,7 +202,7 @@ function render_header(author, author_id, date, url) {
     open.target = "_blank";
     open.title = "Открыть в ИТД";
     open.setAttribute("aria-label", "Открыть в ИТД");
-    open.innerHTML = ICONS.open;
+    open.append(icon_image("open-in-new"));
     header.append(open);
     return header;
 }
@@ -403,7 +428,9 @@ function render_post(post, nested = false, in_dialog = false) {
         card.append(badges);
     }
     if (post.content) {
-        card.append(create("div", "post-content", post.content));
+        const content = create("div", "post-content");
+        content.append(highlighted(post.content));
+        card.append(content);
     }
     if (post.attachments.length) {
         card.append(render_attachments(post.attachments));
@@ -530,7 +557,7 @@ function render_comment_body(comment, show_replies) {
         link.target = "_blank";
         text.append(link, " ");
     }
-    text.append(comment.content);
+    text.append(highlighted(comment.content));
     body.append(text);
 
     const side = create("div", "comment-side");
@@ -581,8 +608,12 @@ function close_dialog() {
 function build_dialog() {
     const dialog = create("dialog");
     dialog.id = "post-dialog";
-    const close = icon_button(null, "close", "Закрыть");
+    const close = create("button");
+    close.type = "button";
     close.id = "post-dialog-close";
+    close.title = "Закрыть";
+    close.setAttribute("aria-label", "Закрыть");
+    close.append(icon_image("close"));
     close.addEventListener("click", close_dialog);
     const header = create("div", "post-dialog-header");
     header.append(close);
@@ -787,9 +818,74 @@ async function load_count() {
     }
 }
 
+function sort_options() {
+    return [...document.querySelectorAll("#sort-options [role=option]")];
+}
+
+function update_sort_dropdown() {
+    for (const option of sort_options()) {
+        const selected = option.dataset.value == state.sort;
+        option.setAttribute("aria-selected", selected);
+        if (selected) {
+            get_el("sort-value").textContent = option.textContent;
+        }
+    }
+}
+
+function toggle_sort_dropdown(open) {
+    get_el("sort-options").hidden = !open;
+    get_el("sort-button").setAttribute("aria-expanded", open);
+    if (open) {
+        sort_options()
+            .find((option) => option.dataset.value == state.sort)
+            ?.focus();
+    }
+}
+
+function setup_sort_dropdown() {
+    const button = get_el("sort-button");
+    const list = get_el("sort-options");
+    button.addEventListener("click", () => toggle_sort_dropdown(list.hidden));
+    const pick = (option) => {
+        toggle_sort_dropdown(false);
+        button.focus();
+        if (option.dataset.value != state.sort) {
+            state.sort = option.dataset.value;
+            update_sort_dropdown();
+            apply();
+        }
+    };
+    for (const option of sort_options()) {
+        option.tabIndex = -1;
+        option.addEventListener("click", () => pick(option));
+    }
+    list.addEventListener("keydown", (event) => {
+        const options = sort_options();
+        const index = options.indexOf(document.activeElement);
+        if (event.key == "ArrowDown" || event.key == "ArrowUp") {
+            event.preventDefault();
+            const step = event.key == "ArrowDown" ? 1 : -1;
+            options[(index + step + options.length) % options.length].focus();
+        } else if (event.key == "Enter" || event.key == " ") {
+            event.preventDefault();
+            if (index >= 0) {
+                pick(options[index]);
+            }
+        } else if (event.key == "Escape" || event.key == "Tab") {
+            toggle_sort_dropdown(false);
+            button.focus();
+        }
+    });
+    document.addEventListener("click", (event) => {
+        if (!get_el("sort-dropdown").contains(event.target)) {
+            toggle_sort_dropdown(false);
+        }
+    });
+}
+
 function update_clear_buttons() {
     for (const box of document.querySelectorAll(".feed-search-box")) {
-        box.querySelector(".feed-search-clear").hidden = !box.querySelector("input").value;
+        box.querySelector(".feed-search-clear").classList.toggle("feed-search-clear-empty", !box.querySelector("input").value);
     }
 }
 
@@ -907,7 +1003,7 @@ function setup_clear_buttons() {
     for (const box of document.querySelectorAll(".feed-search-box")) {
         const input = box.querySelector("input");
         const clear = box.querySelector(".feed-search-clear");
-        clear.innerHTML = ICONS.close;
+        clear.append(icon_image("close"));
         input.addEventListener("input", update_clear_buttons);
         clear.addEventListener("click", () => {
             input.value = "";
@@ -921,10 +1017,7 @@ document.addEventListener("DOMContentLoaded", () => {
     read_url_state();
     apply_state_to_controls();
 
-    get_el("sort-select").addEventListener("change", (event) => {
-        state.sort = event.target.value;
-        apply();
-    });
+    setup_sort_dropdown();
     for (const toggle of toggles()) {
         toggle.addEventListener("change", () => {
             state[toggle.dataset.state] = toggle.checked;
