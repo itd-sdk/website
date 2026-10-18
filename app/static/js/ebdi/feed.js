@@ -15,6 +15,7 @@ const FEEDS = {
         error: "постов",
         defaults: {
             deleted: false,
+            marks: false,
             text: true,
             photo: true,
             video: true,
@@ -47,6 +48,8 @@ let offset = 0;
 let has_more = true;
 let loading = false;
 let request_token = 0;
+// the random sort keeps one shuffle across pages, a new one on every reload
+let random_seed = Math.random().toString(36).slice(2);
 
 function get_el(id) {
     return document.getElementById(id);
@@ -274,9 +277,7 @@ function write_url_state() {
 function apply_state_to_controls() {
     update_sort_dropdown();
     for (const toggle of toggles()) {
-        // an inverted box hides what its flag shows
-        const shown = state[toggle.dataset.state];
-        toggle.checked = "inverted" in toggle.dataset ? !shown : shown;
+        toggle.checked = state[toggle.dataset.state];
     }
     get_el("user-input").value = state.user;
     get_el("query-input").value = state.q;
@@ -1361,6 +1362,9 @@ async function load_page() {
             offset,
             limit: PAGE_SIZE,
         });
+        if (state.sort == "random") {
+            params.set("seed", random_seed);
+        }
         const res = await fetch(`${FEED.api}?${params}`);
         if (token != request_token) {
             return;
@@ -1417,6 +1421,7 @@ function load_if_visible() {
 function reload() {
     // responses of the previous filter are dropped by the token check
     request_token += 1;
+    random_seed = Math.random().toString(36).slice(2);
     loading = false;
     offset = 0;
     has_more = true;
@@ -1671,9 +1676,7 @@ document.addEventListener("DOMContentLoaded", () => {
     setup_sort_dropdown();
     for (const toggle of toggles()) {
         toggle.addEventListener("change", () => {
-            const checked = toggle.checked;
-            state[toggle.dataset.state] =
-                "inverted" in toggle.dataset ? !checked : checked;
+            state[toggle.dataset.state] = toggle.checked;
             apply();
         });
     }

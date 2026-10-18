@@ -12,6 +12,7 @@ from app.routers.api.ebdi.posts import (
     attachment_filter,
     ilike_pattern,
     matching_users,
+    random_order,
     to_author
 )
 from app.schemas import Comment, Post, User
@@ -26,6 +27,7 @@ class CommentSort(Enum):
     found = "found"  # by the time the comment got into the database
     likes = "likes"
     replies = "replies"
+    random = "random"
 
 
 SORT_COLUMNS = {
@@ -118,6 +120,7 @@ def api_get_ebdi_comments(
     photo: bool = True,  # comments with attachments of these kinds
     video: bool = True,
     audio: bool = True,
+    seed: str = Query("", max_length=32),  # shuffle of the random sort
     offset: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=50),
     db: Session = Depends(get_db)
@@ -140,7 +143,13 @@ def api_get_ebdi_comments(
     if user.strip():
         query = query.where(Comment.author_id.in_(matching_users(user)))
     rows = (
-        query.order_by(desc(SORT_COLUMNS[sort]).nulls_last(), desc(Comment.id))
+        query.order_by(
+            *(
+                (random_order(Comment.comment_id, seed), Comment.id)
+                if sort == CommentSort.random
+                else (desc(SORT_COLUMNS[sort]).nulls_last(), desc(Comment.id))
+            )
+        )
         .offset(offset)
         .limit(limit)
         .all()

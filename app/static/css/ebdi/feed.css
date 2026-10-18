@@ -39,14 +39,21 @@
     color: #bbb;
 }
 
+/* both search fields share one line, on phones they stack */
 #feed-searches {
     display: flex;
-    flex-wrap: wrap;
     gap: 8px 16px;
 }
 
 #feed-searches .feed-search-box {
-    flex: 1 1 300px;
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+@media (max-width: 700px) {
+    #feed-searches {
+        flex-direction: column;
+    }
 }
 
 #sort-dropdown {

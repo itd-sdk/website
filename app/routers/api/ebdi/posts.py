@@ -28,6 +28,7 @@ class PostSort(Enum):
     comments = "comments"
     reposts = "reposts"
     views = "views"
+    random = "random"
 
 
 SORT_COLUMNS = {
@@ -38,6 +39,12 @@ SORT_COLUMNS = {
     PostSort.reposts: Post.reposts_count,
     PostSort.views: Post.views_count
 }
+
+
+def random_order(key, seed: str):
+    # a hash of the key and the seed is a shuffle that stays the same for every
+    # page of one seed, unlike random()
+    return func.md5(func.concat(key, seed))
 
 
 def ilike_pattern(text: str) -> str:
@@ -198,10 +205,12 @@ def api_get_ebdi_posts(
     q: str = Query("", max_length=200),  # text in the content
     user: str = Query("", max_length=100),  # author's username
     deleted: bool = False,
+    marks: bool = False,  # only posts with red pens or correctors
     text: bool = True,  # posts without attachments
     photo: bool = True,  # posts with attachments of these kinds
     video: bool = True,
     audio: bool = True,
+    seed: str = Query("", max_length=32),  # shuffle of the random sort
     offset: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=50),
     db: Session = Depends(get_db)
@@ -209,6 +218,13 @@ def api_get_ebdi_posts(
     query = posts_with_users(db)
     if not deleted:
         query = query.where(Post.exists.is_(True))
+    if marks:
+        query = query.where(
+            or_(
+                func.jsonb_array_length(Post.red_pens) > 0,
+                func.jsonb_array_length(Post.correctors) > 0
+            )
+        )
     for condition in attachment_filter(Post.attachments, text, photo, video, audio):
         query = query.where(condition)
     if q.strip():
@@ -216,7 +232,13 @@ def api_get_ebdi_posts(
     if user.strip():
         query = query.where(Post.author_id.in_(matching_users(user)))
     rows = (
-        query.order_by(desc(SORT_COLUMNS[sort]).nulls_last(), desc(Post.id))
+        query.order_by(
+            *(
+                (random_order(Post.post_id, seed), Post.id)
+                if sort == PostSort.random
+                else (desc(SORT_COLUMNS[sort]).nulls_last(), desc(Post.id))
+            )
+        )
         .offset(offset)
         .limit(limit)
         .all()
