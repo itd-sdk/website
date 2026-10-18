@@ -2,7 +2,6 @@
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
     gap: 15px;
-    width: 90vw;
     margin: 0 auto;
 }
 
@@ -99,12 +98,6 @@ canvas {
 }
 
 @media (max-width: 700px) {
-    #charts {
-        grid-template-columns: 1fr;
-        margin-left: -20px;
-        width: 100vw;
-    }
-
     .chart-card {
         padding: 14px;
     }
