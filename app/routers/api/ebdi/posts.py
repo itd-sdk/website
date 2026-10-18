@@ -7,7 +7,7 @@ from itd.enums import ALL
 from itd import Post as ItdPost
 from itd.exceptions import NotFoundError, TargetUserBannedError
 from pydantic import BaseModel
-from sqlalchemy import desc, exists, func, select
+from sqlalchemy import desc, exists, false, func, or_, select
 from sqlalchemy.orm import aliased
 
 from app.logger import get_logger
@@ -53,23 +53,27 @@ ATTACHMENT_KINDS = {
 }
 
 
+def has_attachment(column, kind: str):
+    urls = func.jsonb_array_elements_text(column).table_valued("value")
+    return exists(
+        select(1)
+        .select_from(urls)
+        .where(urls.c.value.regexp_match(ATTACHMENT_KINDS[kind], "i"))
+    )
+
+
 def attachment_filter(
     column, text: bool, photo: bool, video: bool, audio: bool
 ) -> list:
-    """Conditions hiding items with attachments of the unchecked kinds,
-    text stands for items without attachments"""
-    conditions = [] if text else [func.jsonb_array_length(column) > 0]
-    for kind, shown in (("photo", photo), ("video", video), ("audio", audio)):
-        if shown:
-            continue
-        urls = func.jsonb_array_elements_text(column).table_valued("value")
-        conditions.append(
-            ~exists(
-                select(1)
-                .select_from(urls)
-                .where(urls.c.value.regexp_match(ATTACHMENT_KINDS[kind], "i"))
-            )
-        )
+    """Conditions hiding items with attachments of the unchecked kinds;
+    an item without a recognized attachment counts as text, some stored
+    attachment lists hold strings that are not links"""
+    shown = {"photo": photo, "video": video, "audio": audio}
+    if not text and not any(shown.values()):
+        return [false()]
+    conditions = [~has_attachment(column, kind) for kind, on in shown.items() if not on]
+    if not text:
+        conditions.append(or_(*(has_attachment(column, kind) for kind in shown)))
     return conditions
 
 

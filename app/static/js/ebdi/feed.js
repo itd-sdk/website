@@ -593,7 +593,8 @@ function render_attachments(urls) {
             box.append(part);
         }
     }
-    return box;
+    // some stored lists hold strings that are not links
+    return box.children.length ? box : null;
 }
 
 let lightbox_urls = [];
@@ -773,8 +774,9 @@ function render_post(post, nested = false, in_dialog = false) {
         content.append(render_text(post.content, post));
         card.append(content);
     }
-    if (post.attachments.length) {
-        card.append(render_attachments(post.attachments));
+    const attachments = render_attachments(post.attachments);
+    if (attachments) {
+        card.append(attachments);
     }
     if (post.poll_question) {
         card.append(render_poll(post));
@@ -935,13 +937,14 @@ function render_comment_body(comment, show_replies) {
     }
     side.append(render_stat(comment.likes_count, "like", "Лайки"));
 
-    if (!comment.attachments.length) {
+    const attachments = render_attachments(comment.attachments);
+    if (!attachments) {
         const body = create("div", "comment-body");
         body.append(text, side);
         return [body];
     }
     side.classList.add("comment-side-bottom");
-    const parts = [render_attachments(comment.attachments), side];
+    const parts = [attachments, side];
     return text.textContent ? [text, ...parts] : parts;
 }
 
@@ -1340,6 +1343,14 @@ async function load_page() {
     if (loading || !has_more) {
         return;
     }
+    // with every kind unchecked nothing can match, no request is made
+    if (!["text", "photo", "video", "audio"].some((kind) => state[kind])) {
+        has_more = false;
+        show_empty(
+            "Не выбран ни один тип: отметьте текст, фото, видео или голосовые",
+        );
+        return;
+    }
     loading = true;
     const token = request_token;
     get_el("list-loader").hidden = false;
@@ -1372,7 +1383,9 @@ async function load_page() {
         }
         offset += items.length;
         has_more = items.length == PAGE_SIZE;
-        get_el("list-empty").hidden = offset > 0;
+        if (offset == 0) {
+            show_empty("Ничего не найдено");
+        }
         // the observer only fires on changes, a short page keeps the sentinel visible
         requestAnimationFrame(load_if_visible);
     } catch (error) {
@@ -1386,6 +1399,12 @@ async function load_page() {
             get_el("list-loader").hidden = true;
         }
     }
+}
+
+function show_empty(message) {
+    const empty = get_el("list-empty");
+    empty.textContent = message;
+    empty.hidden = false;
 }
 
 function load_if_visible() {
