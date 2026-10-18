@@ -7,7 +7,7 @@ from itd.enums import ALL
 from itd import Post as ItdPost
 from itd.exceptions import NotFoundError, TargetUserBannedError
 from pydantic import BaseModel
-from sqlalchemy import and_, cast, desc, exists, false, func, or_, select
+from sqlalchemy import cast, desc, exists, false, func, or_, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import aliased
 
@@ -119,12 +119,9 @@ class Corrector(BaseModel):
     created_at: datetime | None = None
 
 
-def event_marks(model: type[RedPen] | type[Corrector], marks) -> list:
-    # ids and actors stay on the server, the page needs only the ranges;
-    # some posts hold an object instead of a list, it is no marks
-    if not isinstance(marks, list):
-        return []
-    return [model.model_validate(mark) for mark in marks]
+def event_marks(model: type[RedPen] | type[Corrector], marks: list | None) -> list:
+    # ids and actors stay on the server, the page needs only the ranges
+    return [model.model_validate(mark) for mark in marks or []]
 
 
 class PostResponse(BaseModel):
@@ -224,16 +221,7 @@ def api_get_ebdi_posts(
         query = query.where(Post.exists.is_(True))
     if marks:
         query = query.where(
-            or_(
-                and_(
-                    func.jsonb_typeof(Post.red_pens) == "array",
-                    Post.red_pens != cast([], JSONB)
-                ),
-                and_(
-                    func.jsonb_typeof(Post.correctors) == "array",
-                    Post.correctors != cast([], JSONB)
-                )
-            )
+            or_(Post.red_pens != cast([], JSONB), Post.correctors != cast([], JSONB))
         )
     for condition in attachment_filter(Post.attachments, text, photo, video, audio):
         query = query.where(condition)

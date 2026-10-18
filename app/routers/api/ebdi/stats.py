@@ -375,7 +375,7 @@ def get_post_captures(db: Session) -> list[ClanCount]:
         .where(Post.dominant != "")
         .group_by(clan)
         .order_by(desc(func.count()))
-        .limit(30)
+        .limit(20)
     )
     return [ClanCount(clan=clan, count=count) for clan, count in rows]
 

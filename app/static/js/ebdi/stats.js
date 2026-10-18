@@ -384,7 +384,16 @@ function render_post_captures(data) {
             scales: {
                 x: {
                     grid: { color: GRID },
-                    ticks: { color: TEXT, font: { size: 16 } },
+                    // every bar keeps its emoji, chart.js would skip half of them
+                    ticks: {
+                        color: TEXT,
+                        // narrow charts get smaller emoji so all of them fit
+                        font: (context) => ({
+                            size: context.chart.width < 500 ? 10 : 14,
+                        }),
+                        autoSkip: false,
+                        maxRotation: 0,
+                    },
                 },
                 y: {
                     grid: { color: GRID },
