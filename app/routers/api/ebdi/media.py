@@ -7,11 +7,15 @@ ffmpeg rebuilds the container without touching the audio.
 """
 
 import asyncio
+import os
 import shutil
-from collections import OrderedDict
+import time
+from pathlib import Path as FilePath
+from uuid import uuid4
 
 import httpx
-from fastapi import APIRouter, HTTPException, Path, Request, Response
+from fastapi import APIRouter, HTTPException, Path, Request
+from fastapi.responses import FileResponse
 
 from app.logger import get_logger
 from app.services.limiter import get_limiter
@@ -24,21 +28,52 @@ AUDIO_NAME = (
     r"^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}"
     r"\.(ogg|oga|opus|mp3|m4a|aac|wav|flac)$"
 )
+MEDIA_TYPES = {
+    ".ogg": "audio/ogg",
+    ".oga": "audio/ogg",
+    ".opus": "audio/ogg",
+    ".mp3": "audio/mpeg",
+    ".m4a": "audio/mp4",
+    ".aac": "audio/aac",
+    ".wav": "audio/wav",
+    ".flac": "audio/flac"
+}
 OGG_SUFFIXES = (".ogg", ".oga", ".opus")
 MAX_AUDIO_SIZE = 20 * 1024 * 1024
-CACHE_SIZE = 64 * 1024 * 1024
+# files nobody played for this long are removed, played ones get a new term
+CACHE_TTL = 7 * 24 * 3600
+CLEANUP_INTERVAL = 3600
 FFMPEG = shutil.which("ffmpeg")
 
 client: httpx.AsyncClient | None = None
-# recently served files, the same voice message is usually played by many viewers
-cache: OrderedDict[str, tuple[bytes, str]] = OrderedDict()
-cache_bytes = 0
+last_cleanup = 0.0
 
 if FFMPEG is None:
     l.warning("ffmpeg not found, ogg voice messages are served as is")
 
 
-async def download(name: str) -> tuple[bytes, str]:
+def cache_dir() -> FilePath:
+    # read on use, .env is loaded after the routers are imported
+    path = FilePath(os.getenv("AUDIO_CACHE_DIR", "cache/audio"))
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def remove_stale(directory: FilePath) -> None:
+    deadline = time.time() - CACHE_TTL
+    removed = 0
+    for file in directory.iterdir():
+        try:
+            if file.stat().st_mtime < deadline:
+                file.unlink()
+                removed += 1
+        except FileNotFoundError:
+            pass
+    if removed:
+        l.info("removed %s stale voice messages", removed)
+
+
+async def download(name: str) -> bytes:
     global client
     client = client or httpx.AsyncClient(timeout=15)
     async with client.stream("GET", AUDIO_SOURCE + name) as res:
@@ -49,7 +84,7 @@ async def download(name: str) -> tuple[bytes, str]:
             content += chunk
             if len(content) > MAX_AUDIO_SIZE:
                 raise HTTPException(413, "file too large")
-        return bytes(content), res.headers.get("content-type", "audio/ogg")
+        return bytes(content)
 
 
 async def remux_ogg(content: bytes) -> bytes:
@@ -71,25 +106,22 @@ async def remux_ogg(content: bytes) -> bytes:
     return output
 
 
-def remember(name: str, value: tuple[bytes, str]) -> None:
-    global cache_bytes
-    cache[name] = value
-    cache_bytes += len(value[0])
-    while cache_bytes > CACHE_SIZE:
-        _, (content, _) = cache.popitem(last=False)
-        cache_bytes -= len(content)
-
-
 @router.get("/audio/{name}")
 @get_limiter().limit("120/minute")
 async def api_get_ebdi_audio(request: Request, name: str = Path(pattern=AUDIO_NAME)):
-    # only files of the ITD CDN by name, the endpoint is not an open proxy
-    if name in cache:
-        cache.move_to_end(name)
-        content, media_type = cache[name]
+    global last_cleanup
+    directory = cache_dir()
+    if time.time() - last_cleanup > CLEANUP_INTERVAL:
+        last_cleanup = time.time()
+        await asyncio.to_thread(remove_stale, directory)
+
+    file = directory / name
+    if file.exists():
+        file.touch()
     else:
+        # only files of the ITD CDN by name, the endpoint is not an open proxy
         try:
-            content, media_type = await download(name)
+            content = await download(name)
         except httpx.HTTPError as error:
             l.warning("audio %s fetch failed: %r", name, error)
             raise HTTPException(502, "ITD request failed") from error
@@ -99,10 +131,13 @@ async def api_get_ebdi_audio(request: Request, name: str = Path(pattern=AUDIO_NA
             except Exception as error:
                 # the original still plays in most browsers
                 l.warning("audio %s remux failed: %r", name, error)
-        remember(name, (content, media_type))
+        # a reader never sees a half written file
+        partial = file.with_name(f".{name}.{uuid4().hex}.part")
+        partial.write_bytes(content)
+        partial.replace(file)
     # files never change under the same name
-    return Response(
-        content,
-        media_type=media_type,
+    return FileResponse(
+        file,
+        media_type=MEDIA_TYPES[file.suffix],
         headers={"Cache-Control": "public, max-age=604800, immutable"}
     )
