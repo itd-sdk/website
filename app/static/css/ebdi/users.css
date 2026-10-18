@@ -1,3 +1,10 @@
+/* #rows opts out of scroll anchoring, so the browser anchored to the footer
+   below it and jumped to the end of every appended batch; batches added
+   above are compensated by hand in insert_batch */
+html {
+    overflow-anchor: none;
+}
+
 .row-deleted .user-display-name,
 .row-deleted .row-right {
     opacity: 0.6;

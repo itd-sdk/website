@@ -394,35 +394,58 @@ function can_load() {
     );
 }
 
+// batches load well before the edge is reached, like the posts feed
+const PRELOAD_MARGIN = "1200px 0px";
+
+// an observer only reports changes, a sentinel still in range after a load
+// would never fire again, so it is observed anew
+function recheck(observer, target) {
+    observer.unobserve(target);
+    observer.observe(target);
+}
+
 function init_infinite_scroll() {
-    gap_observer = new IntersectionObserver(async (entries) => {
-        for (const entry of entries) {
-            if (!entry.isIntersecting || !can_load()) {
-                continue;
+    gap_observer = new IntersectionObserver(
+        async (entries) => {
+            for (const entry of entries) {
+                if (!entry.isIntersecting || !can_load()) {
+                    continue;
+                }
+                await load_batch(Number(entry.target.dataset.offset));
             }
-            await load_batch(Number(entry.target.dataset.offset));
-        }
-    });
-    const bottom_observer = new IntersectionObserver(async (entries) => {
-        if (!entries.some((entry) => entry.isIntersecting)) {
-            return;
-        }
-        if (!can_load() || state.finished) {
-            return;
-        }
-        await load_batch(max_loaded_offset() + PAGE_SIZE);
-    });
-    bottom_observer.observe(get_el("sentinel-bottom"));
-    const top_observer = new IntersectionObserver(async (entries) => {
-        if (!entries.some((entry) => entry.isIntersecting)) {
-            return;
-        }
-        if (!can_load() || min_loaded_offset() == 0) {
-            return;
-        }
-        await load_batch(min_loaded_offset() - PAGE_SIZE);
-    });
-    top_observer.observe(get_el("sentinel-top"));
+        },
+        { rootMargin: PRELOAD_MARGIN },
+    );
+    const bottom = get_el("sentinel-bottom");
+    const bottom_observer = new IntersectionObserver(
+        async (entries) => {
+            if (!entries.some((entry) => entry.isIntersecting)) {
+                return;
+            }
+            if (!can_load() || state.finished) {
+                return;
+            }
+            await load_batch(max_loaded_offset() + PAGE_SIZE);
+            recheck(bottom_observer, bottom);
+        },
+        { rootMargin: PRELOAD_MARGIN },
+    );
+    bottom_observer.observe(bottom);
+    const top = get_el("sentinel-top");
+    const top_observer = new IntersectionObserver(
+        async (entries) => {
+            if (!entries.some((entry) => entry.isIntersecting)) {
+                return;
+            }
+            if (!can_load() || min_loaded_offset() == 0) {
+                return;
+            }
+            await load_batch(min_loaded_offset() - PAGE_SIZE);
+            recheck(top_observer, top);
+        },
+        { rootMargin: PRELOAD_MARGIN },
+    );
+    top_observer.observe(top);
 }
 
 let search_timer = null;
