@@ -1,7 +1,7 @@
-{% extends "base.html" %}
+{% extends "ebdi/base.html" %}
+{% set active_tab = "stats" %}
 
-{% block head %}
-<link rel="stylesheet" href="/static/css/ebdi/style.css">
+{% block ebdi_head %}
 <link rel="stylesheet" href="/static/css/ebdi/stats.css">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <script src="https://cdn.jsdelivr.net/npm/luxon@3"></script>
@@ -10,28 +10,7 @@
 <meta name="description" content="Единая База Данных ИТД: статистика пользователей, графики роста, распределение подписчиков">
 {% endblock %}
 
-{% block content %}
-<div id="landing">
-    <img id="banner" src="/static/images/ebdi.png">
-    <div id="landing-description">Единая База Данных ИТД</div>
-</div>
-
-<div id="content">
-    <div id="feedback">
-        <img src="/static/icons/vote.svg">
-        <div id="feedback-content">
-            <div id="feedback-title">Обратная связь</div>
-            <div id="feedback-description">Предложите идеи для ЕБДИ или сообщите о баге.</div>
-        </div>
-        <button onclick="location.href='https://github.com/itd-sdk/website/issues/new'">Перейти <img src="/static/icons/arrow.svg"></button>
-    </div>
-    <nav id="tabs">
-        <a href="/ebdi/users" class="tab">Пользователи</a>
-        <a href="/ebdi/clans" class="tab">Кланы</a>
-        <!--<a href="/ebdi/posts" class="tab">Посты</a>-->
-        <!--<a href="/ebdi/comments" class="tab">Комментарии</a>-->
-        <a href="/ebdi/stats" class="tab tab-active">Статистика</a>
-    </nav>
+{% block ebdi_content %}
 
     <h2>Статистика ИТД</h2>
 
@@ -172,5 +151,4 @@
             <div class="chart-box"><canvas id="chart-follow-ratio"></canvas></div>
         </div>
     </div>
-</div>
 {% endblock %}

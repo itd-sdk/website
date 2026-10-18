@@ -705,6 +705,25 @@
     overflow-wrap: anywhere;
 }
 
+.dialog-posts {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 14px 24px 0;
+    padding: 10px 16px;
+    background-color: #3e3b37;
+    transition: background-color 0.2s;
+}
+
+.dialog-posts,
+.dialog-posts * {
+    color: #fff;
+}
+
+.dialog-posts:hover {
+    background-color: #494037;
+}
+
 #dialog-error {
     margin: 14px 24px 0;
     color: #e35b4c;

@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{# name, title, shown on other pages; posts and comments are hidden from prod for now #}
+{% set tabs = [
+    ("users", "Пользователи", true),
+    ("clans", "Кланы", true),
+    ("posts", "Посты", false),
+    ("comments", "Комментарии", false),
+    ("stats", "Статистика", true),
+] %}
+
+{% block head %}
+<link rel="stylesheet" href="/static/css/ebdi/style.css">
+{% block ebdi_head %}{% endblock %}
+{% endblock %}
+
+{% block content %}
+<div id="landing">
+    <img id="banner" src="/static/images/ebdi.png">
+    <div id="landing-description">Единая База Данных ИТД</div>
+</div>
+
+<div id="content">
+    <div id="feedback">
+        <img src="/static/icons/vote.svg">
+        <div id="feedback-content">
+            <div id="feedback-title">Обратная связь</div>
+            <div id="feedback-description">Предложите идеи для ЕБДИ или сообщите о баге.</div>
+        </div>
+        <button onclick="location.href='https://github.com/itd-sdk/website/issues/new'">Перейти <img src="/static/icons/arrow.svg"></button>
+    </div>
+    <nav id="tabs">
+        {% for name, title, shown in tabs if shown or name == active_tab %}
+        <a href="/ebdi/{{ name }}" class="tab{% if name == active_tab %} tab-active{% endif %}">{{ title }}</a>
+        {% endfor %}
+    </nav>
+{% block ebdi_content %}{% endblock %}
+</div>
+{% block ebdi_after %}{% endblock %}
+{% endblock %}

@@ -627,6 +627,10 @@ function render_dialog_header(user) {
     }
     display_name.href = "https://итд.com/@" + user.user_id;
     get_el("dialog-username").textContent = "@" + user.username;
+    get_el("dialog-posts").href =
+        "/ebdi/posts?" + new URLSearchParams({ user: user.username });
+    get_el("dialog-posts-text").textContent =
+        `Посты пользователя (${format_number(user.posts_count)})`;
 
     const badges = get_el("dialog-badges");
     badges.replaceChildren();
