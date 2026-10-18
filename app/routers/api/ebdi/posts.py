@@ -53,9 +53,12 @@ ATTACHMENT_KINDS = {
 }
 
 
-def attachment_filter(column, photo: bool, video: bool, audio: bool) -> list:
-    """Conditions hiding items with attachments of the unchecked kinds"""
-    conditions = []
+def attachment_filter(
+    column, text: bool, photo: bool, video: bool, audio: bool
+) -> list:
+    """Conditions hiding items with attachments of the unchecked kinds,
+    text stands for items without attachments"""
+    conditions = [] if text else [func.jsonb_array_length(column) > 0]
     for kind, shown in (("photo", photo), ("video", video), ("audio", audio)):
         if shown:
             continue
@@ -191,6 +194,7 @@ def api_get_ebdi_posts(
     q: str = Query("", max_length=200),  # text in the content
     user: str = Query("", max_length=100),  # author's username
     deleted: bool = False,
+    text: bool = True,  # posts without attachments
     photo: bool = True,  # posts with attachments of these kinds
     video: bool = True,
     audio: bool = True,
@@ -201,7 +205,7 @@ def api_get_ebdi_posts(
     query = posts_with_users(db)
     if not deleted:
         query = query.where(Post.exists.is_(True))
-    for condition in attachment_filter(Post.attachments, photo, video, audio):
+    for condition in attachment_filter(Post.attachments, text, photo, video, audio):
         query = query.where(condition)
     if q.strip():
         query = query.where(Post.content.ilike(ilike_pattern(q.strip()), escape="\\"))

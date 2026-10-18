@@ -113,6 +113,8 @@ def api_get_ebdi_comments(
     user: str = Query("", max_length=100),  # author's username
     deleted: bool = False,  # deleted comments
     deleted_posts: bool = False,  # comments under deleted posts
+    replies: bool = True,
+    text: bool = True,  # comments without attachments
     photo: bool = True,  # comments with attachments of these kinds
     video: bool = True,
     audio: bool = True,
@@ -125,7 +127,11 @@ def api_get_ebdi_comments(
         query = query.where(Comment.exists.is_(True))
     if not deleted_posts:
         query = query.where(Post.exists.is_(True))
-    for condition in attachment_filter(Comment.attachments, photo, video, audio):
+    if not replies:
+        query = query.where(Comment.parent_id.is_(None))
+    for condition in attachment_filter(
+        Comment.attachments, text, photo, video, audio
+    ):
         query = query.where(condition)
     if q.strip():
         query = query.where(

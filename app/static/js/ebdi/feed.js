@@ -13,7 +13,13 @@ const FEEDS = {
     posts: {
         api: "/api/ebdi/posts",
         error: "постов",
-        defaults: { deleted: false, photo: true, video: true, audio: true },
+        defaults: {
+            deleted: false,
+            text: true,
+            photo: true,
+            video: true,
+            audio: true,
+        },
         render: (item) => render_post(item),
     },
     comments: {
@@ -22,6 +28,8 @@ const FEEDS = {
         defaults: {
             deleted: false,
             deleted_posts: false,
+            replies: true,
+            text: true,
             photo: true,
             video: true,
             audio: true,
@@ -266,7 +274,9 @@ function write_url_state() {
 function apply_state_to_controls() {
     update_sort_dropdown();
     for (const toggle of toggles()) {
-        toggle.checked = state[toggle.dataset.state];
+        // an inverted box hides what its flag shows
+        const shown = state[toggle.dataset.state];
+        toggle.checked = "inverted" in toggle.dataset ? !shown : shown;
     }
     get_el("user-input").value = state.user;
     get_el("query-input").value = state.q;
@@ -1642,7 +1652,9 @@ document.addEventListener("DOMContentLoaded", () => {
     setup_sort_dropdown();
     for (const toggle of toggles()) {
         toggle.addEventListener("change", () => {
-            state[toggle.dataset.state] = toggle.checked;
+            const checked = toggle.checked;
+            state[toggle.dataset.state] =
+                "inverted" in toggle.dataset ? !checked : checked;
             apply();
         });
     }
