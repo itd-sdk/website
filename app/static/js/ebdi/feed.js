@@ -82,19 +82,66 @@ function format_number(value) {
     return new Intl.NumberFormat("ru-RU").format(value);
 }
 
+const MONTHS = [
+    "янв",
+    "фев",
+    "мар",
+    "апр",
+    "мая",
+    "июн",
+    "июл",
+    "авг",
+    "сен",
+    "окт",
+    "ноя",
+    "дек",
+];
+
+// 27 авг 2026 01:40:56
 function format_date(value) {
     if (!value) {
         return "";
     }
-    return new Date(value)
-        .toLocaleString("ru-RU", {
-            year: "numeric",
-            month: "long",
-            day: "numeric",
-            hour: "2-digit",
-            minute: "2-digit",
-        })
-        .replace(" г.", "");
+    const date = new Date(value);
+    const pad = (number) => String(number).padStart(2, "0");
+    const time = [date.getHours(), date.getMinutes(), date.getSeconds()]
+        .map(pad)
+        .join(":");
+    return `${date.getDate()} ${MONTHS[date.getMonth()]} ${date.getFullYear()} ${time}`;
+}
+
+// overflow: hidden on body resets the page scroll because html clips overflow-x,
+// so the page is pinned in place like in the users dialog
+let scroll_locks = 0;
+let scroll_lock_offset = 0;
+
+function lock_scroll() {
+    if (scroll_locks++) {
+        return;
+    }
+    scroll_lock_offset = window.scrollY;
+    const scrollbar = window.innerWidth - document.documentElement.clientWidth;
+    Object.assign(document.body.style, {
+        position: "fixed",
+        top: `-${scroll_lock_offset}px`,
+        left: "0",
+        right: "0",
+        paddingRight: scrollbar > 0 ? `${scrollbar}px` : "",
+    });
+}
+
+function unlock_scroll() {
+    if (scroll_locks == 0 || --scroll_locks) {
+        return;
+    }
+    Object.assign(document.body.style, {
+        position: "",
+        top: "",
+        left: "",
+        right: "",
+        paddingRight: "",
+    });
+    window.scrollTo({ top: scroll_lock_offset, behavior: "instant" });
 }
 
 function format_duration(seconds) {
@@ -229,6 +276,54 @@ function placeholder_peaks(url) {
     return peaks;
 }
 
+let audio_decoder = null;
+
+// peaks of the loudest sample per bucket, enough for the drawn bars
+function audio_peaks(buffer, buckets = 600) {
+    const data = buffer.getChannelData(0);
+    const size = Math.max(1, Math.floor(data.length / buckets));
+    const peaks = new Float32Array(Math.ceil(data.length / size));
+    for (let i = 0; i < peaks.length; i++) {
+        let max = 0;
+        for (
+            let j = i * size, end = Math.min(j + size, data.length);
+            j < end;
+            j++
+        ) {
+            max = Math.max(max, Math.abs(data[j]));
+        }
+        peaks[i] = max;
+    }
+    return peaks;
+}
+
+async function decode_audio(url) {
+    const res = await fetch(url);
+    if (!res.ok) {
+        throw new Error(`status ${res.status}`);
+    }
+    const blob = await res.blob();
+    // an offline context decodes without the autoplay restrictions
+    audio_decoder ??= new OfflineAudioContext(1, 1, 44100);
+    const buffer = await audio_decoder.decodeAudioData(
+        await blob.arrayBuffer(),
+    );
+    return { blob, peaks: audio_peaks(buffer), duration: buffer.duration };
+}
+
+function show_audio_error(tile, url) {
+    const link = create("a", null, "скачать");
+    link.href = url;
+    link.target = "_blank";
+    const message = create(
+        "div",
+        "audio-error",
+        "Не удалось воспроизвести голосовое, ",
+    );
+    message.append(link);
+    tile.replaceChildren(message);
+}
+
 async function init_waveform(tile) {
     const { url } = tile.dataset;
     const wave = tile.querySelector(".audio-wave");
@@ -243,6 +338,14 @@ async function init_waveform(tile) {
         tile.replaceChildren(audio);
         return;
     }
+    let decoded = null;
+    try {
+        decoded = await decode_audio(url);
+    } catch (error) {
+        // a forbidden cross-origin read or a codec web audio cannot decode,
+        // the media element still gets a try with placeholder bars
+        console.warn("audio decode failed", url, error);
+    }
     const player = WaveSurfer.create({
         container: wave,
         height: 44,
@@ -253,10 +356,28 @@ async function init_waveform(tile) {
         barGap: 2,
         barRadius: 2,
         normalize: true,
+        // decoded audio plays from memory, the media element may not support the codec
+        backend: decoded ? "WebAudio" : "MediaElement",
     });
+    let failed = false;
+    const fail = () => {
+        if (!failed) {
+            failed = true;
+            if (playing == player) {
+                playing = null;
+            }
+            player.destroy();
+            show_audio_error(tile, url);
+        }
+    };
+    // without a decoded duration the player waits for metadata that never
+    // comes when the media element cannot read the file
+    player.on("error", fail);
     player.on(
         "ready",
-        (duration) => (time.textContent = format_duration(duration)),
+        // decoders trim a few milliseconds, 3.99 s is shown as 0:04
+        (duration) =>
+            (time.textContent = format_duration(Math.round(duration))),
     );
     player.on(
         "timeupdate",
@@ -272,13 +393,19 @@ async function init_waveform(tile) {
     player.on("pause", () => (play.src = "/static/icons/play.svg"));
     player.on("finish", () => (play.src = "/static/icons/play.svg"));
     play.addEventListener("click", () => player.playPause());
-    play.disabled = false;
     try {
-        await player.load(url);
+        if (decoded) {
+            await player.loadBlob(
+                decoded.blob,
+                [decoded.peaks],
+                decoded.duration,
+            );
+        } else {
+            await player.load(url, [placeholder_peaks(url)]);
+        }
     } catch (error) {
-        // the file host may not allow cross-origin reads, the media element plays it anyway
-        console.warn("audio decode failed, drawing placeholder", error);
-        await player.load(url, [placeholder_peaks(url)]).catch(() => {});
+        console.warn("audio load failed", url, error);
+        fail();
     }
 }
 
@@ -432,11 +559,7 @@ function build_lightbox() {
             show_lightbox(lightbox_index + (dx < 0 ? 1 : -1));
         }
     });
-    box.addEventListener("close", () => {
-        if (!get_el("post-dialog")?.open) {
-            document.body.style.overflow = "";
-        }
-    });
+    box.addEventListener("close", unlock_scroll);
     document.body.append(box);
     return box;
 }
@@ -459,7 +582,7 @@ function open_lightbox(urls, index) {
     const box = get_el("lightbox") || build_lightbox();
     show_lightbox(index);
     if (!box.open) {
-        document.body.style.overflow = "hidden";
+        lock_scroll();
         box.showModal();
     }
 }
@@ -696,8 +819,9 @@ function render_replies(
     return box;
 }
 
+// likes sit in the bottom right corner: next to a text-only comment,
+// under the attachments otherwise
 function render_comment_body(comment, show_replies) {
-    const body = create("div", "comment-body");
     const text = create("div", "post-content comment-text");
     if (comment.parent_id && comment.reply_to) {
         const link = create(
@@ -710,15 +834,21 @@ function render_comment_body(comment, show_replies) {
         text.append(link, " ");
     }
     text.append(highlighted(comment.content));
-    body.append(text);
 
     const side = create("div", "comment-side");
     if (show_replies) {
         side.append(render_stat(comment.replies_count, "comment", "Ответы"));
     }
     side.append(render_stat(comment.likes_count, "like", "Лайки"));
-    body.append(side);
-    return body;
+
+    if (!comment.attachments.length) {
+        const body = create("div", "comment-body");
+        body.append(text, side);
+        return [body];
+    }
+    side.classList.add("comment-side-bottom");
+    const parts = [render_attachments(comment.attachments), side];
+    return text.textContent ? [text, ...parts] : parts;
 }
 
 function render_context(label, preview, on_click) {
@@ -795,10 +925,7 @@ function render_comment(comment, in_thread = false, in_dialog = false) {
             );
         }
     }
-    card.append(render_comment_body(comment, top_level && !in_thread));
-    if (comment.attachments.length) {
-        card.append(render_attachments(comment.attachments));
-    }
+    card.append(...render_comment_body(comment, top_level && !in_thread));
     return card;
 }
 
@@ -840,7 +967,7 @@ function build_dialog() {
     });
     dialog.addEventListener("close", () => {
         dialog_token += 1;
-        document.body.style.overflow = "";
+        unlock_scroll();
         stop_playing();
     });
     document.body.append(dialog);
@@ -864,7 +991,7 @@ function open_dialog(on_refresh = null) {
     refresh.onclick = on_refresh;
     get_el("post-dialog-status").textContent = "";
     if (!dialog.open) {
-        document.body.style.overflow = "hidden";
+        lock_scroll();
         dialog.showModal();
     }
     return { scroll, token };
@@ -1091,7 +1218,11 @@ function open_post_dialog(post, { card = null, focus = null } = {}) {
                 list.querySelector(`[data-comment-id="${focus}"]`) ||
                 list.querySelector(`[data-comment-id="${thread_id}"]`);
             if (target) {
-                target.scrollIntoView({ block: "center" });
+                // scrollIntoView would also move the pinned page behind the dialog
+                const box = scroll.getBoundingClientRect();
+                const rect = target.getBoundingClientRect();
+                scroll.scrollTop +=
+                    rect.top - box.top - (box.height - rect.height) / 2;
                 target.classList.add("comment-focus");
             }
         }
