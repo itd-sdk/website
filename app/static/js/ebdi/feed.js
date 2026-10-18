@@ -1092,6 +1092,16 @@ function setup_clear_buttons() {
     }
 }
 
+// https://css-tricks.com/how-to-detect-when-a-sticky-element-gets-pinned/
+function observe_controls_stick() {
+    const observer = new IntersectionObserver(
+        ([e]) => e.target.classList.toggle("pinned", e.intersectionRatio < 1),
+        { threshold: [1] },
+    );
+
+    observer.observe(get_el("controls-box"));
+}
+
 document.addEventListener("DOMContentLoaded", () => {
     read_url_state();
     apply_state_to_controls();
@@ -1119,4 +1129,5 @@ document.addEventListener("DOMContentLoaded", () => {
 
     load_count();
     load_page();
+    observe_controls_stick();
 });

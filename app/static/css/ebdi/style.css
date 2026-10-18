@@ -493,6 +493,9 @@ emoji-picker {
 }
 
 @media (max-width: 1000px) {
+    #content {
+        padding: 0 10px;
+    }
     #landing {
         height: 20vh;
         margin-bottom: 25px;
