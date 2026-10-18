@@ -384,14 +384,24 @@ async def handle_post(conn: Connection, request: PostRequest):
         conn.db,
         Post,
         "post_id",
-        [{**post.model_dump(exclude={"comments"}), "exists": True}]
+        [{**post.model_dump(exclude={"comments", "comments_complete"}), "exists": True}]
     )
     # same comment can come twice (pagination shifts), one insert
     # with duplicate keys fails, so keep the first occurrence
     comments: dict[UUID, dict] = {}
     for row in flatten_comments(post.comments, post.post_id):
-        comments.setdefault(row["comment_id"], row)
+        comments.setdefault(row["comment_id"], {**row, "exists": True})
     upsert(conn.db, Comment, "comment_id", list(comments.values()))
+    if post.comments_complete:
+        deleted = (
+            conn.db.query(Comment)
+            .where(Comment.post_id == post.post_id)
+            .where(Comment.exists.is_(True))
+            .where(Comment.comment_id.not_in(comments.keys()))
+            .update({Comment.exists: False}, synchronize_session=False)
+        )
+        if deleted:
+            l.debug("(%s) post %s: %s comments deleted", conn.app.name, post.post_id, deleted)
     conn.db.commit()
     await conn.send(PostSavedResponse())
 

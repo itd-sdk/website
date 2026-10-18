@@ -4,7 +4,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel
-from sqlalchemy import desc, func, or_, select
+from sqlalchemy import desc, func, select
 from sqlalchemy.orm import aliased
 
 from app.schemas import Post, User
@@ -38,14 +38,10 @@ def ilike_pattern(text: str) -> str:
     return f"%{escaped}%"
 
 
-def matching_users(text: str):
-    """user_id of users whose username or display name contains the text"""
-    pattern = ilike_pattern(text.strip().removeprefix("@"))
+def matching_users(username: str):
+    """user_id of users with this username, deleted accounts may share it"""
     return select(User.user_id).where(
-        or_(
-            User.username.ilike(pattern, escape="\\"),
-            User.display_name.ilike(pattern, escape="\\")
-        )
+        User.username == username.strip().removeprefix("@")
     )
 
 
@@ -144,7 +140,7 @@ def api_get_ebdi_posts(
     request: Request,
     sort: PostSort = PostSort.found,
     q: str = Query("", max_length=200),  # text in the content
-    user: str = Query("", max_length=100),  # text in the author's name
+    user: str = Query("", max_length=100),  # author's username
     deleted: bool = False,
     offset: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=50),

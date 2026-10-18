@@ -18,7 +18,7 @@ class User(Base):
         server_default=func.now(), onupdate=func.now()
     )
     created_at: Mapped[datetime | None]
-    username: Mapped[str]
+    username: Mapped[str] = mapped_column(index=True)
     display_name: Mapped[str]
     followers_count: Mapped[int]
     following_count: Mapped[int]

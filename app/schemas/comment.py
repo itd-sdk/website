@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import ForeignKey, Index, Text, func
+from sqlalchemy import ForeignKey, Index, Text, func, true
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -37,6 +37,7 @@ class Comment(Base):
     attachments: Mapped[list] = mapped_column(JSONB, default=list)
     likes_count: Mapped[int] = mapped_column(default=0, index=True)
     replies_count: Mapped[int] = mapped_column(default=0, index=True)
+    exists: Mapped[bool] = mapped_column(default=True, server_default=true())
 
     replies: Mapped[list["Comment"]] = relationship(
         order_by="Comment.created_at", viewonly=True

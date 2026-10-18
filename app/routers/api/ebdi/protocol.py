@@ -104,6 +104,8 @@ class PostBody(BaseModel):
     original_post_id: UUID | None = None
     wall_recipient_id: UUID | None = None
     comments: list[CommentBody] = []
+    # comments hold the whole tree, stored comments missing in it were deleted
+    comments_complete: bool = False
     red_pens: list[dict] = []
     red_pen_authors: list[str] = []
     correctors: list[dict] = []

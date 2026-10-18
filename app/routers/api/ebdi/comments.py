@@ -45,6 +45,7 @@ class CommentResponse(BaseModel):
     reply_to: PostAuthor | None  # user being replied to
     post_author: PostAuthor | None  # for the link to the post
     post_exists: bool
+    exists: bool
     created_at: datetime | None
     found_at: datetime
     content: str
@@ -77,6 +78,7 @@ def to_response(row) -> CommentResponse:
         reply_to=to_author(reply_to),
         post_author=to_author(post_author),
         post_exists=post_exists,
+        exists=comment.exists,
         created_at=comment.created_at,
         found_at=comment.found_at,
         content=comment.content,
@@ -92,14 +94,17 @@ def api_get_ebdi_comments(
     request: Request,
     sort: CommentSort = CommentSort.found,
     q: str = Query("", max_length=200),  # text in the content
-    user: str = Query("", max_length=100),  # text in the author's name
-    deleted: bool = False,  # comments under deleted posts
+    user: str = Query("", max_length=100),  # author's username
+    deleted: bool = False,  # deleted comments
+    deleted_posts: bool = False,  # comments under deleted posts
     offset: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=50),
     db: Session = Depends(get_db)
 ):
     query = comments_with_users(db)
     if not deleted:
+        query = query.where(Comment.exists.is_(True))
+    if not deleted_posts:
         query = query.where(Post.exists.is_(True))
     if q.strip():
         query = query.where(
