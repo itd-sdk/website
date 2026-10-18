@@ -46,12 +46,19 @@
                     <option value="views">Количество просмотров</option>
                 </select>
             </label>
-            <label id="deleted-toggle">
-                <input type="checkbox" id="deleted-checkbox"><span>Показывать удалённые</span>
-            </label>
+            <div class="feed-toggles">
+                <label class="feed-toggle"><input type="checkbox" data-state="deleted"><span>Показывать удалённые</span></label>
+            </div>
         </div>
-        <input id="user-input" class="feed-search" type="search" placeholder="Поиск по пользователю" autocomplete="off">
-        <input id="query-input" class="feed-search" type="search" placeholder="Поиск по содержанию" autocomplete="off">
+        <div class="feed-search-box" id="user-search-box">
+            <input id="user-input" class="feed-search" type="search" placeholder="Поиск по пользователю" autocomplete="off">
+            <button class="feed-search-clear" type="button" title="Очистить" aria-label="Очистить" hidden></button>
+            <div id="user-candidates" class="feed-candidates" hidden></div>
+        </div>
+        <div class="feed-search-box">
+            <input id="query-input" class="feed-search" type="search" placeholder="Поиск по содержанию" autocomplete="off">
+            <button class="feed-search-clear" type="button" title="Очистить" aria-label="Очистить" hidden></button>
+        </div>
     </div>
 
     <div id="feed"></div>
