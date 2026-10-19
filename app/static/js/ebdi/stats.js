@@ -439,17 +439,83 @@ function render_followers_distribution(data) {
     });
 }
 
+// most users have a handful of posts and followers, so the scatter axes show
+// log(1 + value): the crowd near zero spreads out and zero stays on the chart
+const LOG_TICKS = [
+    0, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000,
+    50000, 100000,
+];
+
+function to_log(value) {
+    return Math.log10(1 + value);
+}
+
+function log_axis(title, min = 0) {
+    return {
+        min: to_log(min),
+        grid: { color: GRID },
+        ticks: {
+            color: TEXT,
+            // ticks near zero are close together, the crowded ones are skipped
+            maxRotation: 0,
+            autoSkipPadding: 8,
+            callback: (value) =>
+                format_number(Math.round(10 ** value - 1)),
+        },
+        afterBuildTicks: (axis) => {
+            axis.ticks = LOG_TICKS.map(to_log)
+                .filter((value) => value >= axis.min && value <= axis.max)
+                .map((value) => ({ value }));
+        },
+        title: { display: true, text: title, color: TEXT },
+    };
+}
+
+// a point is a cell of users, the more users the brighter and bigger it is;
+// crowded cells are drawn last so sparse ones never hide them
+function density_dataset(cells, to_point) {
+    const max_log = Math.log(Math.max(2, ...cells.map((cell) => cell.count)));
+    const share = (cell) => Math.log(cell.count) / max_log;
+    const points = [...cells]
+        .sort((a, b) => a.count - b.count)
+        .map((cell) => ({ ...to_point(cell), cell }));
+    return {
+        label: "Пользователи",
+        data: points,
+        backgroundColor: points.map(
+            (point) =>
+                `rgba(237, 106, 45, ${(0.15 + 0.85 * share(point.cell)).toFixed(2)})`,
+        ),
+        borderWidth: 0,
+        pointRadius: points.map((point) => 1.5 + 3 * share(point.cell)),
+        pointHoverRadius: points.map((point) => 4 + 3 * share(point.cell)),
+    };
+}
+
+function users_label(count) {
+    const forms = ["пользователь", "пользователя", "пользователей"];
+    const tens = count % 100;
+    const ones = count % 10;
+    const form =
+        tens >= 11 && tens <= 14
+            ? forms[2]
+            : ones == 1
+              ? forms[0]
+              : ones >= 2 && ones <= 4
+                ? forms[1]
+                : forms[2];
+    return `${format_number(count)} ${form}`;
+}
+
 function render_followers_by_age(data) {
     new Chart(get_el("chart-followers-by-age"), {
         type: "scatter",
         data: {
             datasets: [
-                {
-                    label: "Пользователь",
-                    data: data,
-                    backgroundColor: "rgba(237, 106, 45, 0.4)",
-                    pointRadius: 2,
-                },
+                density_dataset(data, (cell) => ({
+                    x: cell.x,
+                    y: to_log(cell.y),
+                })),
             ],
         },
         options: merge_options({
@@ -459,8 +525,12 @@ function render_followers_by_age(data) {
                 tooltip: {
                     ...base_options.plugins.tooltip,
                     callbacks: {
-                        label: (item) =>
-                            `${format_month(item.parsed.x)}: ${format_number(item.parsed.y)}`,
+                        title: (items) =>
+                            "Неделя с " + format_date(items[0].parsed.x),
+                        label: (item) => {
+                            const cell = item.raw.cell;
+                            return `${users_label(cell.count)}, ~${format_number(Math.round(cell.y))} подписчиков`;
+                        },
                     },
                 },
             },
@@ -476,13 +546,7 @@ function render_followers_by_age(data) {
                         color: TEXT,
                     },
                 },
-                y: {
-                    grid: { color: GRID },
-                    ticks: {
-                        color: TEXT,
-                    },
-                    title: { display: true, text: "Подписчики", color: TEXT },
-                },
+                y: log_axis("Подписчики"),
             },
         }),
     });
@@ -493,12 +557,10 @@ function render_posts_vs_followers(data) {
         type: "scatter",
         data: {
             datasets: [
-                {
-                    label: "Пользователь",
-                    data: data,
-                    backgroundColor: "rgba(237, 106, 45, 0.4)",
-                    pointRadius: 2,
-                },
+                density_dataset(data, (cell) => ({
+                    x: to_log(cell.x),
+                    y: to_log(cell.y),
+                })),
             ],
         },
         options: merge_options({
@@ -508,24 +570,16 @@ function render_posts_vs_followers(data) {
                 tooltip: {
                     ...base_options.plugins.tooltip,
                     callbacks: {
-                        label: (item) =>
-                            `${format_number(item.parsed.x)} постов, ${format_number(item.parsed.y)} подписчиков`,
+                        label: (item) => {
+                            const cell = item.raw.cell;
+                            return `${users_label(cell.count)}: ~${format_number(Math.round(cell.x))} постов, ~${format_number(Math.round(cell.y))} подписчиков`;
+                        },
                     },
                 },
             },
             scales: {
-                x: {
-                    // type: "logarithmic",
-                    grid: { color: GRID },
-                    ticks: { color: TEXT },
-                    title: { display: true, text: "Посты", color: TEXT },
-                },
-                y: {
-                    // type: "logarithmic",
-                    grid: { color: GRID },
-                    ticks: { color: TEXT },
-                    title: { display: true, text: "Подписчики", color: TEXT },
-                },
+                x: log_axis("Посты", 1),
+                y: log_axis("Подписчики"),
             },
         }),
     });

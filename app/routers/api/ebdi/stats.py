@@ -39,11 +39,13 @@ class Bucket(BaseModel):
 class ScatterPoint(BaseModel):
     x: float
     y: float
+    count: int = 1  # users in the cell
 
 
 class TimePoint(BaseModel):
     x: datetime
     y: float
+    count: int = 1
 
 
 class ClanShare(BaseModel):
@@ -125,36 +127,53 @@ def get_followers_distribution(db: Session) -> list[Bucket]:
     return [Bucket(bucket=value, count=count) for value, count in rows]
 
 
+# scatter charts get cells instead of users: the counts are binned on a log
+# scale (small values keep a cell each) and every cell carries its users
+LOG_BINS = 8  # cells per e-fold
+MAX_CELLS = 20000
+
+
+def log_bin(column):
+    return func.round(func.ln(column + 1) * LOG_BINS)
+
+
 def get_followers_by_age(db: Session) -> list[TimePoint]:
-    # sampling keeps the payload small enough to render client side
+    # days would put the points of neighbouring cells on top of each other
+    week = func.date_trunc("week", User.created_at)
     rows = (
-        db.query(
-            func.date_trunc("day", User.created_at).label("day"), User.followers_count
-        )
+        db.query(week, func.avg(User.followers_count), func.count())
         .where(User.exists.is_(True))
         .where(User.created_at.isnot(None))
         .where(User.followers_count < 2000)
         .where(not_(IMPRECISE_CREATED_AT))
-        .distinct()
-        .order_by(desc(User.followers_count))
-        .limit(5000)
+        .group_by(week, log_bin(User.followers_count))
+        .order_by(desc(func.count()))
+        .limit(MAX_CELLS)
         .all()
     )
-    return [TimePoint(x=created_at, y=followers) for created_at, followers in rows]
+    return [
+        TimePoint(x=created_at, y=followers, count=count)
+        for created_at, followers, count in rows
+    ]
 
 
 def get_posts_vs_followers(db: Session) -> list[ScatterPoint]:
     rows = (
-        db.query(User.posts_count, User.followers_count)
+        db.query(
+            func.avg(User.posts_count), func.avg(User.followers_count), func.count()
+        )
         .where(User.exists.is_(True))
         .where(User.posts_count > 0)
         .where(User.followers_count < 2000)
-        .distinct()
-        .order_by(desc(User.followers_count))
-        .limit(5000)
+        .group_by(log_bin(User.posts_count), log_bin(User.followers_count))
+        .order_by(desc(func.count()))
+        .limit(MAX_CELLS)
         .all()
     )
-    return [ScatterPoint(x=posts, y=followers) for posts, followers in rows]
+    return [
+        ScatterPoint(x=posts, y=followers, count=count)
+        for posts, followers, count in rows
+    ]
 
 
 def get_clans_over_time(db: Session) -> list[ClanShare]:
