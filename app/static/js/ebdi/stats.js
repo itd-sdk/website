@@ -439,34 +439,11 @@ function render_followers_distribution(data) {
     });
 }
 
-// most users have a handful of posts and followers, so the scatter axes show
-// log(1 + value): the crowd near zero spreads out and zero stays on the chart
-const LOG_TICKS = [
-    0, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000,
-    50000, 100000,
-];
-
-function to_log(value) {
-    return Math.log10(1 + value);
-}
-
-function log_axis(title, min = 0) {
+function linear_axis(title) {
     return {
-        min: to_log(min),
+        min: 0,
         grid: { color: GRID },
-        ticks: {
-            color: TEXT,
-            // ticks near zero are close together, the crowded ones are skipped
-            maxRotation: 0,
-            autoSkipPadding: 8,
-            callback: (value) =>
-                format_number(Math.round(10 ** value - 1)),
-        },
-        afterBuildTicks: (axis) => {
-            axis.ticks = LOG_TICKS.map(to_log)
-                .filter((value) => value >= axis.min && value <= axis.max)
-                .map((value) => ({ value }));
-        },
+        ticks: { color: TEXT },
         title: { display: true, text: title, color: TEXT },
     };
 }
@@ -514,7 +491,7 @@ function render_followers_by_age(data) {
             datasets: [
                 density_dataset(data, (cell) => ({
                     x: cell.x,
-                    y: to_log(cell.y),
+                    y: cell.y,
                 })),
             ],
         },
@@ -546,7 +523,7 @@ function render_followers_by_age(data) {
                         color: TEXT,
                     },
                 },
-                y: log_axis("Подписчики"),
+                y: linear_axis("Подписчики"),
             },
         }),
     });
@@ -558,8 +535,8 @@ function render_posts_vs_followers(data) {
         data: {
             datasets: [
                 density_dataset(data, (cell) => ({
-                    x: to_log(cell.x),
-                    y: to_log(cell.y),
+                    x: cell.x,
+                    y: cell.y,
                 })),
             ],
         },
@@ -578,8 +555,8 @@ function render_posts_vs_followers(data) {
                 },
             },
             scales: {
-                x: log_axis("Посты", 1),
-                y: log_axis("Подписчики"),
+                x: linear_axis("Посты"),
+                y: linear_axis("Подписчики"),
             },
         }),
     });

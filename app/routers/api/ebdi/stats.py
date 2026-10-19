@@ -127,14 +127,15 @@ def get_followers_distribution(db: Session) -> list[Bucket]:
     return [Bucket(bucket=value, count=count) for value, count in rows]
 
 
-# scatter charts get cells instead of users: the counts are binned on a log
-# scale (small values keep a cell each) and every cell carries its users
-LOG_BINS = 8  # cells per e-fold
+# scatter charts get cells instead of users: an axis is cut into equal cells
+# and every cell carries its users
+GRID_CELLS = 100  # cells along an axis
+MAX_FOLLOWERS = 2000
 MAX_CELLS = 20000
 
 
-def log_bin(column):
-    return func.round(func.ln(column + 1) * LOG_BINS)
+def grid_cell(column, top: float):
+    return func.floor(column / max(1.0, top / GRID_CELLS))
 
 
 def get_followers_by_age(db: Session) -> list[TimePoint]:
@@ -144,9 +145,9 @@ def get_followers_by_age(db: Session) -> list[TimePoint]:
         db.query(week, func.avg(User.followers_count), func.count())
         .where(User.exists.is_(True))
         .where(User.created_at.isnot(None))
-        .where(User.followers_count < 2000)
+        .where(User.followers_count < MAX_FOLLOWERS)
         .where(not_(IMPRECISE_CREATED_AT))
-        .group_by(week, log_bin(User.followers_count))
+        .group_by(week, grid_cell(User.followers_count, MAX_FOLLOWERS))
         .order_by(desc(func.count()))
         .limit(MAX_CELLS)
         .all()
@@ -158,14 +159,23 @@ def get_followers_by_age(db: Session) -> list[TimePoint]:
 
 
 def get_posts_vs_followers(db: Session) -> list[ScatterPoint]:
+    def users(*columns):
+        return (
+            db.query(*columns)
+            .where(User.exists.is_(True))
+            .where(User.posts_count > 0)
+            .where(User.followers_count < MAX_FOLLOWERS)
+        )
+
+    max_posts = users(func.max(User.posts_count)).scalar() or 0
     rows = (
-        db.query(
+        users(
             func.avg(User.posts_count), func.avg(User.followers_count), func.count()
         )
-        .where(User.exists.is_(True))
-        .where(User.posts_count > 0)
-        .where(User.followers_count < 2000)
-        .group_by(log_bin(User.posts_count), log_bin(User.followers_count))
+        .group_by(
+            grid_cell(User.posts_count, max_posts),
+            grid_cell(User.followers_count, MAX_FOLLOWERS)
+        )
         .order_by(desc(func.count()))
         .limit(MAX_CELLS)
         .all()
