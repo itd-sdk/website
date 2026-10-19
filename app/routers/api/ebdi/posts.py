@@ -12,6 +12,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import aliased
 
 from app.logger import get_logger
+from app.routers.api.ebdi.dates import LocalDatetime
 from app.routers.api.ebdi.protocol import CommentBody
 from app.routers.api.ebdi.storage import save_comments
 from app.schemas import Post, User
@@ -108,7 +109,7 @@ class RedPen(BaseModel):
     start: int
     end: int
     replacement: str
-    created_at: datetime | None = None
+    created_at: LocalDatetime | None = None
 
 
 class Corrector(BaseModel):
@@ -117,7 +118,7 @@ class Corrector(BaseModel):
     start: int
     end: int
     actor: UUID | None = None
-    created_at: datetime | None = None
+    created_at: LocalDatetime | None = None
 
 
 class MarkAuthor(BaseModel):
@@ -156,9 +157,9 @@ class PostResponse(BaseModel):
     post_id: UUID
     author_id: UUID
     author: PostAuthor | None  # None if the author is not in the database
-    created_at: datetime | None
-    edited_at: datetime | None
-    found_at: datetime
+    created_at: LocalDatetime | None
+    edited_at: LocalDatetime | None
+    found_at: LocalDatetime
     content: str
     attachments: list[str]
     likes_count: int

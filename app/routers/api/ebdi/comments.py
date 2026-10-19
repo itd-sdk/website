@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy import and_, desc, func, or_, select
 from sqlalchemy.orm import aliased
 
+from app.routers.api.ebdi.dates import LocalDatetime
 from app.routers.api.ebdi.posts import (
     PostAuthor,
     attachment_filter,
@@ -61,8 +62,8 @@ class CommentResponse(BaseModel):
     post_author: PostAuthor | None  # for the link to the post
     post_exists: bool
     exists: bool
-    created_at: datetime | None
-    found_at: datetime
+    created_at: LocalDatetime | None
+    found_at: LocalDatetime
     content: str
     attachments: list[str]
     likes_count: int
