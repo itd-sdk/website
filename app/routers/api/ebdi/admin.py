@@ -6,6 +6,7 @@ Disabled unless EBDI_ADMIN_TOKEN is set, requests carry it as a bearer token.
 from datetime import datetime, timedelta
 from hmac import compare_digest
 from os import getenv
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -101,6 +102,8 @@ class AdminState(BaseModel):
     queue: list[QueuedTask]
     counts: Counts
     history: list[HistoryPoint]
+    weights: dict[TaskType, int]  # how often each task type is given out, 0 is off
+    max_weight: int
 
 
 def task_info(task: websocket.Task) -> TaskInfo:
@@ -224,7 +227,9 @@ def api_get_ebdi_admin_state(request: Request, db: Session = Depends(get_db)):
         ],
         queue=[queued(manual) for manual in websocket.manual_tasks],
         counts=counts,
-        history=history
+        history=history,
+        weights=websocket.get_task_weights(),
+        max_weight=websocket.MAX_TASK_WEIGHT
     )
 
 
@@ -290,3 +295,17 @@ def api_delete_ebdi_admin_task(request: Request, task_id: int):
             websocket.manual_tasks.remove(manual)
             return {"deleted": task_id}
     raise HTTPException(404, "task not in the queue")
+
+
+@router.put(
+    "/weights",
+    response_model=dict[TaskType, int],
+    dependencies=[Depends(require_admin)]
+)
+@get_limiter().exempt
+def api_put_ebdi_admin_weights(
+    request: Request,
+    body: dict[TaskType, Annotated[int, Field(ge=0, le=websocket.MAX_TASK_WEIGHT)]]
+):
+    websocket.set_task_weights(body)
+    return websocket.get_task_weights()

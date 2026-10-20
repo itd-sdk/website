@@ -3,7 +3,10 @@ from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from itertools import count
-from random import randint
+from json import dumps, loads
+from os import getenv
+from pathlib import Path
+from random import choices
 from string import ascii_lowercase, digits
 from uuid import UUID
 
@@ -57,9 +60,40 @@ POSTS_INTERVALS = {
     "this_month": timedelta(days=14)
 }
 POSTS_INTERVAL_DEFAULT = timedelta(days=7)
-POSTS = True
-UPDATE = True
-CREATE = False
+# how often each task type is given out relative to the others, 0 turns it off;
+# set from the admin panel and kept in a file across restarts
+DEFAULT_TASK_WEIGHTS = {TaskType.update: 10, TaskType.posts: 10, TaskType.create: 0}
+MAX_TASK_WEIGHT = 10
+task_weights: dict[TaskType, int] | None = None
+
+
+def weights_file() -> Path:
+    # read on use, .env is loaded after the routers are imported
+    return Path(getenv("EBDI_TASK_WEIGHTS", "cache/task_weights.json"))
+
+
+def get_task_weights() -> dict[TaskType, int]:
+    global task_weights
+    if task_weights is None:
+        task_weights = dict(DEFAULT_TASK_WEIGHTS)
+        try:
+            stored = loads(weights_file().read_text())
+            task_weights.update(
+                {TaskType(key): int(value) for key, value in stored.items()}
+            )
+        except FileNotFoundError:
+            pass
+        except (ValueError, OSError) as error:
+            l.warning("task weights file ignored: %r", error)
+    return task_weights
+
+
+def set_task_weights(weights: dict[TaskType, int]) -> None:
+    global task_weights
+    task_weights = {**get_task_weights(), **weights}
+    path = weights_file()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(dumps({key.value: value for key, value in task_weights.items()}))
 
 
 @dataclass
@@ -186,63 +220,77 @@ def refresh_interval():
     )
 
 
+def update_task(db: Session, app: App) -> Task | None:
+    priority = func.extract("epoch", func.now() - User.updated_at) / refresh_interval()
+    targets = (
+        db.query(User)
+        .where(priority >= 0.8)
+        .where(User.id.not_in(get_targets()))
+        .where(User.followers_count >= 1)
+        .order_by(desc(priority))
+        .limit(20)
+        .all()
+    )
+    return Task(app, TaskType.update, targets) if targets else None
+
+
+def posts_task(db: Session, app: App) -> Task | None:
+    interval = case(
+        *[
+            (User.last_seen == value, int(interval.total_seconds()))
+            for value, interval in POSTS_INTERVALS.items()
+        ],
+        else_=int(POSTS_INTERVAL_DEFAULT.total_seconds())
+    )
+    target = (
+        db.query(User)
+        .where(User.exists.is_(True))
+        .where(User.posts_count > 0)
+        .where(User.last_seen.is_distinct_from("long_ago"))
+        .where(
+            or_(
+                User.posts_updated_at.is_(None),
+                func.extract("epoch", func.now() - User.posts_updated_at) >= interval
+            )
+        )
+        .where(User.id.not_in(get_targets()))
+        # users with the most posts first, one or two posts can wait
+        .order_by(User.posts_count.desc(), User.posts_updated_at.asc().nulls_first())
+        .first()
+    )
+    return Task(app, TaskType.posts, [target]) if target is not None else None
+
+
+def create_task(db: Session, app: App) -> Task | None:
+    settings = get_settings(db)
+    prefix = settings.search_cursor
+    settings.search_cursor = increment_prefix(prefix)
+    db.commit()
+    return Task(app, TaskType.create, prefix=prefix)
+
+
+TASK_BUILDERS = {
+    TaskType.update: update_task,
+    TaskType.posts: posts_task,
+    TaskType.create: create_task
+}
+
+
 def new_task(db: Session, app: App) -> Task | None:
     manual = take_manual_task(db, app)
     if manual is not None:
         return manual
 
-    if UPDATE:
-        priority = (
-            func.extract("epoch", func.now() - User.updated_at) / refresh_interval()
-        )
-        update_query = (
-            db.query(User)
-            .where(priority >= 0.8)
-            .where(User.id.not_in(get_targets()))
-            .where(User.followers_count >= 1)
-            .order_by(desc(priority))
-            .limit(20)
-            .all()
-        )
-        if update_query:
-            return Task(app, TaskType.update, update_query)
-
-    if POSTS and (not CREATE or randint(0, 1) == 0):
-        interval = case(
-            *[
-                (User.last_seen == value, int(interval.total_seconds()))
-                for value, interval in POSTS_INTERVALS.items()
-            ],
-            else_=int(POSTS_INTERVAL_DEFAULT.total_seconds())
-        )
-        posts_query = (
-            db.query(User)
-            .where(User.exists.is_(True))
-            .where(User.posts_count > 0)
-            .where(User.last_seen.is_distinct_from("long_ago"))
-            .where(
-                or_(
-                    User.posts_updated_at.is_(None),
-                    func.extract("epoch", func.now() - User.posts_updated_at)
-                    >= interval
-                )
-            )
-            .where(User.id.not_in(get_targets()))
-            # users with the most posts first, one or two posts can wait
-            .order_by(
-                User.posts_count.desc(), User.posts_updated_at.asc().nulls_first()
-            )
-            .first()
-        )
-        if posts_query is not None:
-            return Task(app, TaskType.posts, [posts_query])
-
-    if CREATE:
-        settings = get_settings(db)
-        prefix = settings.search_cursor
-        settings.search_cursor = increment_prefix(prefix)
-        db.commit()
-        return Task(app, TaskType.create, prefix=prefix)
+    # a type is drawn by its weight, a type without work passes the turn on
+    weights = get_task_weights()
+    types = [task_type for task_type in TASK_BUILDERS if weights[task_type] > 0]
+    while types:
+        task_type = choices(types, [weights[t] for t in types])[0]
+        task = TASK_BUILDERS[task_type](db, app)
+        if task is not None:
+            return task
+        types.remove(task_type)
+    return None
 
 
 def task_response(db: Session, task: Task) -> BaseModel:
