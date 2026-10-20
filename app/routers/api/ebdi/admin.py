@@ -6,7 +6,7 @@ Disabled unless EBDI_ADMIN_TOKEN is set, requests carry it as a bearer token.
 from datetime import datetime, timedelta
 from hmac import compare_digest
 from os import getenv
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -21,6 +21,7 @@ from app.services.limiter import get_limiter
 
 router = APIRouter(prefix="/admin")
 
+TaskKind = Literal["update", "posts_new", "posts_recheck", "create"]
 HISTORY_HOURS = 48
 UPDATE_CHUNK = 20  # users in one update task, like the automatic ones
 COUNTS_TTL = timedelta(seconds=30)
@@ -102,7 +103,7 @@ class AdminState(BaseModel):
     queue: list[QueuedTask]
     counts: Counts
     history: list[HistoryPoint]
-    weights: dict[TaskType, int]  # how often each task type is given out, 0 is off
+    weights: dict[str, int]  # how often each kind of task is given out, 0 is off
     max_weight: int
 
 
@@ -154,14 +155,20 @@ def queued(manual: websocket.ManualTask) -> QueuedTask:
     )
 
 
-def hourly(db: Session, column, since: datetime) -> dict[datetime, int]:
+def hourly(db: Session, column, since: datetime, *where) -> dict[datetime, int]:
     hour = func.date_trunc("hour", column)
-    rows = db.query(hour, func.count()).where(column >= since).group_by(hour)
+    rows = db.query(hour, func.count()).where(column >= since, *where).group_by(hour)
     return dict(rows.all())
 
 
-def count_since(db: Session, column, since: datetime) -> int:
-    return db.query(func.count()).where(column >= since).scalar() or 0
+def count_since(db: Session, column, since: datetime, *where) -> int:
+    return db.query(func.count()).where(column >= since, *where).scalar() or 0
+
+
+def saved_again(model):
+    # a new row is found and updated at once, "updated" counts only the rows
+    # saved again later, so new and updated never overlap
+    return model.found_at < model.updated_at - timedelta(minutes=1)
 
 
 counts_cache: tuple[datetime, Counts, list[HistoryPoint]] | None = None
@@ -177,10 +184,10 @@ def get_counts(db: Session) -> tuple[Counts, list[HistoryPoint]]:
     counts = Counts(
         users=db.query(func.count(User.id)).scalar() or 0,
         users_found_today=count_since(db, User.found_at, today),
-        users_updated_today=count_since(db, User.updated_at, today),
+        users_updated_today=count_since(db, User.updated_at, today, saved_again(User)),
         posts=db.query(func.count(Post.id)).scalar() or 0,
         posts_found_today=count_since(db, Post.found_at, today),
-        posts_updated_today=count_since(db, Post.updated_at, today),
+        posts_updated_today=count_since(db, Post.updated_at, today, saved_again(Post)),
         comments=db.query(func.count(Comment.id)).scalar() or 0,
         comments_found_today=count_since(db, Comment.found_at, today)
     )
@@ -190,9 +197,9 @@ def get_counts(db: Session) -> tuple[Counts, list[HistoryPoint]]:
     )
     series = {
         "users_found": hourly(db, User.found_at, start),
-        "users_updated": hourly(db, User.updated_at, start),
+        "users_updated": hourly(db, User.updated_at, start, saved_again(User)),
         "posts_found": hourly(db, Post.found_at, start),
-        "posts_updated": hourly(db, Post.updated_at, start),
+        "posts_updated": hourly(db, Post.updated_at, start, saved_again(Post)),
         "comments_found": hourly(db, Comment.found_at, start)
     }
     history = []
@@ -299,13 +306,13 @@ def api_delete_ebdi_admin_task(request: Request, task_id: int):
 
 @router.put(
     "/weights",
-    response_model=dict[TaskType, int],
+    response_model=dict[str, int],
     dependencies=[Depends(require_admin)]
 )
 @get_limiter().exempt
 def api_put_ebdi_admin_weights(
     request: Request,
-    body: dict[TaskType, Annotated[int, Field(ge=0, le=websocket.MAX_TASK_WEIGHT)]]
+    body: dict[TaskKind, Annotated[int, Field(ge=0, le=websocket.MAX_TASK_WEIGHT)]]
 ):
     websocket.set_task_weights(body)
     return websocket.get_task_weights()

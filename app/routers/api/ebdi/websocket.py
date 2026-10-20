@@ -62,9 +62,10 @@ POSTS_INTERVALS = {
 POSTS_INTERVAL_DEFAULT = timedelta(days=7)
 # how often each task type is given out relative to the others, 0 turns it off;
 # set from the admin panel and kept in a file across restarts
-DEFAULT_TASK_WEIGHTS = {TaskType.update: 10, TaskType.posts: 10, TaskType.create: 0}
+# posts are split in the first pass over a user and the rechecks of known ones
+DEFAULT_TASK_WEIGHTS = {"update": 10, "posts_new": 10, "posts_recheck": 3, "create": 0}
 MAX_TASK_WEIGHT = 10
-task_weights: dict[TaskType, int] | None = None
+task_weights: dict[str, int] | None = None
 
 
 def weights_file() -> Path:
@@ -72,14 +73,21 @@ def weights_file() -> Path:
     return Path(getenv("EBDI_TASK_WEIGHTS", "cache/task_weights.json"))
 
 
-def get_task_weights() -> dict[TaskType, int]:
+def get_task_weights() -> dict[str, int]:
     global task_weights
     if task_weights is None:
         task_weights = dict(DEFAULT_TASK_WEIGHTS)
         try:
             stored = loads(weights_file().read_text())
+            if "posts" in stored:
+                # a file from before the posts split
+                stored.setdefault("posts_new", stored["posts"])
             task_weights.update(
-                {TaskType(key): int(value) for key, value in stored.items()}
+                {
+                    key: int(value)
+                    for key, value in stored.items()
+                    if key in DEFAULT_TASK_WEIGHTS
+                }
             )
         except FileNotFoundError:
             pass
@@ -88,12 +96,12 @@ def get_task_weights() -> dict[TaskType, int]:
     return task_weights
 
 
-def set_task_weights(weights: dict[TaskType, int]) -> None:
+def set_task_weights(weights: dict[str, int]) -> None:
     global task_weights
     task_weights = {**get_task_weights(), **weights}
     path = weights_file()
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(dumps({key.value: value for key, value in task_weights.items()}))
+    path.write_text(dumps(task_weights))
 
 
 @dataclass
@@ -234,7 +242,23 @@ def update_task(db: Session, app: App) -> Task | None:
     return Task(app, TaskType.update, targets) if targets else None
 
 
-def posts_task(db: Session, app: App) -> Task | None:
+def posts_new_task(db: Session, app: App) -> Task | None:
+    """First pass over a user whose posts were never fetched (or were reset)"""
+    target = (
+        db.query(User)
+        .where(User.exists.is_(True))
+        .where(User.posts_count > 0)
+        .where(User.posts_updated_at.is_(None))
+        .where(User.id.not_in(get_targets()))
+        # users with the most posts first, one or two posts can wait
+        .order_by(User.posts_count.desc())
+        .first()
+    )
+    return Task(app, TaskType.posts, [target]) if target is not None else None
+
+
+def posts_recheck_task(db: Session, app: App) -> Task | None:
+    """Recent posts of a known user, the most overdue one first"""
     interval = case(
         *[
             (User.last_seen == value, int(interval.total_seconds()))
@@ -242,20 +266,17 @@ def posts_task(db: Session, app: App) -> Task | None:
         ],
         else_=int(POSTS_INTERVAL_DEFAULT.total_seconds())
     )
+    overdue = func.extract("epoch", func.now() - User.posts_updated_at) / interval
     target = (
         db.query(User)
         .where(User.exists.is_(True))
         .where(User.posts_count > 0)
+        # long inactive users are fetched once and not rechecked
         .where(User.last_seen.is_distinct_from("long_ago"))
-        .where(
-            or_(
-                User.posts_updated_at.is_(None),
-                func.extract("epoch", func.now() - User.posts_updated_at) >= interval
-            )
-        )
+        .where(User.posts_updated_at.is_not(None))
+        .where(overdue >= 1)
         .where(User.id.not_in(get_targets()))
-        # users with the most posts first, one or two posts can wait
-        .order_by(User.posts_count.desc(), User.posts_updated_at.asc().nulls_first())
+        .order_by(desc(overdue))
         .first()
     )
     return Task(app, TaskType.posts, [target]) if target is not None else None
@@ -270,9 +291,10 @@ def create_task(db: Session, app: App) -> Task | None:
 
 
 TASK_BUILDERS = {
-    TaskType.update: update_task,
-    TaskType.posts: posts_task,
-    TaskType.create: create_task
+    "update": update_task,
+    "posts_new": posts_new_task,
+    "posts_recheck": posts_recheck_task,
+    "create": create_task
 }
 
 
@@ -283,13 +305,13 @@ def new_task(db: Session, app: App) -> Task | None:
 
     # a type is drawn by its weight, a type without work passes the turn on
     weights = get_task_weights()
-    types = [task_type for task_type in TASK_BUILDERS if weights[task_type] > 0]
-    while types:
-        task_type = choices(types, [weights[t] for t in types])[0]
-        task = TASK_BUILDERS[task_type](db, app)
+    kinds = [kind for kind in TASK_BUILDERS if weights[kind] > 0]
+    while kinds:
+        kind = choices(kinds, [weights[k] for k in kinds])[0]
+        task = TASK_BUILDERS[kind](db, app)
         if task is not None:
             return task
-        types.remove(task_type)
+        kinds.remove(kind)
     return None
 
 
