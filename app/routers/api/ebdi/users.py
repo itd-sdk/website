@@ -68,6 +68,19 @@ def apply_filters(query, clan, verified, has_itdp, exists):
     return query
 
 
+def order_column(col, descending: bool):
+    # created_at can be empty, those users go last in both directions
+    return (desc(col) if descending else col.asc()).nulls_last()
+
+
+def ahead_of(col, value, descending: bool, user_id: int):
+    """Rows listed before the user with this value, ties broken by id"""
+    if value is None:
+        return or_(col.is_not(None), and_(col.is_(None), User.id < user_id))
+    ahead = col > value if descending else col < value
+    return or_(ahead, and_(col == value, User.id < user_id))
+
+
 def build_users_query(
     db: Session,
     order: UserOrder,  # такая небольшая пасхалка, можно сделать ордер по дате обновления
@@ -79,7 +92,7 @@ def build_users_query(
 ):
     col = getattr(User, order.value)
     query = apply_filters(db.query(User), clan, verified, has_itdp, exists)
-    return query.order_by(desc(col) if descending else col.asc(), User.id)
+    return query.order_by(order_column(col, descending), User.id)
 
 
 def rank_users(
@@ -96,8 +109,6 @@ def rank_users(
     col = getattr(User, order.value)
     first = users[0]
     value = getattr(first, order.value)
-    # rows ahead of the batch, ties broken by id to match the ordering
-    ahead = col > value if descending else col < value
     base = (
         apply_filters(
             db.query(func.count(User.id)).where(User.exists.is_(True)),
@@ -106,7 +117,7 @@ def rank_users(
             has_itdp,
             exists
         )
-        .where(or_(ahead, and_(col == value, User.id < first.id)))
+        .where(ahead_of(col, value, descending, first.id))
         .scalar()
     )
 
@@ -251,7 +262,7 @@ def api_get_ebdi_user_search(
                 User.display_name.ilike(pattern, escape="\\")
             )
         )
-        .order_by(desc(col) if descending else col.asc(), User.id)
+        .order_by(order_column(col, descending), User.id)
         .limit(20)
         .all()
     )
@@ -259,9 +270,8 @@ def api_get_ebdi_user_search(
     result = []
     for user in users:
         value = getattr(user, order.value)
-        ahead = col > value if descending else col < value
         # search results are scattered across the list, each needs its own count
-        condition = or_(ahead, and_(col == value, User.id < user.id))
+        condition = ahead_of(col, value, descending, user.id)
         response = UserResponse.model_validate(user, from_attributes=True)
         response.position = db.query(func.count(User.id)).where(condition).scalar() + 1
         if user.exists:
