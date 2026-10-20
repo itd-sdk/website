@@ -231,15 +231,15 @@ function render_user(user) {
         new Intl.NumberFormat().format(user.following_count);
     node.querySelector(".user-posts").textContent =
         new Intl.NumberFormat().format(user.posts_count);
-    node.querySelector(".user-created-at").textContent = new Date(
-        user.created_at,
-    )
-        .toLocaleString("ru-RU", {
-            year: "numeric",
-            month: "long",
-            day: "numeric",
-        })
-        .replace(" г.", "");
+    node.querySelector(".user-created-at").textContent = user.created_at
+        ? new Date(user.created_at)
+              .toLocaleString("ru-RU", {
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+              })
+              .replace(" г.", "")
+        : "-";
 
     apply_style(node, user?.bio);
     return node;

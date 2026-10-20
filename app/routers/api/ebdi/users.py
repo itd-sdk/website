@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from itd import User as ItdUser
 from itd.exceptions import NotFoundError, TargetUserBannedError
 from pydantic import BaseModel
-from sqlalchemy import and_, desc, func, or_, text
+from sqlalchemy import and_, func, or_, text
 
 from app.routers.api.ebdi.dates import LocalDatetime
 from app.routers.api.ebdi.protocol import NewUserBody
@@ -68,6 +68,11 @@ def apply_filters(query, clan, verified, has_itdp, exists):
     return query
 
 
+def order_column(col, descending: bool):
+    # created_at can be empty, those users go last in both directions
+    return (col.desc() if descending else col.asc()).nulls_last()
+
+
 def build_users_query(
     db: Session,
     order: UserOrder,  # такая небольшая пасхалка, можно сделать ордер по дате обновления
@@ -79,7 +84,7 @@ def build_users_query(
 ):
     col = getattr(User, order.value)
     query = apply_filters(db.query(User), clan, verified, has_itdp, exists)
-    return query.order_by(desc(col) if descending else col.asc(), User.id)
+    return query.order_by(order_column(col, descending), User.id)
 
 
 def rank_users(
@@ -97,7 +102,13 @@ def rank_users(
     first = users[0]
     value = getattr(first, order.value)
     # rows ahead of the batch, ties broken by id to match the ordering
-    ahead = col > value if descending else col < value
+    if value is None:
+        ahead = or_(col.is_not(None), and_(col.is_(None), User.id < first.id))
+    else:
+        ahead = or_(
+            col > value if descending else col < value,
+            and_(col == value, User.id < first.id)
+        )
     base = (
         apply_filters(
             db.query(func.count(User.id)).where(User.exists.is_(True)),
@@ -106,7 +117,7 @@ def rank_users(
             has_itdp,
             exists
         )
-        .where(or_(ahead, and_(col == value, User.id < first.id)))
+        .where(ahead)
         .scalar()
     )
 
@@ -251,7 +262,7 @@ def api_get_ebdi_user_search(
                 User.display_name.ilike(pattern, escape="\\")
             )
         )
-        .order_by(desc(col) if descending else col.asc(), User.id)
+        .order_by(order_column(col, descending), User.id)
         .limit(20)
         .all()
     )

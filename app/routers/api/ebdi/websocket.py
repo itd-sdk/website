@@ -184,7 +184,7 @@ def new_task(db: Session, app: App) -> Task | None:
             .where(User.id.not_in(get_targets()))
             # users with the most posts first, one or two posts can wait
             .order_by(
-                desc(User.posts_count), User.posts_updated_at.asc().nulls_first()
+                User.posts_count.desc(), User.posts_updated_at.asc().nulls_first()
             )
             .first()
         )
