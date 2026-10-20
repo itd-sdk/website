@@ -1,7 +1,7 @@
-{% extends "base.html" %}
+{% extends "ebdi/base.html" %}
+{% set active_tab = "stats" %}
 
-{% block head %}
-<link rel="stylesheet" href="/static/css/ebdi/style.css">
+{% block ebdi_head %}
 <link rel="stylesheet" href="/static/css/ebdi/stats.css">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <script src="https://cdn.jsdelivr.net/npm/luxon@3"></script>
@@ -10,26 +10,7 @@
 <meta name="description" content="Единая База Данных ИТД: статистика пользователей, графики роста, распределение подписчиков">
 {% endblock %}
 
-{% block content %}
-<div id="landing">
-    <img id="banner" src="/static/images/ebdi.png">
-    <div id="landing-description">Единая База Данных ИТД</div>
-</div>
-
-<div id="content">
-    <div id="feedback">
-        <img src="/static/icons/vote.svg">
-        <div id="feedback-content">
-            <div id="feedback-title">Обратная связь</div>
-            <div id="feedback-description">Предложите идеи для ЕБДИ или сообщите о баге.</div>
-        </div>
-        <button onclick="location.href='https://github.com/itd-sdk/website/issues/new'">Перейти <img src="/static/icons/arrow.svg"></button>
-    </div>
-    <nav id="tabs">
-        <a href="/ebdi/users" class="tab">Пользователи</a>
-        <a href="/ebdi/clans" class="tab">Кланы</a>
-        <a href="/ebdi/stats" class="tab tab-active">Статистика</a>
-    </nav>
+{% block ebdi_content %}
 
     <h2>Статистика ИТД</h2>
 
@@ -50,6 +31,20 @@
             <div class="chart-box"><canvas id="chart-total"></canvas></div>
         </div>
         <div class="chart-card">
+            <div class="chart-title">Всего постов</div>
+            <div class="chart-description">
+                Количество постов в базе по дате публикации
+            </div>
+            <div class="chart-box"><canvas id="chart-posts-total"></canvas></div>
+        </div>
+        <div class="chart-card">
+            <div class="chart-title">Всего комментариев</div>
+            <div class="chart-description">
+                Количество комментариев и ответов в базе по дате создания
+            </div>
+            <div class="chart-box"><canvas id="chart-comments-total"></canvas></div>
+        </div>
+        <div class="chart-card">
             <div class="chart-title">Новые регистрации</div>
             <div class="chart-description">
                 Сколько аккаунтов появлялось каждый период
@@ -60,6 +55,49 @@
                 <div class="chart-tab chart-tab-active" data-unit="month">По месяцам</div>
             </div>
             <div class="chart-box"><canvas id="chart-registrations"></canvas></div>
+        </div>
+        <div class="chart-card">
+            <div class="chart-title">Новые посты</div>
+            <div class="chart-description">
+                Сколько постов публиковалось каждый период
+            </div>
+            <div class="chart-tabs" id="posts-chart-tabs">
+                <div class="chart-tab" data-unit="day">По дням</div>
+                <div class="chart-tab" data-unit="week">По неделям</div>
+                <div class="chart-tab chart-tab-active" data-unit="month">По месяцам</div>
+            </div>
+            <div class="chart-box"><canvas id="chart-posts-per-day"></canvas></div>
+        </div>
+        <div class="chart-card">
+            <div class="chart-title">Новые комментарии</div>
+            <div class="chart-description">
+                Сколько комментариев оставляли каждый период
+            </div>
+            <div class="chart-tabs" id="comments-chart-tabs">
+                <div class="chart-tab" data-unit="day">По дням</div>
+                <div class="chart-tab" data-unit="week">По неделям</div>
+                <div class="chart-tab chart-tab-active" data-unit="month">По месяцам</div>
+            </div>
+            <div class="chart-box"><canvas id="chart-comments-per-day"></canvas></div>
+        </div>
+        <div class="chart-card" id="words-card">
+            <div class="chart-title">Частые слова</div>
+            <div class="chart-description">
+                Самые частые слова: чем чаще слово встречается, тем оно больше
+            </div>
+            <div class="chart-tabs" id="words-tabs">
+                <div class="chart-tab chart-tab-active" data-source="posts">В постах</div>
+                <div class="chart-tab" data-source="comments">В комментариях</div>
+            </div>
+            <div id="word-cloud"></div>
+        </div>
+
+        <div class="chart-card">
+            <div class="chart-title">Захват постов</div>
+            <div class="chart-description">
+                Сколько постов держит каждый клан как доминирующий
+            </div>
+            <div class="chart-box"><canvas id="chart-post-captures"></canvas></div>
         </div>
 
         <div class="chart-card">
@@ -73,7 +111,7 @@
         <div class="chart-card">
             <div class="chart-title">Подписчики и дата регистрации</div>
             <div class="chart-description">
-                Отношение даты регистрации к количеству подписчиков (5 000 пользователей)
+                Отношение даты регистрации к количеству подписчиков (до 2 000 подписчиков). Чем ярче точка, тем больше в ней пользователей
             </div>
             <div class="chart-box"><canvas id="chart-followers-by-age"></canvas></div>
         </div>
@@ -81,7 +119,7 @@
         <div class="chart-card">
             <div class="chart-title">Посты и подписчики</div>
             <div class="chart-description">
-                Отношение количества постов к количеству подписчиков (5 000 пользователей)
+                Отношение количества постов к количеству подписчиков (до 2 000 подписчиков). Чем ярче точка, тем больше в ней пользователей
             </div>
             <div class="chart-box"><canvas id="chart-posts-vs-followers"></canvas></div>
         </div>
@@ -113,10 +151,9 @@
         <div class="chart-card">
             <div class="chart-title">Подписки против подписчиков</div>
             <div class="chart-description">
-                Отношение количества подписок к количеству подписчиков
+                Отношение количества подписок к количеству подписчиков (меньше 1 - подпичиков больше чем подписок, больше 1 - подисок больше чем подписчиков)
             </div>
             <div class="chart-box"><canvas id="chart-follow-ratio"></canvas></div>
         </div>
     </div>
-</div>
 {% endblock %}

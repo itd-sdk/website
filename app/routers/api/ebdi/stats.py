@@ -3,9 +3,9 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import Response
 from pydantic import BaseModel
-from sqlalchemy import and_, case, desc, extract, func, literal, not_
+from sqlalchemy import and_, case, desc, extract, func, literal, not_, text
 
-from app.schemas import User
+from app.schemas import Comment, Post, User
 from app.services.db import Session, get_db
 from app.services.limiter import get_limiter
 
@@ -13,7 +13,7 @@ router = APIRouter(prefix="/stats")
 
 # log-scale buckets, upper bound is exclusive
 FOLLOWER_BUCKETS = [0, 1, 2, 10, 50, 100, 500, 1000, 5000]
-RATIO_BUCKETS = [0, 0.1, 0.5, 1, 2, 5, 10]
+RATIO_BUCKETS = [0, 0.1, 0.5, 1, 1.25, 1.5, 1.75, 2, 3, 5, 10]
 
 IMPRECISE_CREATED_AT = and_(
     extract("day", User.created_at) == 1,
@@ -39,11 +39,13 @@ class Bucket(BaseModel):
 class ScatterPoint(BaseModel):
     x: float
     y: float
+    count: int = 1  # users in the cell
 
 
 class TimePoint(BaseModel):
     x: datetime
     y: float
+    count: int = 1
 
 
 class ClanShare(BaseModel):
@@ -125,36 +127,63 @@ def get_followers_distribution(db: Session) -> list[Bucket]:
     return [Bucket(bucket=value, count=count) for value, count in rows]
 
 
+# scatter charts get cells instead of users: an axis is cut into equal cells
+# and every cell carries its users
+GRID_CELLS = 100  # cells along an axis
+MAX_FOLLOWERS = 2000
+MAX_CELLS = 20000
+
+
+def grid_cell(column, top: float):
+    return func.floor(column / max(1.0, top / GRID_CELLS))
+
+
 def get_followers_by_age(db: Session) -> list[TimePoint]:
-    # sampling keeps the payload small enough to render client side
+    # days would put the points of neighbouring cells on top of each other
+    week = func.date_trunc("week", User.created_at)
     rows = (
-        db.query(
-            func.date_trunc("day", User.created_at).label("day"), User.followers_count
-        )
+        db.query(week, func.avg(User.followers_count), func.count())
         .where(User.exists.is_(True))
         .where(User.created_at.isnot(None))
-        .where(User.followers_count < 20_000)
+        .where(User.followers_count < MAX_FOLLOWERS)
         .where(not_(IMPRECISE_CREATED_AT))
-        .distinct()
-        .order_by(desc(User.followers_count))
-        .limit(5000)
+        .group_by(week, grid_cell(User.followers_count, MAX_FOLLOWERS))
+        .order_by(desc(func.count()))
+        .limit(MAX_CELLS)
         .all()
     )
-    return [TimePoint(x=created_at, y=followers) for created_at, followers in rows]
+    return [
+        TimePoint(x=created_at, y=followers, count=count)
+        for created_at, followers, count in rows
+    ]
 
 
 def get_posts_vs_followers(db: Session) -> list[ScatterPoint]:
+    def users(*columns):
+        return (
+            db.query(*columns)
+            .where(User.exists.is_(True))
+            .where(User.posts_count > 0)
+            .where(User.followers_count < MAX_FOLLOWERS)
+        )
+
+    max_posts = users(func.max(User.posts_count)).scalar() or 0
     rows = (
-        db.query(User.posts_count, User.followers_count)
-        .where(User.exists.is_(True))
-        .where(User.posts_count > 0)
-        .where(User.followers_count < 20_000)
-        .distinct()
-        .order_by(desc(User.followers_count))
-        .limit(5000)
+        users(
+            func.avg(User.posts_count), func.avg(User.followers_count), func.count()
+        )
+        .group_by(
+            grid_cell(User.posts_count, max_posts),
+            grid_cell(User.followers_count, MAX_FOLLOWERS)
+        )
+        .order_by(desc(func.count()))
+        .limit(MAX_CELLS)
         .all()
     )
-    return [ScatterPoint(x=posts, y=followers) for posts, followers in rows]
+    return [
+        ScatterPoint(x=posts, y=followers, count=count)
+        for posts, followers, count in rows
+    ]
 
 
 def get_clans_over_time(db: Session) -> list[ClanShare]:
@@ -282,6 +311,108 @@ def get_follow_ratio(db: Session) -> list[Bucket]:
     return [Bucket(bucket=value, count=count) for value, count in rows]
 
 
+def get_running_total(db: Session, created_at) -> list[Total]:
+    rows = (
+        db.query(func.date_trunc("month", created_at).label("month"), func.count())
+        .where(created_at.isnot(None))
+        .group_by("month")
+        .order_by("month")
+        .all()
+    )
+    result = []
+    total = 0
+    for value, count in rows:
+        total += count
+        result.append(Total(month=value, total=total))
+    return result
+
+
+class PerDay(BaseModel):
+    date: datetime
+    count: int
+
+
+def get_per_day(db: Session, created_at) -> list[PerDay]:
+    day = func.date_trunc("day", created_at).label("day")
+    rows = (
+        db.query(day, func.count())
+        .where(created_at.isnot(None))
+        .group_by("day")
+        .order_by("day")
+        .all()
+    )
+    return [PerDay(date=value, count=count) for value, count in rows]
+
+
+class WordCount(BaseModel):
+    word: str
+    count: int
+
+
+STOPWORDS = sorted(
+    set(
+        """
+    без был была были было быть вам вас ведь весь вот все всё всего всех всем вообще
+    где даже для его если есть еще ещё жду или как какой кого когда кто куда
+    лишь между меня мне мной мое моё может можно мой моя надо нас него нее неё
+    нет нибудь них ничего ну оба она они оно опять очень пока почему потом
+    потому при про раз сам свой свою себе себя сейчас так такой там тебе тебя
+    тем теперь то тоже только том тот три тут ты уже хоть хотя чего чем через
+    что чтобы чтоб эта эти это этого этой этом этот эту будет будут буду была
+    было вы мы он она где-то кстати вроде типа просто реально вообще прям
+    чуть сколько свои своих своей нам ним ней них его ее её им их тех тот
+    the and you for that this with are not but have was what all your can
+    just from they will about like http https www com
+""".split()
+    )
+)
+WORDS_SQL = """
+    select word, count(*) as count
+    from (
+        select regexp_split_to_table(
+            translate(
+                lower(regexp_replace(content, 'https?://\\S+|@\\w+', ' ', 'g')),
+                'АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ',
+                'абвгдеёжзийклмнопрстуфхцчшщъыьэюя'
+            ),
+            '[^a-zа-яё]+'
+        ) as word
+        from {table}
+        where content <> ''
+    ) words
+    where length(word) between 3 and 30 and word <> all(:stopwords)
+    group by word
+    order by count desc
+    limit 120
+"""
+
+
+def get_top_words(db: Session, table: str) -> list[WordCount]:
+    # uppercase cyrillic is mapped by hand, lower() depends on the database locale
+    rows = db.execute(text(WORDS_SQL.format(table=table)), {"stopwords": STOPWORDS})
+    return [WordCount(word=word, count=count) for word, count in rows]
+
+
+class ClanCount(BaseModel):
+    clan: str
+    count: int
+
+
+def get_post_captures(db: Session) -> list[ClanCount]:
+    # emoji may come with or without the variation selector
+    clan = func.replace(Post.dominant, "\ufe0f", "")
+    rows = (
+        db.query(clan, func.count())
+        .where(Post.exists.is_(True))
+        .where(Post.dominant.is_not(None))
+        .where(Post.dominant != "")
+        .group_by(clan)
+        .order_by(desc(func.count()))
+        .limit(10)
+    )
+    return [ClanCount(clan=clan, count=count) for clan, count in rows]
+
+
 class StatsResponse(BaseModel):
     total: list[Total]
     registrations: list[Registrations]
@@ -292,6 +423,13 @@ class StatsResponse(BaseModel):
     last_seen: list[LastSeenShare]
     cohorts: list[Cohort]
     follow_ratio: list[Bucket]
+    posts_total: list[Total]
+    posts_per_day: list[PerDay]
+    comments_total: list[Total]
+    comments_per_day: list[PerDay]
+    words_posts: list[WordCount]
+    words_comments: list[WordCount]
+    post_captures: list[ClanCount]  # posts each clan holds as the dominant one
 
 
 @router.get("/", response_model=StatsResponse)
@@ -307,7 +445,14 @@ def api_get_ebdi_stats(request: Request, db: Session = Depends(get_db)):
             clans_over_time=get_clans_over_time(db),
             last_seen=get_last_seen(db),
             cohorts=get_cohorts(db),
-            follow_ratio=get_follow_ratio(db)
+            follow_ratio=get_follow_ratio(db),
+            posts_total=get_running_total(db, Post.created_at),
+            posts_per_day=get_per_day(db, Post.created_at),
+            comments_total=get_running_total(db, Comment.created_at),
+            comments_per_day=get_per_day(db, Comment.created_at),
+            words_posts=get_top_words(db, "posts"),
+            words_comments=get_top_words(db, "comments"),
+            post_captures=get_post_captures(db)
         ).model_dump_json()
         request.app.state.stats_updated_at = datetime.now()
     return Response(content=request.app.state.stats, media_type="application/json")

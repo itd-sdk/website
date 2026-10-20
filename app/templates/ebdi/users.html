@@ -1,7 +1,7 @@
-{% extends "base.html" %}
+{% extends "ebdi/base.html" %}
+{% set active_tab = "users" %}
 
-{% block head %}
-<link rel="stylesheet" href="/static/css/ebdi/style.css">
+{% block ebdi_head %}
 <link rel="stylesheet" href="/static/css/ebdi/users.css">
 <script src="/static/js/ebdi/users.js"></script>
 <script type="module" src="https://cdn.jsdelivr.net/npm/emoji-picker-element@1/index.js"></script>
@@ -9,29 +9,7 @@
 <meta name="keywords" content="itd, itd-sdk, итд, итд ранкинг, ебди, итд пользователи, новки, илья новки, nowkie">
 {% endblock %}
 
-{% block content %}
-<div id="landing">
-    <img id="banner" src="/static/images/ebdi.png">
-    <div id="landing-description">Единая База Данных ИТД</div>
-</div>
-
-<div id="content">
-    <div id="feedback">
-        <img src="/static/icons/vote.svg">
-        <div id="feedback-content">
-            <div id="feedback-title">Обратная связь</div>
-            <div id="feedback-description">Предложите идеи для ЕБДИ или сообщите о баге.</div>
-        </div>
-        <button onclick="location.href='https://github.com/itd-sdk/website/issues/new'">Перейти <img src="/static/icons/arrow.svg"></button>
-    </div>
-    <nav id="tabs">
-        <a href="/ebdi/users" class="tab tab-active">Пользователи</a>
-        <a href="/ebdi/clans" class="tab">Кланы</a>
-        <a href="/ebdi/stats" class="tab">Статистика</a>
-        <!--<a href="/ebdi/posts" class="tab">Посты</a>-->
-        <!--<a href="/ebdi/hashtags" class="tab">Хэштэги</a>-->
-        <!--<a href="/ebdi/stats" class="tab">Статистика</a>-->
-    </nav>
+{% block ebdi_content %}
 
     <h2>Пользователи ИТД</h2>
 
@@ -126,7 +104,9 @@
         </div>
         <div id="sentinel-bottom" class="sentinel"></div>
     <!--<div id="note">Лицензировано под <a href="https://creativecommons.org/licenses/by-nc/4.0/">CC BY-NC 4.0</a></div>-->
-</div>
+{% endblock %}
+
+{% block ebdi_after %}
 
 <dialog id="user-dialog">
     <div id="dialog-status" hidden>Обновление...</div>

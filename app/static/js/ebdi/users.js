@@ -22,10 +22,13 @@ const state = {
     failed_offset: null,
     loaded_offsets: new Set(),
     loading: false,
+    jumping: false,
 };
 
 let user_template = null;
 let gap_observer = null;
+let top_observer = null;
+let bottom_observer = null;
 
 const users_by_id = new Map();
 let dialog_user = null;
@@ -146,7 +149,9 @@ async function fetch_count() {
         return;
     }
     get_el("total-objects").hidden = false;
-    get_el("total-objects-value").textContent = (await res.json()).count;
+    get_el("total-objects-value").textContent = format_number(
+        (await res.json()).count,
+    );
 }
 
 async function fetch_users(offset) {
@@ -286,7 +291,8 @@ function update_gaps() {
         }
         const gap = document.createElement("div");
         gap.className = "row row-gap";
-        gap.dataset.offset = prev_offset + PAGE_SIZE;
+        gap.dataset.first = prev_offset + PAGE_SIZE;
+        gap.dataset.last = offset - PAGE_SIZE;
         const spinner = document.createElement("div");
         spinner.className = "loader-spinner";
         gap.appendChild(spinner);
@@ -296,7 +302,7 @@ function update_gaps() {
 }
 
 function get_scroll_anchor() {
-    return [...document.querySelectorAll("#rows .row")].find(
+    return [...document.querySelectorAll("#rows .row-batch .row")].find(
         (node) => node.getBoundingClientRect().bottom > 0,
     );
 }
@@ -311,21 +317,18 @@ function insert_batch(offset, users) {
     }
     const batches = [...container.querySelectorAll(".row-batch")];
     const next = batches.find((el) => Number(el.dataset.offset) > offset);
-    // batches inserted above shift everything down, compensate by height delta
-    const prepending = Boolean(next);
-    const height_before = document.documentElement.scrollHeight;
-    const scroll_before = window.scrollY;
+    // a batch inserted above the visible rows shifts them down, the first
+    // visible row is kept in place instead
+    const anchor = get_scroll_anchor();
+    const anchor_top = anchor?.getBoundingClientRect().top;
 
     container.insertBefore(batch, next ?? get_el("list-loader"));
     update_gaps();
 
-    if (prepending) {
-        const delta = document.documentElement.scrollHeight - height_before;
+    if (anchor?.isConnected) {
+        const delta = anchor.getBoundingClientRect().top - anchor_top;
         if (delta) {
-            window.scrollTo({
-                top: scroll_before + delta,
-                behavior: "instant",
-            });
+            window.scrollBy({ top: delta, behavior: "instant" });
         }
     }
 }
@@ -336,7 +339,9 @@ async function load_batch(offset) {
     }
     state.loading = true;
     hide_error();
-    const gap = document.querySelector(`.row-gap[data-offset="${offset}"]`);
+    const gap = document.querySelector(
+        `.row-gap[data-first="${offset}"], .row-gap[data-last="${offset}"]`,
+    );
     if (!gap) {
         show_loader(true);
     }
@@ -387,6 +392,7 @@ function max_loaded_offset() {
 function can_load() {
     return (
         !state.loading &&
+        !state.jumping &&
         !get_el("user-dialog").open &&
         state.failed_offset == null &&
         state.loaded_offsets.size > 0 &&
@@ -394,35 +400,72 @@ function can_load() {
     );
 }
 
+// batches load well before the edge is reached, like the posts feed
+const PRELOAD_MARGIN = "1200px 0px";
+
+// an observer only reports changes, a sentinel still in range after a load
+// would never fire again, so it is observed anew
+function recheck(observer, target) {
+    observer.unobserve(target);
+    observer.observe(target);
+}
+
+// loads skipped while a jump or the dialog blocked them are picked up again
+function recheck_all() {
+    for (const gap of document.querySelectorAll(".row-gap")) {
+        recheck(gap_observer, gap);
+    }
+    recheck(top_observer, get_el("sentinel-top"));
+    recheck(bottom_observer, get_el("sentinel-bottom"));
+}
+
 function init_infinite_scroll() {
-    gap_observer = new IntersectionObserver(async (entries) => {
-        for (const entry of entries) {
-            if (!entry.isIntersecting || !can_load()) {
-                continue;
+    gap_observer = new IntersectionObserver(
+        async (entries) => {
+            for (const entry of entries) {
+                if (!entry.isIntersecting || !can_load()) {
+                    continue;
+                }
+                // the end of the gap next to the visible rows is filled, so
+                // the gap moves away instead of staying in view
+                const above =
+                    entry.boundingClientRect.top < window.innerHeight / 2;
+                const { first, last } = entry.target.dataset;
+                await load_batch(Number(above ? last : first));
             }
-            await load_batch(Number(entry.target.dataset.offset));
-        }
-    });
-    const bottom_observer = new IntersectionObserver(async (entries) => {
-        if (!entries.some((entry) => entry.isIntersecting)) {
-            return;
-        }
-        if (!can_load() || state.finished) {
-            return;
-        }
-        await load_batch(max_loaded_offset() + PAGE_SIZE);
-    });
-    bottom_observer.observe(get_el("sentinel-bottom"));
-    const top_observer = new IntersectionObserver(async (entries) => {
-        if (!entries.some((entry) => entry.isIntersecting)) {
-            return;
-        }
-        if (!can_load() || min_loaded_offset() == 0) {
-            return;
-        }
-        await load_batch(min_loaded_offset() - PAGE_SIZE);
-    });
-    top_observer.observe(get_el("sentinel-top"));
+        },
+        { rootMargin: PRELOAD_MARGIN },
+    );
+    const bottom = get_el("sentinel-bottom");
+    bottom_observer = new IntersectionObserver(
+        async (entries) => {
+            if (!entries.some((entry) => entry.isIntersecting)) {
+                return;
+            }
+            if (!can_load() || state.finished) {
+                return;
+            }
+            await load_batch(max_loaded_offset() + PAGE_SIZE);
+            recheck(bottom_observer, bottom);
+        },
+        { rootMargin: PRELOAD_MARGIN },
+    );
+    bottom_observer.observe(bottom);
+    const top = get_el("sentinel-top");
+    top_observer = new IntersectionObserver(
+        async (entries) => {
+            if (!entries.some((entry) => entry.isIntersecting)) {
+                return;
+            }
+            if (!can_load() || min_loaded_offset() == 0) {
+                return;
+            }
+            await load_batch(min_loaded_offset() - PAGE_SIZE);
+            recheck(top_observer, top);
+        },
+        { rootMargin: PRELOAD_MARGIN },
+    );
+    top_observer.observe(top);
 }
 
 let search_timer = null;
@@ -527,6 +570,20 @@ async function wait_loading() {
     }
 }
 
+function scroll_end() {
+    return new Promise((resolve) => {
+        const done = () => {
+            clearTimeout(timer);
+            window.removeEventListener("scrollend", done);
+            resolve();
+        };
+        // scrollend is missing in older browsers and does not fire when
+        // the row is already in place
+        const timer = setTimeout(done, 1500);
+        window.addEventListener("scrollend", done);
+    });
+}
+
 async function jump_to_user(user) {
     hide_candidates();
     let needs_reset = has_active_filters();
@@ -560,13 +617,17 @@ async function jump_to_user(user) {
         alert("Ошибка: пользователь не найден");
         return;
     }
+    state.jumping = true;
     node.scrollIntoView({ behavior: "smooth", block: "center" });
+    await scroll_end();
+    state.jumping = false;
+    recheck_all();
     node.classList.add("row-highlighted");
     setTimeout(() => node.classList.remove("row-highlighted"), 3000);
 }
 
 function format_number(value) {
-    return new Intl.NumberFormat().format(value);
+    return new Intl.NumberFormat("ru-RU").format(value);
 }
 
 function format_date(value) {
@@ -656,8 +717,16 @@ function render_gap(label, amount) {
     return line;
 }
 
-function render_rank_card(label, rank) {
+function render_rank_card(label, rank, href) {
     const card = create("div", "rank-card");
+    if (href) {
+        // an empty link over the card, the text keeps its own colors
+        const cover = create("a", "rank-card-cover");
+        cover.href = href;
+        cover.title = `${label} пользователя`;
+        card.append(cover);
+        card.classList.add("rank-card-link");
+    }
 
     const head = create("div", "rank-head");
     head.append(create("div", "rank-label", label));
@@ -687,11 +756,17 @@ function render_rank_card(label, rank) {
     return card;
 }
 
-function render_dialog_ranks(ranks) {
+function render_dialog_ranks(ranks, user) {
     const container = get_el("dialog-ranks");
     container.append(render_rank_card("Подписчики", ranks.followers));
     container.append(render_rank_card("Подписки", ranks.following));
-    container.append(render_rank_card("Посты", ranks.posts));
+    container.append(
+        render_rank_card(
+            "Посты",
+            ranks.posts,
+            "/ebdi/posts?" + new URLSearchParams({ user: user.username }),
+        ),
+    );
 }
 
 function render_dialog_dates(user) {
@@ -756,7 +831,7 @@ async function load_dialog_ranks(user, token) {
         if (token != dialog_token) {
             return;
         }
-        render_dialog_ranks(json);
+        render_dialog_ranks(json, user);
     } catch (error) {
         console.warn("ranks request failed", error);
         if (token == dialog_token) {
@@ -852,8 +927,15 @@ async function refresh_dialog_user() {
             }
             return;
         }
-        // refresh response may lack leaderboard-only fields (rank, position)
-        const fresh = { ...user, ...(await res.json()) };
+        // the refresh response has rank and position empty (null, 0), the
+        // list ones stay
+        const json = await res.json();
+        for (const key of ["rank", "position"]) {
+            if (!json[key]) {
+                delete json[key];
+            }
+        }
+        const fresh = { ...user, ...json };
         users_by_id.set(fresh.user_id, fresh);
         update_row(fresh);
 
@@ -923,7 +1005,10 @@ function init_user_dialog() {
             close_user_dialog();
         }
     });
-    dialog.addEventListener("close", unlock_scroll);
+    dialog.addEventListener("close", () => {
+        unlock_scroll();
+        recheck_all();
+    });
 }
 
 function init_sort_headers() {

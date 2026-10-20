@@ -81,6 +81,7 @@ class CommentBody(BaseModel):
     content: str = ""
     attachments: list[str] = []
     likes_count: int = 0
+    replies_count: int | None = None  # None: count the sent replies
     replies: list["CommentBody"] = []
 
 
@@ -94,6 +95,7 @@ class PostBody(BaseModel):
     attachments: list[str] = []
     likes_count: int = 0
     comments_count: int = 0
+    reposts_count: int | None = None  # None: older client, stored value is kept
     views_count: int = 0
     poll_question: str | None = None
     poll_options: list[str] | None = None
@@ -102,6 +104,8 @@ class PostBody(BaseModel):
     original_post_id: UUID | None = None
     wall_recipient_id: UUID | None = None
     comments: list[CommentBody] = []
+    # comments hold the whole tree, stored comments missing in it were deleted
+    comments_complete: bool = False
     red_pens: list[dict] = []
     red_pen_authors: list[str] = []
     correctors: list[dict] = []

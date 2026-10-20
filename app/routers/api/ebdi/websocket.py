@@ -1,5 +1,4 @@
 from asyncio import wait_for
-from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from random import randint
@@ -8,8 +7,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, WebSocket
 from pydantic import BaseModel, ValidationError
-from sqlalchemy import case, desc, func, or_
-from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy import and_, case, desc, func, or_
 from starlette.websockets import WebSocketDisconnect
 from websockets.exceptions import ConnectionClosedError
 
@@ -17,7 +15,6 @@ from app.logger import get_logger
 from app.routers.api.ebdi.protocol import (
     PROTOCOL_VERSION,
     CloseCode,
-    CommentBody,
     CreatedResponse,
     CreateRequest,
     CreateTaskResponse,
@@ -38,7 +35,8 @@ from app.routers.api.ebdi.protocol import (
     UpdateTaskResponse,
     client_message
 )
-from app.schemas import App, Comment, Post, User
+from app.routers.api.ebdi.storage import save_comments, set_user_exists, upsert
+from app.schemas import App, Post, User
 from app.services.db import Session, get_db
 from app.services.settings import get_settings
 
@@ -46,6 +44,7 @@ router = APIRouter(prefix="/websocket")
 l = get_logger("ebdi.websocket")
 
 POSTS_OVERLAP = timedelta(days=30)  # rescrape posts newer than last check minus this
+POSTS_DELETE_MARGIN = timedelta(days=1)
 # how often posts are rechecked by last activity, long_ago users are not checked at all
 POSTS_INTERVALS = {
     "just_now": timedelta(days=1),
@@ -68,6 +67,10 @@ class Task:
     targets: list[User] = field(default_factory=list)
     prefix: str | None = None
     started_at: datetime = field(default_factory=lambda: datetime.now())
+    # posts task: the client sends every post newer than `since`, the stored
+    # ones it did not send are gone from ITD
+    since: datetime | None = None
+    seen_posts: set[UUID] = field(default_factory=set)
 
 
 tasks: list[Task] = []
@@ -102,31 +105,6 @@ def increment_prefix(prefix: str) -> str:
         chars[i] = ALPHABET[0]
     # wrapped around, start the cycle over
     return ALPHABET[0] * len(prefix)
-
-
-def flatten_comments(
-    comments: list[CommentBody], post_id: UUID, parent_id: UUID | None = None
-) -> Iterator[dict]:
-    # parents always go before their replies so the parent_id fk is satisfied
-    for comment in comments:
-        yield {
-            **comment.model_dump(exclude={"replies"}),
-            "post_id": post_id,
-            "parent_id": parent_id
-        }
-        yield from flatten_comments(comment.replies, post_id, comment.comment_id)
-
-
-def upsert(db: Session, model: type[Post] | type[Comment], key: str, rows: list[dict]):
-    # chunks keep a single statement below the postgres bind parameters limit
-    for i in range(0, len(rows), 1000):
-        stmt = insert(model).values(rows[i : i + 1000])
-        db.execute(
-            stmt.on_conflict_do_update(
-                index_elements=[key],
-                set_={c: stmt.excluded[c] for c in rows[0] if c != key}
-            )
-        )
 
 
 def refresh_interval():
@@ -204,7 +182,10 @@ def new_task(db: Session, app: App) -> Task | None:
                 )
             )
             .where(User.id.not_in(get_targets()))
-            .order_by(User.posts_updated_at.asc().nulls_first())
+            # users with the most posts first, one or two posts can wait
+            .order_by(
+                desc(User.posts_count), User.posts_updated_at.asc().nulls_first()
+            )
             .first()
         )
         if posts_query is not None:
@@ -230,22 +211,20 @@ def task_response(db: Session, task: Task) -> BaseModel:
         case TaskType.posts:
             user = task.targets[0]
             since = None
-            known_comments = {}
+            known = db.query(Post.post_id, Post.comments_count).where(
+                or_(
+                    Post.author_id == user.user_id,
+                    Post.wall_recipient_id == user.user_id
+                )
+            )
             if user.posts_updated_at is not None:
                 since_local = user.posts_updated_at - POSTS_OVERLAP
-                known_comments = {
-                    post_id: count
-                    for post_id, count in db.query(Post.post_id, Post.comments_count)
-                    .where(
-                        or_(
-                            Post.author_id == user.user_id,
-                            Post.wall_recipient_id == user.user_id
-                        )
-                    )
-                    .where(Post.created_at > since_local)
-                }
+                known = known.where(Post.created_at > since_local)
+                task.since = since_local
                 # naive local time -> aware utc, client compares it with post dates
                 since = since_local.astimezone(timezone.utc)
+            # a full rescan also refetches comments only where the count changed
+            known_comments = dict(known.all())
             return PostsTaskResponse(
                 target=PostsTarget(
                     id=user.user_id,
@@ -311,10 +290,10 @@ async def handle_update(conn: Connection, request: UpdateRequest):
             if i == "avatar":
                 continue
             setattr(user, i, getattr(request.target, i))
-        user.exists = True
+        set_user_exists(conn.db, user, True)
     else:
         l.debug("(%s) < not exists", conn.app.name)
-        user.exists = False
+        set_user_exists(conn.db, user, False)
     user.updated_at = datetime.now()
 
     conn.app.refreshed += 1
@@ -365,15 +344,54 @@ async def handle_post(conn: Connection, request: PostRequest):
         return
 
     l.debug("(%s) < post %s", conn.app.name, post.post_id)
-    upsert(conn.db, Post, "post_id", [post.model_dump(exclude={"comments"})])
-    # same comment can come twice (pagination shifts), one insert
-    # with duplicate keys fails, so keep the first occurrence
-    comments: dict[UUID, dict] = {}
-    for row in flatten_comments(post.comments, post.post_id):
-        comments.setdefault(row["comment_id"], row)
-    upsert(conn.db, Comment, "comment_id", list(comments.values()))
+    assert conn.task is not None
+    conn.task.seen_posts.add(post.post_id)
+    row = {
+        **post.model_dump(exclude={"comments", "comments_complete"}),
+        "exists": True,
+        "deleted_at": None
+    }
+    if row["reposts_count"] is None:
+        del row["reposts_count"]
+    if conn.task.since is None:
+        # a full rescan (posts_updated_at was reset) brings the posts back as
+        # if they were just found, regular passes keep the first found_at
+        row["found_at"] = func.now()
+    upsert(conn.db, Post, "post_id", [row])
+    deleted = save_comments(
+        conn.db, post.post_id, post.comments, post.comments_complete
+    )
+    if deleted:
+        l.debug(
+            "(%s) post %s: %s comments deleted", conn.app.name, post.post_id, deleted
+        )
     conn.db.commit()
     await conn.send(PostSavedResponse())
+
+
+def mark_deleted_posts(db: Session, task: Task | None, user: User) -> None:
+    assert task is not None
+    # posts shown on the user's profile: own ones and the ones others left on it;
+    # own posts on other walls do not show up there, so they are left alone
+    query = (
+        db.query(Post)
+        .where(Post.exists.is_(True))
+        .where(
+            or_(
+                Post.wall_recipient_id == user.user_id,
+                and_(Post.author_id == user.user_id, Post.wall_recipient_id.is_(None))
+            )
+        )
+        .where(Post.post_id.not_in(task.seen_posts))
+    )
+    if task.since is not None:
+        # margin covers a timezone mismatch between the app and the database
+        query = query.where(Post.created_at > task.since + POSTS_DELETE_MARGIN)
+    deleted = query.update(
+        {Post.exists: False, Post.deleted_at: func.now()}, synchronize_session=False
+    )
+    if deleted:
+        l.debug("(%s) %s posts deleted", user.username, deleted)
 
 
 async def handle_posts_done(conn: Connection, request: PostsDoneRequest):
@@ -384,7 +402,9 @@ async def handle_posts_done(conn: Connection, request: PostsDoneRequest):
     l.debug("(%s) < posts done %s", conn.app.name, user.username)
     user.posts_updated_at = datetime.now()
     if not request.target_exists:
-        user.exists = False
+        set_user_exists(conn.db, user, False)
+    else:
+        mark_deleted_posts(conn.db, conn.task, user)
     conn.app.refreshed += 1
     conn.db.commit()
     await conn.send(PostsUpdatedResponse())

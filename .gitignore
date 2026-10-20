@@ -11,3 +11,6 @@ wheels/
 .env
 database.db
 epepuy/*
+
+# voice messages served by the ebdi audio proxy
+cache/

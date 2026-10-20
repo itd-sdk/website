@@ -22,39 +22,44 @@ h2 {
     );
 }
 
-#feedback {
+.feedback {
     background: linear-gradient(to right, #2c2a2744, #2c2a2744);
     background-size: cover;
-    border: #fbeadb 1px solid;
+    border: #fbeadbbb 1px solid;
     padding: 15px;
     display: flex;
     flex-direction: row;
     justify-content: space-between;
+    align-items: center;
     max-width: 550px;
     margin-left: auto;
     margin-right: auto;
 }
-
-#feedback img {
-    width: 50px;
-    margin-right: 5px;
+.feedback:first-child {
+    margin-bottom: 15px;
 }
 
-#feedback-title {
+.feedback > img {
+    width: 50px;
+    height: min-content;
+    margin-right: 20px;
+}
+
+.feedback-title {
     font-weight: bold;
 }
 
-#feedback-description {
+.feedback-description {
     color: #999;
     font-size: 13px;
 }
 
-#feedback button {
+.feedback button {
     height: min-content;
     align-self: center;
     margin-left: 10px;
 }
-#feedback button img {
+.feedback button img {
     width: 9px;
 }
 
@@ -493,6 +498,13 @@ emoji-picker {
 }
 
 @media (max-width: 1000px) {
+    #content {
+        padding: 0 10px;
+    }
+    /* the full width bar follows the narrower page padding */
+    #controls-box {
+        margin-left: -10px;
+    }
     #landing {
         height: 20vh;
         margin-bottom: 25px;
