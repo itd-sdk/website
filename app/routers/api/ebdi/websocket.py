@@ -1,6 +1,8 @@
 from asyncio import wait_for
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
+from itertools import count
 from random import randint
 from string import ascii_lowercase, digits
 from uuid import UUID
@@ -71,9 +73,49 @@ class Task:
     # ones it did not send are gone from ITD
     since: datetime | None = None
     seen_posts: set[UUID] = field(default_factory=set)
+    full: bool = False  # posts task: refetch every post, not only the recent ones
+    renew_found_at: bool = False
+    manual: bool = False  # sent from the admin panel
+    done: int = 0  # handled targets, created users or saved posts
+    # plain copies for the admin panel, it must not touch the connection's session
+    usernames: list[str] = field(default_factory=list)
+    target_posts: int = 0
 
 
 tasks: list[Task] = []
+
+
+@dataclass
+class ManualTask:
+    """Task queued from the admin panel, given out before the automatic ones"""
+
+    type: TaskType
+    client: str | None  # app name, None for the first client that asks
+    query: str | None = None  # create: search query
+    usernames: list[str] = field(default_factory=list)  # update or posts targets
+    full: bool = False
+    id: int = field(default_factory=count(1).__next__)
+    created_at: datetime = field(default_factory=lambda: datetime.now())
+
+
+manual_tasks: list[ManualTask] = []
+
+
+def take_manual_task(db: Session, app: App) -> Task | None:
+    for manual in list(manual_tasks):
+        if manual.client not in (None, app.name):
+            continue
+        manual_tasks.remove(manual)
+        if manual.type == TaskType.create:
+            return Task(app, TaskType.create, prefix=manual.query, manual=True)
+        targets = db.query(User).where(User.username.in_(manual.usernames)).all()
+        if not targets:
+            l.warning("manual task %s: no users %s", manual.id, manual.usernames)
+            continue
+        if manual.type == TaskType.posts:
+            targets = targets[:1]
+        return Task(app, manual.type, targets, full=manual.full, manual=True)
+    return None
 
 
 def get_targets():
@@ -145,6 +187,10 @@ def refresh_interval():
 
 
 def new_task(db: Session, app: App) -> Task | None:
+    manual = take_manual_task(db, app)
+    if manual is not None:
+        return manual
+
     if UPDATE:
         priority = (
             func.extract("epoch", func.now() - User.updated_at) / refresh_interval()
@@ -217,7 +263,9 @@ def task_response(db: Session, task: Task) -> BaseModel:
                     Post.wall_recipient_id == user.user_id
                 )
             )
-            if user.posts_updated_at is not None:
+            # a reset posts_updated_at brings the posts back as if just found
+            task.renew_found_at = user.posts_updated_at is None
+            if user.posts_updated_at is not None and not task.full:
                 since_local = user.posts_updated_at - POSTS_OVERLAP
                 known = known.where(Post.created_at > since_local)
                 task.since = since_local
@@ -241,6 +289,11 @@ class Connection:
     db: Session
     app: App
     task: Task | None = None
+    name: str = ""  # app.name, the admin panel reads it from another thread
+    connected_at: datetime = field(default_factory=lambda: datetime.now())
+    last_message_at: datetime = field(default_factory=lambda: datetime.now())
+    # what the client did since it connected: updated, created, posts, posts_done
+    stats: Counter = field(default_factory=Counter)
 
     async def send(self, message: BaseModel) -> None:
         await self.websocket.send_text(message.model_dump_json())
@@ -260,6 +313,10 @@ class Connection:
         return user
 
 
+# connected clients by app name, read by the admin panel
+connections: dict[str, Connection] = {}
+
+
 async def handle_task(connection: Connection, request: TaskRequest):
     if connection.task is not None and connection.task in tasks:
         tasks.remove(connection.task)
@@ -270,6 +327,8 @@ async def handle_task(connection: Connection, request: TaskRequest):
         await connection.error("no tasks")
         return
     tasks.append(connection.task)
+    connection.task.usernames = [target.username for target in connection.task.targets]
+    connection.task.target_posts = sum(t.posts_count for t in connection.task.targets)
     l.debug(
         "(%s) new task type=%s targets=%s",
         connection.app.name,
@@ -296,6 +355,9 @@ async def handle_update(conn: Connection, request: UpdateRequest):
         set_user_exists(conn.db, user, False)
     user.updated_at = datetime.now()
 
+    assert conn.task is not None
+    conn.task.done += 1
+    conn.stats["updated"] += 1
     conn.app.refreshed += 1
     conn.db.commit()
     await conn.send(UpdatedResponse())
@@ -320,6 +382,8 @@ async def handle_create(conn: Connection, request: CreateRequest):
             )
         )
         conn.app.added += 1
+        conn.task.done += 1
+        conn.stats["created"] += 1
         db.commit()
 
     await conn.send(CreatedResponse())
@@ -349,13 +413,13 @@ async def handle_post(conn: Connection, request: PostRequest):
     row = {
         **post.model_dump(exclude={"comments", "comments_complete"}),
         "exists": True,
-        "deleted_at": None
+        "deleted_at": None,
+        "updated_at": func.now()
     }
     if row["reposts_count"] is None:
         del row["reposts_count"]
-    if conn.task.since is None:
-        # a full rescan (posts_updated_at was reset) brings the posts back as
-        # if they were just found, regular passes keep the first found_at
+    if conn.task.renew_found_at:
+        # regular passes and manual full rescans keep the first found_at
         row["found_at"] = func.now()
     upsert(conn.db, Post, "post_id", [row])
     deleted = save_comments(
@@ -365,6 +429,8 @@ async def handle_post(conn: Connection, request: PostRequest):
         l.debug(
             "(%s) post %s: %s comments deleted", conn.app.name, post.post_id, deleted
         )
+    conn.task.done += 1
+    conn.stats["posts"] += 1
     conn.db.commit()
     await conn.send(PostSavedResponse())
 
@@ -405,6 +471,7 @@ async def handle_posts_done(conn: Connection, request: PostsDoneRequest):
         set_user_exists(conn.db, user, False)
     else:
         mark_deleted_posts(conn.db, conn.task, user)
+    conn.stats["posts_done"] += 1
     conn.app.refreshed += 1
     conn.db.commit()
     await conn.send(PostsUpdatedResponse())
@@ -434,13 +501,14 @@ async def api_websocket_ebdi(
             f"client version {version} is not supported, update to {PROTOCOL_VERSION}"
         )
         return
-    if app.name in [task.app.name for task in tasks]:
+    if app.name in connections or app.name in [task.app.name for task in tasks]:
         l.info("decline reason=already exists")
         await websocket.close(CloseCode.task_exists, "task already exists")
         return
 
     await websocket.accept()
-    conn = Connection(websocket, db, app)
+    conn = Connection(websocket, db, app, name=app.name)
+    connections[app.name] = conn
     try:
         while True:
             timeout = 60
@@ -453,6 +521,7 @@ async def api_websocket_ebdi(
                 await websocket.close(CloseCode.timeout, "timeout")
                 return
 
+            conn.last_message_at = datetime.now()
             try:
                 request = client_message.validate_json(data)
             except ValidationError as e:
@@ -476,5 +545,7 @@ async def api_websocket_ebdi(
     except (WebSocketDisconnect, ConnectionClosedError):
         l.warning("(%s) disconnect", app.name)
     finally:
+        if connections.get(app.name) is conn:
+            del connections[app.name]
         if conn.task is not None and conn.task in tasks:
             tasks.remove(conn.task)
