@@ -14,8 +14,9 @@ def create_db() -> None:
     global SessionLocal
     engine = create_engine(
         getenv("DATABASE_URL", ""),
-        pool_size=10,
-        max_overflow=20,
+        pool_size=3,
+        max_overflow=10,
+        pool_recycle=900,
         # drop connections broken by a postgres restart instead of failing requests
         pool_pre_ping=True
     )
