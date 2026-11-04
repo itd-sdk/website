@@ -535,3 +535,8 @@ dialog::backdrop {
     pointer-events: none;
     position: fixed;
 }
+
+#footer-opensource {
+    margin-left: auto;
+    margin-top: auto;
+}
