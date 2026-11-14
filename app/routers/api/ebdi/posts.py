@@ -3,8 +3,8 @@ from enum import Enum
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from itd.enums import ALL
 from itd import Post as ItdPost
+from itd.enums import ALL
 from itd.exceptions import NotFoundError, TargetUserBannedError
 from pydantic import BaseModel
 from sqlalchemy import cast, desc, exists, false, func, or_, select
@@ -148,8 +148,7 @@ def mark_users(db: Session, posts: list[Post]) -> dict[str, User]:
 def mark_authors(ids: list[str], users: dict[str, User]) -> list[MarkAuthor]:
     # one entry per user, in the order of their first mark
     return [
-        MarkAuthor(user_id=i, user=to_author(users.get(i)))
-        for i in dict.fromkeys(ids)
+        MarkAuthor(user_id=i, user=to_author(users.get(i))) for i in dict.fromkeys(ids)
     ]
 
 
@@ -285,9 +284,7 @@ def api_get_ebdi_posts(
     }
     original_rows = []
     if original_ids:
-        original_rows = posts_with_users(db).where(
-            Post.post_id.in_(original_ids)
-        ).all()
+        original_rows = posts_with_users(db).where(Post.post_id.in_(original_ids)).all()
     users = mark_users(db, [row[0] for row in rows + original_rows])
     originals = {
         post.post_id: to_response(post, author, recipient, users)
@@ -326,7 +323,7 @@ def get_post_response(db: Session, post_id: UUID) -> PostResponse:
             posts_with_users(db).where(Post.post_id == post.original_post_id).first()
         )
     users = mark_users(db, [post, found[0]] if found else [post])
-    original = to_response(*found, users) if found else None
+    original = to_response(*found, users=users) if found else None
     return to_response(post, author, recipient, users, original)
 
 
@@ -373,7 +370,11 @@ def api_post_ebdi_post_refresh(
 
     try:
         itd_post = ItdPost(post_id)
-        comments_changed = itd_post.comments_count != post.comments_count
+        # comments are refetched only when the counter moved, like the scraper does
+        if itd_post.comments_count != post.comments_count:
+            deleted = save_comments(db, post_id, fetch_comment_tree(itd_post), True)
+            l.debug("post %s: comments refetched, %s deleted", post_id, deleted)
+
         post.likes_count = itd_post.likes_count
         post.comments_count = itd_post.comments_count
         post.reposts_count = itd_post.reposts_count
@@ -382,25 +383,9 @@ def api_post_ebdi_post_refresh(
         post.edited_at = itd_post.edited_at
         post.dominant = itd_post.dominant
         post.attachments = [attachment.url for attachment in itd_post.attachments]
-        # same shape as the scraper stores
-        post.red_pens = [pen.model_dump(mode="json") for pen in itd_post.red_pens]
-        post.red_pen_authors = [str(c.actor.id) for c in itd_post.red_pen.claims]
-        post.correctors = [
-            {
-                "id": str(c.id),
-                "start": c.start,
-                "end": c.end,
-                "actor": str(c.actor.id),
-                "created_at": str(c.created_at)
-            }
-            for c in itd_post.correctors
-        ]
         post.exists = True
         post.deleted_at = None
-        # comments are refetched only when the counter moved, like the scraper does
-        if comments_changed:
-            deleted = save_comments(db, post_id, fetch_comment_tree(itd_post), True)
-            l.debug("post %s: comments refetched, %s deleted", post_id, deleted)
+
     except (NotFoundError, TargetUserBannedError):
         db.rollback()
         post = db.query(Post).where(Post.post_id == post_id).one()
@@ -410,6 +395,6 @@ def api_post_ebdi_post_refresh(
     except Exception as error:
         db.rollback()
         l.warning("post %s refresh failed: %r", post_id, error)
-        raise HTTPException(502, "ITD request failed") from error
+        raise HTTPException(500, "request failed") from error
     db.commit()
     return get_post_response(db, post_id)
