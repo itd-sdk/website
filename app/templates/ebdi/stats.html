@@ -26,21 +26,21 @@
         <div class="chart-card">
             <div class="chart-title">Всего пользователей</div>
             <div class="chart-description">
-                Общее количество пользователей
+                Количество пользователей по дате создания
             </div>
             <div class="chart-box"><canvas id="chart-total"></canvas></div>
         </div>
         <div class="chart-card">
             <div class="chart-title">Всего постов</div>
             <div class="chart-description">
-                Количество постов в базе по дате публикации
+                Количество постов по дате публикации
             </div>
             <div class="chart-box"><canvas id="chart-posts-total"></canvas></div>
         </div>
         <div class="chart-card">
             <div class="chart-title">Всего комментариев</div>
             <div class="chart-description">
-                Количество комментариев и ответов в базе по дате создания
+                Количество комментариев и ответов по дате создания
             </div>
             <div class="chart-box"><canvas id="chart-comments-total"></canvas></div>
         </div>
@@ -83,7 +83,7 @@
         <div class="chart-card" id="words-card">
             <div class="chart-title">Частые слова</div>
             <div class="chart-description">
-                Самые частые слова: чем чаще слово встречается, тем оно больше
+                Самые частые слова в постах и комментариях
             </div>
             <div class="chart-tabs" id="words-tabs">
                 <div class="chart-tab chart-tab-active" data-source="posts">В постах</div>
@@ -95,7 +95,7 @@
         <div class="chart-card">
             <div class="chart-title">Захват постов</div>
             <div class="chart-description">
-                Сколько постов держит каждый клан как доминирующий
+                Сколько постов захватил каждый клан
             </div>
             <div class="chart-box"><canvas id="chart-post-captures"></canvas></div>
         </div>
@@ -106,22 +106,6 @@
                 Распределение пользователей по количеству подписчиков
             </div>
             <div class="chart-box"><canvas id="chart-followers-distribution"></canvas></div>
-        </div>
-
-        <div class="chart-card">
-            <div class="chart-title">Подписчики и дата регистрации</div>
-            <div class="chart-description">
-                Отношение даты регистрации к количеству подписчиков (до 2 000 подписчиков). Чем ярче точка, тем больше в ней пользователей
-            </div>
-            <div class="chart-box"><canvas id="chart-followers-by-age"></canvas></div>
-        </div>
-
-        <div class="chart-card">
-            <div class="chart-title">Посты и подписчики</div>
-            <div class="chart-description">
-                Отношение количества постов к количеству подписчиков (до 2 000 подписчиков). Чем ярче точка, тем больше в ней пользователей
-            </div>
-            <div class="chart-box"><canvas id="chart-posts-vs-followers"></canvas></div>
         </div>
 
         <div class="chart-card">
@@ -138,22 +122,6 @@
                 Когда пользователи заходили в последний раз
             </div>
             <div class="chart-box"><canvas id="chart-last-seen"></canvas></div>
-        </div>
-
-        <div class="chart-card">
-            <div class="chart-title">Доля пользователей</div>
-            <div class="chart-description">
-                Доля верифицированных, ИТД+ и удалённых среди пришедших
-            </div>
-            <div class="chart-box"><canvas id="chart-cohorts"></canvas></div>
-        </div>
-
-        <div class="chart-card">
-            <div class="chart-title">Подписки против подписчиков</div>
-            <div class="chart-description">
-                Отношение количества подписок к количеству подписчиков (меньше 1 - подпичиков больше чем подписок, больше 1 - подисок больше чем подписчиков)
-            </div>
-            <div class="chart-box"><canvas id="chart-follow-ratio"></canvas></div>
         </div>
     </div>
 {% endblock %}

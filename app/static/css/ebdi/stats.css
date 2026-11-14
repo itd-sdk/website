@@ -107,6 +107,10 @@ canvas {
     }
 
     .chart-box {
-        height: 260px;
+        height: 220px;
+    }
+
+    #charts {
+        grid-template-columns: repeat(auto-fit, 100%);
     }
 }

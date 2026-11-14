@@ -12,7 +12,7 @@ from app.services.limiter import get_limiter
 router = APIRouter(prefix="/stats")
 
 # log-scale buckets, upper bound is exclusive
-FOLLOWER_BUCKETS = [0, 1, 2, 10, 50, 100, 500, 1000, 5000]
+FOLLOWER_BUCKETS = [0, 1, 2, 5, 10, 50, 100, 500, 1000, 5000]
 RATIO_BUCKETS = [0, 0.1, 0.5, 1, 1.25, 1.5, 1.75, 2, 3, 5, 10]
 
 IMPRECISE_CREATED_AT = and_(
@@ -138,54 +138,6 @@ def grid_cell(column, top: float):
     return func.floor(column / max(1.0, top / GRID_CELLS))
 
 
-def get_followers_by_age(db: Session) -> list[TimePoint]:
-    # days would put the points of neighbouring cells on top of each other
-    week = func.date_trunc("week", User.created_at)
-    rows = (
-        db.query(week, func.avg(User.followers_count), func.count())
-        .where(User.exists.is_(True))
-        .where(User.created_at.isnot(None))
-        .where(User.followers_count < MAX_FOLLOWERS)
-        .where(not_(IMPRECISE_CREATED_AT))
-        .group_by(week, grid_cell(User.followers_count, MAX_FOLLOWERS))
-        .order_by(desc(func.count()))
-        .limit(MAX_CELLS)
-        .all()
-    )
-    return [
-        TimePoint(x=created_at, y=followers, count=count)
-        for created_at, followers, count in rows
-    ]
-
-
-def get_posts_vs_followers(db: Session) -> list[ScatterPoint]:
-    def users(*columns):
-        return (
-            db.query(*columns)
-            .where(User.exists.is_(True))
-            .where(User.posts_count > 0)
-            .where(User.followers_count < MAX_FOLLOWERS)
-        )
-
-    max_posts = users(func.max(User.posts_count)).scalar() or 0
-    rows = (
-        users(
-            func.avg(User.posts_count), func.avg(User.followers_count), func.count()
-        )
-        .group_by(
-            grid_cell(User.posts_count, max_posts),
-            grid_cell(User.followers_count, MAX_FOLLOWERS)
-        )
-        .order_by(desc(func.count()))
-        .limit(MAX_CELLS)
-        .all()
-    )
-    return [
-        ScatterPoint(x=posts, y=followers, count=count)
-        for posts, followers, count in rows
-    ]
-
-
 def get_clans_over_time(db: Session) -> list[ClanShare]:
     top = [
         clan
@@ -258,57 +210,6 @@ def get_last_seen(db: Session) -> list[LastSeenShare]:
         LastSeenShare(last_seen="В этом месяце", count=rows.get("this_month", 0)),
         LastSeenShare(last_seen="Давно", count=rows.get("long_ago", 0))
     ]
-
-
-def get_cohorts(db: Session) -> list[Cohort]:
-    rows = (
-        db.query(
-            func.date_trunc("month", User.created_at).label("month"),
-            func.count(User.id),
-            func.count(User.id).filter(User.verified.is_(True)),
-            func.count(User.id).filter(User.has_itdp.is_(True)),
-            func.count(User.id).filter(User.exists.is_(False))
-        )
-        .where(User.created_at.isnot(None))
-        .group_by("month")
-        .order_by("month")
-        .all()
-    )
-    cohorts = []
-    total_users = 0
-    total_verified = 0
-    total_itdp = 0
-    total_deleted = 0
-    for value, total, verified, has_itdp, deleted in rows:
-        total_users += total
-        total_verified += verified
-        total_itdp += has_itdp
-        total_deleted += deleted
-        cohorts.append(
-            Cohort(
-                month=value,
-                total=total_users,
-                verified=total_verified,
-                has_itdp=total_itdp,
-                deleted=total_deleted
-            )
-        )
-    return cohorts
-
-
-def get_follow_ratio(db: Session) -> list[Bucket]:
-    # guard against division by zero for users with no followers
-    ratio = User.following_count / func.greatest(User.followers_count, 1)
-    bucket = bucket_case(ratio, RATIO_BUCKETS).label("bucket")
-    rows = (
-        db.query(bucket, func.count(User.id))
-        .where(User.exists.is_(True))
-        .where(User.following_count > 0)
-        .group_by("bucket")
-        .order_by("bucket")
-        .all()
-    )
-    return [Bucket(bucket=value, count=count) for value, count in rows]
 
 
 def get_running_total(db: Session, created_at) -> list[Total]:
@@ -417,12 +318,8 @@ class StatsResponse(BaseModel):
     total: list[Total]
     registrations: list[Registrations]
     followers_distribution: list[Bucket]
-    followers_by_age: list[TimePoint]
-    posts_vs_followers: list[ScatterPoint]
     clans_over_time: list[ClanShare]
     last_seen: list[LastSeenShare]
-    cohorts: list[Cohort]
-    follow_ratio: list[Bucket]
     posts_total: list[Total]
     posts_per_day: list[PerDay]
     comments_total: list[Total]
@@ -440,12 +337,8 @@ def api_get_ebdi_stats(request: Request, db: Session = Depends(get_db)):
             total=get_total(db),
             registrations=get_registrations(db),
             followers_distribution=get_followers_distribution(db),
-            followers_by_age=get_followers_by_age(db),
-            posts_vs_followers=get_posts_vs_followers(db),
             clans_over_time=get_clans_over_time(db),
             last_seen=get_last_seen(db),
-            cohorts=get_cohorts(db),
-            follow_ratio=get_follow_ratio(db),
             posts_total=get_running_total(db, Post.created_at),
             posts_per_day=get_per_day(db, Post.created_at),
             comments_total=get_running_total(db, Comment.created_at),
