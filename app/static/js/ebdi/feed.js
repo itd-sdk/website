@@ -209,7 +209,9 @@ function render_text(
             const tag = types.includes("search-match") ? "mark" : "span";
             node = create(tag, types.join(" "), piece);
             const titles = [
-                ...new Set(covering.map((range) => range.title).filter(Boolean)),
+                ...new Set(
+                    covering.map((range) => range.title).filter(Boolean),
+                ),
             ];
             if (titles.length) {
                 node.title = titles.join("\n");
@@ -878,9 +880,9 @@ function render_post(post, nested = false, in_dialog = false) {
             open_post_dialog(post, { card: nested ? null : card }),
         );
     }
-    if (post.author && !post.author.exists) {
-        card.classList.add("post-deleted-author");
-    }
+    // if (post.author && !post.author.exists) {
+    //     card.classList.add("post-deleted-author");
+    // }
     card.append(render_author(post));
 
     const badges = render_badges(post);
@@ -1103,9 +1105,9 @@ function render_comment(comment, in_thread = false, in_dialog = false) {
     if (!in_thread && !in_dialog && top_level) {
         make_clickable(card, () => open_comment_dialog(comment));
     }
-    if (comment.author && !comment.author.exists) {
-        card.classList.add("post-deleted-author");
-    }
+    // if (comment.author && !comment.author.exists) {
+    //     card.classList.add("post-deleted-author");
+    // }
     card.append(
         render_header(
             comment.author,
