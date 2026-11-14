@@ -95,7 +95,8 @@ function apply_state_to_controls() {
             input.checked = true;
         }
     }
-    get_el("clan-text").textContent = `Клан: ${state.clan + "\uFE0F" || "Все"}`;
+    get_el("clan-text").textContent =
+        `Клан: ${(state.clan || "Все") + "\uFE0F"}`;
     if (state.clan) {
         get_el("clan-remove").hidden = false;
     }
@@ -1035,7 +1036,8 @@ function init_clan_picker() {
         .querySelector("emoji-picker")
         .addEventListener("emoji-click", (event) => {
             state.clan = normalize_emoji(event.detail.unicode);
-            get_el("clan-text").textContent = `Клан: ${state.clan}\uFE0F`;
+            get_el("clan-text").textContent =
+                `Клан: ${state.clan || "Все"}\uFE0F`;
             get_el("clan-remove").hidden = false;
             picker_box.hidden = true;
             reload();
