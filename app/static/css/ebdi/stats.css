@@ -109,6 +109,9 @@ canvas {
     .chart-box {
         height: 220px;
     }
+    .chart-box:has(#chart-clans) {
+        height: 300px;
+    }
 
     #charts {
         grid-template-columns: repeat(auto-fit, 100%);

@@ -447,6 +447,13 @@ dialog::backdrop {
     #bear:not([hidden]) {
         width: 50vw;
     }
+
+    #footer {
+        flex-wrap: wrap;
+    }
+    #footer-logo {
+        margin-right: 100%;
+    }
 }
 
 @keyframes bear-walk {
