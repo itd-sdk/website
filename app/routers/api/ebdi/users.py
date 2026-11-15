@@ -1,3 +1,4 @@
+from collections.abc import Iterator
 from datetime import datetime, timedelta
 from enum import Enum
 from json import dumps
@@ -5,15 +6,17 @@ from time import time
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, StreamingResponse
 from itd import User as ItdUser
 from itd.exceptions import NotFoundError, TargetUserBannedError
 from pydantic import BaseModel
-from sqlalchemy import and_, desc, func, or_
+from sqlalchemy import and_, func, or_, text
 
+from app.routers.api.ebdi.dates import LocalDatetime
 from app.routers.api.ebdi.protocol import NewUserBody
+from app.routers.api.ebdi.storage import set_user_exists
 from app.schemas import User, UserSnapshot
-from app.services.db import Session, get_db
+from app.services.db import Session, get_db, new_session
 from app.services.history import record_changes, user_state
 from app.services.limiter import get_limiter
 
@@ -23,8 +26,9 @@ router = APIRouter(prefix="/users")
 class UserResponse(NewUserBody):
     id: int
     user_id: UUID
-    found_at: datetime
-    updated_at: datetime | None = None
+    created_at: LocalDatetime | None = None
+    found_at: LocalDatetime
+    updated_at: LocalDatetime | None = None
     has_itdp: bool
     exists: bool
     position: int = 0
@@ -65,6 +69,11 @@ def apply_filters(query, clan, verified, has_itdp, exists):
     return query
 
 
+def order_column(col, descending: bool):
+    # created_at can be empty, those users go last in both directions
+    return (col.desc() if descending else col.asc()).nulls_last()
+
+
 def build_users_query(
     db: Session,
     order: UserOrder,  # такая небольшая пасхалка, можно сделать ордер по дате обновления
@@ -76,7 +85,7 @@ def build_users_query(
 ):
     col = getattr(User, order.value)
     query = apply_filters(db.query(User), clan, verified, has_itdp, exists)
-    return query.order_by(desc(col) if descending else col.asc(), User.id)
+    return query.order_by(order_column(col, descending), User.id)
 
 
 def rank_users(
@@ -94,7 +103,13 @@ def rank_users(
     first = users[0]
     value = getattr(first, order.value)
     # rows ahead of the batch, ties broken by id to match the ordering
-    ahead = col > value if descending else col < value
+    if value is None:
+        ahead = or_(col.is_not(None), and_(col.is_(None), User.id < first.id))
+    else:
+        ahead = or_(
+            col > value if descending else col < value,
+            and_(col == value, User.id < first.id)
+        )
     base = (
         apply_filters(
             db.query(func.count(User.id)).where(User.exists.is_(True)),
@@ -103,7 +118,7 @@ def rank_users(
             has_itdp,
             exists
         )
-        .where(or_(ahead, and_(col == value, User.id < first.id)))
+        .where(ahead)
         .scalar()
     )
 
@@ -223,9 +238,9 @@ def api_post_ebdi_users_refresh(
             else:
                 setattr(db_user, i, getattr(user, i))
     except (NotFoundError, TargetUserBannedError):
-        db_user.exists = False
+        set_user_exists(db, db_user, False)
     else:
-        db_user.exists = True
+        set_user_exists(db, db_user, True)
     finally:
         now = datetime.now()
         db_user.updated_at = now
@@ -235,7 +250,7 @@ def api_post_ebdi_users_refresh(
 
 
 class HistoryPoint(BaseModel):
-    t: datetime
+    t: LocalDatetime
     followers: int
     following: int
     posts: int
@@ -245,7 +260,7 @@ class HistoryPoint(BaseModel):
 class HistoryResponse(BaseModel):
     points: list[HistoryPoint]
     # last time the user was seen existing and the first time it was gone
-    deleted_between: tuple[datetime | None, datetime] | None = None
+    deleted_between: tuple[LocalDatetime | None, LocalDatetime] | None = None
 
 
 @router.get("/{id}/history", response_model=HistoryResponse)
@@ -270,7 +285,9 @@ def api_get_ebdi_user_history(
         .order_by(UserSnapshot.recorded_at)
     ]
     # the current state is the last known point even if it was never snapshotted
-    if not points or points[-1].t < user.updated_at:
+    # points carry the server offset, the column is naive local time
+    updated_at = user.updated_at.astimezone()
+    if not points or points[-1].t < updated_at:
         points.append(
             HistoryPoint(
                 t=user.updated_at,
@@ -291,7 +308,7 @@ def api_get_ebdi_user_history(
                 for point in points
                 if not point.exists and (last_alive is None or point.t > last_alive)
             ),
-            user.updated_at
+            updated_at
         )
         deleted_between = (last_alive, first_gone)
     return HistoryResponse(points=points, deleted_between=deleted_between)
@@ -314,7 +331,7 @@ def api_get_ebdi_user_search(
                 User.display_name.ilike(pattern, escape="\\")
             )
         )
-        .order_by(desc(col) if descending else col.asc(), User.id)
+        .order_by(order_column(col, descending), User.id)
         .limit(20)
         .all()
     )
@@ -347,52 +364,69 @@ def api_get_user_count(request: Request, db: Session = Depends(get_db)):
     return {"count": request.app.state.users_count}
 
 
-@router.get("/graph")
-def api_get_users_graph(request: Request, db: Session = Depends(get_db)):
-    users = (
-        db.query(
-            User.id,
-            User.user_id,
-            User.username,
-            User.display_name,
-            User.followers_count,
-            User.following_count,
-            User.verified,
-            User.avatar,
-            User.following,
-            User.followers
+# users linked by follows, each pair once; stored in a temp table because both
+# the nodes and the edges queries need it
+GRAPH_EDGES = """
+    create temp table graph_edges on commit drop as
+    with active as (
+        select id, user_id, following, followers
+        from users
+        where followers_count > 0 or following_count > 0
+    )
+    select distinct least(a.id, b.id) as source, greatest(a.id, b.id) as target
+    from active a
+    cross join lateral unnest(a.following || a.followers) as linked(user_id)
+    join active b on b.user_id = linked.user_id
+    where a.id <> b.id
+"""
+GRAPH_NODES = """
+    select id, username, display_name, followers_count, following_count, verified, avatar
+    from users
+    where id in (select source from graph_edges union select target from graph_edges)
+"""
+GRAPH_BATCH = 5000
+
+
+def stream_graph() -> Iterator[str]:
+    # a server-side cursor keeps only one batch in memory, the full graph of
+    # 450k+ users used to take hundreds of megabytes per request
+    with new_session() as db:
+        db.execute(text(GRAPH_EDGES))
+        yield '{"nodes":['
+        separator = ""
+        nodes = db.execute(
+            text(GRAPH_NODES), execution_options={"yield_per": GRAPH_BATCH}
         )
-        .where(or_(User.followers_count > 0, User.following_count > 0))
-        .all()
-    )
-    user_ids = {str(user.user_id): user.id for user in users}
+        for rows in nodes.partitions(GRAPH_BATCH):
+            yield separator + ",".join(
+                dumps(
+                    {
+                        "id": id,
+                        "username": username,
+                        "display_name": display_name,
+                        "followers": followers,
+                        "following": following,
+                        "verified": verified,
+                        "avatar": avatar
+                    }
+                )
+                for id, username, display_name, followers, following, verified, avatar in rows
+            )
+            separator = ","
+        yield '],"edges":['
+        separator = ""
+        edges = db.execute(
+            text("select source, target from graph_edges"),
+            execution_options={"yield_per": GRAPH_BATCH}
+        )
+        for rows in edges.partitions(GRAPH_BATCH):
+            yield separator + ",".join(
+                f'{{"source":{source},"target":{target}}}' for source, target in rows
+            )
+            separator = ","
+        yield "]}"
 
-    edges: set[tuple[int, int]] = set()
-    for user in users:
-        for target in user.following + user.followers:
-            target_id = user_ids.get(str(target))
-            if target_id is not None and (target_id, user.id) not in edges:
-                edges.add((user.id, target_id))
 
-    linked_ids = {i for edge in edges for i in edge}
-    users = [user for user in users if user.id in linked_ids]
-
-    nodes = [
-        {
-            "id": u.id,
-            "username": u.username,
-            "display_name": u.display_name,
-            "followers": u.followers_count,
-            "following": u.following_count,
-            "verified": u.verified,
-            "avatar": u.avatar
-        }
-        for u in users
-    ]
-
-    return Response(
-        content=dumps(
-            {"nodes": nodes, "edges": [{"source": s, "target": t} for s, t in edges]}
-        ),
-        media_type="application/json"
-    )
+@router.get("/graph")
+def api_get_users_graph():
+    return StreamingResponse(stream_graph(), media_type="application/json")

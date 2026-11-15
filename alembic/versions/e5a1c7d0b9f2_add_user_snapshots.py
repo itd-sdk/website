@@ -1,7 +1,7 @@
 """add user snapshots
 
 Revision ID: e5a1c7d0b9f2
-Revises: c41d2e9f8a7b
+Revises: b7d1f3a9c5e2
 Create Date: 2026-10-13
 
 """
@@ -15,7 +15,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "e5a1c7d0b9f2"
-down_revision: Union[str, Sequence[str], None] = "c41d2e9f8a7b"
+down_revision: Union[str, Sequence[str], None] = "b7d1f3a9c5e2"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

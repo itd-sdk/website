@@ -170,7 +170,7 @@ input[type="checkbox"] {
     width: 16px;
     height: 16px;
     border: 1px solid #fff;
-    background: #141414;
+    background: #202020;
     display: inline-block;
     position: relative;
     cursor: pointer;
@@ -447,6 +447,13 @@ dialog::backdrop {
     #bear:not([hidden]) {
         width: 50vw;
     }
+
+    #footer {
+        flex-wrap: wrap;
+    }
+    #footer-logo {
+        margin-right: 100%;
+    }
 }
 
 @keyframes bear-walk {
@@ -534,4 +541,9 @@ dialog::backdrop {
 #dima {
     pointer-events: none;
     position: fixed;
+}
+
+#footer-opensource {
+    margin-left: auto;
+    margin-top: auto;
 }

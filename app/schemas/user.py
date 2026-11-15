@@ -18,17 +18,18 @@ class User(Base):
         server_default=func.now(), onupdate=func.now()
     )
     created_at: Mapped[datetime | None]
-    username: Mapped[str]
+    username: Mapped[str] = mapped_column(index=True)
     display_name: Mapped[str]
     followers_count: Mapped[int]
     following_count: Mapped[int]
-    posts_count: Mapped[int]
+    posts_count: Mapped[int] = mapped_column(index=True)
     verified: Mapped[bool]
     has_itdp: Mapped[bool] = mapped_column(default=False)
     following: Mapped[list[UUID]] = mapped_column(ARRAY(PG_UUID(as_uuid=True)))
     followers: Mapped[list[UUID]] = mapped_column(ARRAY(PG_UUID(as_uuid=True)))
     avatar: Mapped[str] = mapped_column(default="?")
     exists: Mapped[bool] = mapped_column(default=True)
+    deleted_at: Mapped[datetime | None]  # when exists became false
     bio: Mapped[str | None]
     banner: Mapped[str | None]
     last_seen: Mapped[str | None]

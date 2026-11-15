@@ -160,8 +160,8 @@ function merge_options(overrides) {
     };
 }
 
-function render_total(data) {
-    new Chart(get_el("chart-total"), {
+function render_total(data, canvas_id = "chart-total") {
+    new Chart(get_el(canvas_id), {
         data: {
             labels: data.map((row) => format_month(row.month)),
             datasets: [
@@ -188,6 +188,7 @@ function render_total(data) {
 
 let registrations = null;
 let registrations_chart = null;
+let stats_loaded = false;
 
 function bucket_start(date, unit) {
     const d = new Date(date);
@@ -200,8 +201,8 @@ function bucket_start(date, unit) {
     return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 }
 
-function rollup(rows, unit) {
-    const field = unit === "month" ? "count_all" : "count";
+// registrations drop month-only dates except for the monthly view, posts pass "count"
+function rollup(rows, unit, field = unit === "month" ? "count_all" : "count") {
     const totals = new Map();
     for (const row of rows) {
         if (!row[field]) {
@@ -257,17 +258,150 @@ function render_registrations(unit) {
     });
 }
 
-function setup_registration_tabs() {
-    const tabs = get_el("chart-tabs");
+function setup_tabs(id, on_select) {
+    const tabs = get_el(id);
     tabs.addEventListener("click", (event) => {
         const button = event.target.closest(".chart-tab");
-        if (!button || !registrations) {
+        if (!button || !stats_loaded) {
             return;
         }
         for (const tab of tabs.children) {
             tab.classList.toggle("chart-tab-active", tab === button);
         }
-        render_registrations(button.dataset.unit);
+        on_select(button.dataset);
+    });
+}
+
+// per-day series of posts and comments, rolled up into the selected period
+const per_day = { posts: null, comments: null };
+const per_day_charts = {};
+
+function render_per_day(source, unit) {
+    per_day_charts[source]?.destroy();
+    per_day_charts[source] = new Chart(get_el(`chart-${source}-per-day`), {
+        type: "bar",
+        data: {
+            datasets: [
+                {
+                    label: source === "posts" ? "Постов" : "Комментариев",
+                    data: rollup(per_day[source], unit, "count"),
+                    backgroundColor: ACCENT,
+                    pointStyle: "line",
+                },
+            ],
+        },
+        options: merge_options({
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    ...base_options.plugins.tooltip,
+                    callbacks: {
+                        title: (items) =>
+                            unit === "month"
+                                ? format_month(items[0].parsed.x)
+                                : format_date(items[0].parsed.x),
+                    },
+                },
+            },
+            scales: {
+                x: {
+                    type: "time",
+                    time: { unit },
+                    grid: { color: GRID },
+                    ticks: { color: TEXT, maxRotation: 0, autoSkipPadding: 20 },
+                },
+                y: base_options.scales.y,
+            },
+        }),
+    });
+}
+
+let words = null;
+
+// stable pseudo-random order, so big words are spread over the cloud
+function word_hash(word) {
+    let hash = 0;
+    for (const char of word) {
+        hash = (hash * 31 + char.codePointAt(0)) | 0;
+    }
+    return hash;
+}
+
+function render_words(source) {
+    const cloud = get_el("word-cloud");
+    cloud.replaceChildren();
+    const rows = words[source];
+    if (!rows.length) {
+        cloud.textContent = "Пока нет данных";
+        return;
+    }
+    // log scale, otherwise a couple of top words dwarf everything else
+    const counts = rows.map((row) => Math.log(row.count));
+    const min = Math.min(...counts);
+    const range = Math.max(...counts) - min || 1;
+    const sorted = [...rows].sort(
+        (a, b) => word_hash(a.word) - word_hash(b.word),
+    );
+    for (const row of sorted) {
+        const weight = (Math.log(row.count) - min) / range;
+        const node = document.createElement("span");
+        node.className = "word";
+        node.textContent = row.word;
+        node.title = `${row.word}: ${format_number(row.count)}`;
+        node.style.fontSize = `${13 + weight * 37}px`;
+        node.style.fontWeight = weight > 0.6 ? 700 : weight > 0.3 ? 500 : 400;
+        node.style.color =
+            weight > 0.75 ? ACCENT : weight > 0.4 ? COLORS[1] : TEXT;
+        cloud.append(node);
+    }
+}
+
+function render_post_captures(data) {
+    new Chart(get_el("chart-post-captures"), {
+        type: "bar",
+        data: {
+            labels: data.map((row) => display_emoji(row.clan)),
+            datasets: [
+                {
+                    label: "Постов",
+                    data: data.map((row) => row.count),
+                    backgroundColor: ACCENT,
+                    pointStyle: "line",
+                },
+            ],
+        },
+        options: merge_options({
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    ...base_options.plugins.tooltip,
+                    callbacks: {
+                        title: (items) =>
+                            clan_label(data[items[0].dataIndex].clan),
+                    },
+                },
+            },
+            scales: {
+                x: {
+                    grid: { color: GRID },
+                    // every bar keeps its emoji, chart.js would skip half of them
+                    ticks: {
+                        color: TEXT,
+                        // narrow charts get smaller emoji so all of them fit
+                        font: (context) => ({
+                            size: context.chart.width < 500 ? 10 : 14,
+                        }),
+                        autoSkip: false,
+                        maxRotation: 0,
+                    },
+                },
+                y: {
+                    grid: { color: GRID },
+                    ticks: { color: TEXT },
+                    title: { display: true, text: "Постов", color: TEXT },
+                },
+            },
+        }),
     });
 }
 
@@ -305,96 +439,13 @@ function render_followers_distribution(data) {
     });
 }
 
-function render_followers_by_age(data) {
-    new Chart(get_el("chart-followers-by-age"), {
-        type: "scatter",
-        data: {
-            datasets: [
-                {
-                    label: "Пользователь",
-                    data: data,
-                    backgroundColor: "rgba(237, 106, 45, 0.4)",
-                    pointRadius: 2,
-                },
-            ],
-        },
-        options: merge_options({
-            interaction: { intersect: true, mode: "nearest" },
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    ...base_options.plugins.tooltip,
-                    callbacks: {
-                        label: (item) =>
-                            `${format_month(item.parsed.x)}: ${format_number(item.parsed.y)}`,
-                    },
-                },
-            },
-            scales: {
-                x: {
-                    type: "time",
-                    time: { unit: "month" },
-                    grid: { color: GRID },
-                    ticks: { color: TEXT },
-                    title: {
-                        display: true,
-                        text: "Дата регистрации",
-                        color: TEXT,
-                    },
-                },
-                y: {
-                    grid: { color: GRID },
-                    ticks: {
-                        color: TEXT,
-                    },
-                    title: { display: true, text: "Подписчики", color: TEXT },
-                },
-            },
-        }),
-    });
-}
-
-function render_posts_vs_followers(data) {
-    new Chart(get_el("chart-posts-vs-followers"), {
-        type: "scatter",
-        data: {
-            datasets: [
-                {
-                    label: "Пользователь",
-                    data: data,
-                    backgroundColor: "rgba(237, 106, 45, 0.4)",
-                    pointRadius: 2,
-                },
-            ],
-        },
-        options: merge_options({
-            interaction: { intersect: true, mode: "nearest" },
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    ...base_options.plugins.tooltip,
-                    callbacks: {
-                        label: (item) =>
-                            `${format_number(item.parsed.x)} постов, ${format_number(item.parsed.y)} подписчиков`,
-                    },
-                },
-            },
-            scales: {
-                x: {
-                    // type: "logarithmic",
-                    grid: { color: GRID },
-                    ticks: { color: TEXT },
-                    title: { display: true, text: "Посты", color: TEXT },
-                },
-                y: {
-                    // type: "logarithmic",
-                    grid: { color: GRID },
-                    ticks: { color: TEXT },
-                    title: { display: true, text: "Подписчики", color: TEXT },
-                },
-            },
-        }),
-    });
+function linear_axis(title) {
+    return {
+        min: 0,
+        grid: { color: GRID },
+        ticks: { color: TEXT },
+        title: { display: true, text: title, color: TEXT },
+    };
 }
 
 function render_clans_over_time(data) {
@@ -476,109 +527,6 @@ function render_last_seen(data) {
     });
 }
 
-function render_cohorts(data) {
-    new Chart(get_el("chart-cohorts"), {
-        type: "line",
-        data: {
-            labels: data.map((row) => format_month(row.month)),
-            datasets: [
-                {
-                    label: "Верифицированные",
-                    data: data.map((row) =>
-                        row.total ? (row.verified / row.total) * 100 : 0,
-                    ),
-                    borderColor: COLORS[0],
-                    backgroundColor: "transparent",
-                    borderWidth: 2,
-                    pointRadius: 0,
-                    tension: 0.3,
-                    pointStyle: "line",
-                },
-                {
-                    label: "С ИТД+",
-                    data: data.map((row) =>
-                        row.total ? (row.has_itdp / row.total) * 100 : 0,
-                    ),
-                    borderColor: COLORS[4],
-                    backgroundColor: "transparent",
-                    borderWidth: 2,
-                    pointRadius: 0,
-                    tension: 0.3,
-                    pointStyle: "line",
-                },
-                {
-                    label: "Удалённые",
-                    data: data.map((row) =>
-                        row.total ? (row.deleted / row.total) * 100 : 0,
-                    ),
-                    borderColor: "#e35b4c",
-                    backgroundColor: "transparent",
-                    borderWidth: 2,
-                    pointRadius: 0,
-                    tension: 0.3,
-                    pointStyle: "line",
-                },
-            ],
-        },
-        options: merge_options({
-            plugins: {
-                tooltip: {
-                    ...base_options.plugins.tooltip,
-                    callbacks: {
-                        label: (item) =>
-                            `${item.dataset.label}: ${item.parsed.y.toFixed(1)}%`,
-                    },
-                },
-            },
-            scales: {
-                x: base_options.scales.x,
-                y: {
-                    grid: { color: GRID },
-                    ticks: { color: TEXT, callback: (value) => value + "%" },
-                },
-            },
-        }),
-    });
-}
-
-function render_follow_ratio(data) {
-    new Chart(get_el("chart-follow-ratio"), {
-        type: "bar",
-        data: {
-            labels: data.map((row, i) =>
-                ratio_bucket_label(row.bucket, data[i + 1]?.bucket),
-            ),
-            datasets: [
-                {
-                    label: "Пользователей",
-                    data: data.map((row) => row.count),
-                    backgroundColor: COLORS[4],
-                    pointStyle: "line",
-                },
-            ],
-        },
-        options: merge_options({
-            plugins: { legend: { display: false } },
-            scales: {
-                x: {
-                    grid: { color: GRID },
-                    ticks: { color: TEXT },
-                    title: {
-                        display: true,
-                        text: "Подписок на одного подписчика",
-                        color: TEXT,
-                    },
-                },
-                y: {
-                    // type: "logarithmic",
-                    grid: { color: GRID },
-                    ticks: { color: TEXT },
-                },
-            },
-        }),
-    });
-}
-
 async function load_clan_names() {
     try {
         const res = await fetch(
@@ -618,15 +566,21 @@ async function load_stats() {
         const data = await res.json();
         get_el("charts").hidden = false;
         registrations = data.registrations;
+        per_day.posts = data.posts_per_day;
+        per_day.comments = data.comments_per_day;
+        words = { posts: data.words_posts, comments: data.words_comments };
+        stats_loaded = true;
         render_total(data.total);
         render_registrations("month");
+        render_total(data.posts_total, "chart-posts-total");
+        render_per_day("posts", "month");
+        render_total(data.comments_total, "chart-comments-total");
+        render_per_day("comments", "month");
+        render_words("posts");
+        render_post_captures(data.post_captures);
         render_followers_distribution(data.followers_distribution);
-        render_followers_by_age(data.followers_by_age);
-        render_posts_vs_followers(data.posts_vs_followers);
         render_clans_over_time(data.clans_over_time);
         render_last_seen(data.last_seen);
-        render_cohorts(data.cohorts);
-        render_follow_ratio(data.follow_ratio);
     } catch (error) {
         console.warn("stats request failed", error);
         show_error("Не удалось связаться с сервером");
@@ -637,7 +591,12 @@ async function load_stats() {
 
 document.addEventListener("DOMContentLoaded", async () => {
     get_el("retry-button").addEventListener("click", load_stats);
-    setup_registration_tabs();
+    setup_tabs("chart-tabs", ({ unit }) => render_registrations(unit));
+    setup_tabs("posts-chart-tabs", ({ unit }) => render_per_day("posts", unit));
+    setup_tabs("comments-chart-tabs", ({ unit }) =>
+        render_per_day("comments", unit),
+    );
+    setup_tabs("words-tabs", ({ source }) => render_words(source));
     await load_clan_names();
     await load_stats();
 });

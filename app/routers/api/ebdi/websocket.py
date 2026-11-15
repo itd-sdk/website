@@ -1,15 +1,18 @@
 from asyncio import wait_for
-from collections.abc import Iterator
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from random import randint
+from itertools import count
+from json import dumps, loads
+from os import getenv
+from pathlib import Path
+from random import choices
 from string import ascii_lowercase, digits
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, WebSocket
 from pydantic import BaseModel, ValidationError
-from sqlalchemy import case, desc, func, or_
-from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy import and_, case, desc, func, or_
 from starlette.websockets import WebSocketDisconnect
 from websockets.exceptions import ConnectionClosedError
 
@@ -17,7 +20,6 @@ from app.logger import get_logger
 from app.routers.api.ebdi.protocol import (
     PROTOCOL_VERSION,
     CloseCode,
-    CommentBody,
     CreatedResponse,
     CreateRequest,
     CreateTaskResponse,
@@ -38,7 +40,8 @@ from app.routers.api.ebdi.protocol import (
     UpdateTaskResponse,
     client_message
 )
-from app.schemas import App, Comment, Post, User
+from app.routers.api.ebdi.storage import save_comments, set_user_exists, upsert
+from app.schemas import App, Post, User
 from app.services.db import Session, get_db
 from app.services.history import record_changes, user_state
 from app.services.settings import get_settings
@@ -47,6 +50,7 @@ router = APIRouter(prefix="/websocket")
 l = get_logger("ebdi.websocket")
 
 POSTS_OVERLAP = timedelta(days=30)  # rescrape posts newer than last check minus this
+POSTS_DELETE_MARGIN = timedelta(days=1)
 # how often posts are rechecked by last activity, long_ago users are not checked at all
 POSTS_INTERVALS = {
     "just_now": timedelta(days=1),
@@ -57,9 +61,48 @@ POSTS_INTERVALS = {
     "this_month": timedelta(days=14)
 }
 POSTS_INTERVAL_DEFAULT = timedelta(days=7)
-POSTS = True
-UPDATE = False
-CREATE = False
+# how often each task type is given out relative to the others, 0 turns it off;
+# set from the admin panel and kept in a file across restarts
+# posts are split in the first pass over a user and the rechecks of known ones
+DEFAULT_TASK_WEIGHTS = {"update": 10, "posts_new": 10, "posts_recheck": 3, "create": 0}
+MAX_TASK_WEIGHT = 10
+task_weights: dict[str, int] | None = None
+
+
+def weights_file() -> Path:
+    # read on use, .env is loaded after the routers are imported
+    return Path(getenv("EBDI_TASK_WEIGHTS", "cache/task_weights.json"))
+
+
+def get_task_weights() -> dict[str, int]:
+    global task_weights
+    if task_weights is None:
+        task_weights = dict(DEFAULT_TASK_WEIGHTS)
+        try:
+            stored = loads(weights_file().read_text())
+            if "posts" in stored:
+                # a file from before the posts split
+                stored.setdefault("posts_new", stored["posts"])
+            task_weights.update(
+                {
+                    key: int(value)
+                    for key, value in stored.items()
+                    if key in DEFAULT_TASK_WEIGHTS
+                }
+            )
+        except FileNotFoundError:
+            pass
+        except (ValueError, OSError) as error:
+            l.warning("task weights file ignored: %r", error)
+    return task_weights
+
+
+def set_task_weights(weights: dict[str, int]) -> None:
+    global task_weights
+    task_weights = {**get_task_weights(), **weights}
+    path = weights_file()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(dumps(task_weights))
 
 
 @dataclass
@@ -69,9 +112,53 @@ class Task:
     targets: list[User] = field(default_factory=list)
     prefix: str | None = None
     started_at: datetime = field(default_factory=lambda: datetime.now())
+    # posts task: the client sends every post newer than `since`, the stored
+    # ones it did not send are gone from ITD
+    since: datetime | None = None
+    seen_posts: set[UUID] = field(default_factory=set)
+    full: bool = False  # posts task: refetch every post, not only the recent ones
+    renew_found_at: bool = False
+    manual: bool = False  # sent from the admin panel
+    done: int = 0  # handled targets, created users or saved posts
+    # plain copies for the admin panel, it must not touch the connection's session
+    usernames: list[str] = field(default_factory=list)
+    target_posts: int = 0
 
 
 tasks: list[Task] = []
+
+
+@dataclass
+class ManualTask:
+    """Task queued from the admin panel, given out before the automatic ones"""
+
+    type: TaskType
+    client: str | None  # app name, None for the first client that asks
+    query: str | None = None  # create: search query
+    usernames: list[str] = field(default_factory=list)  # update or posts targets
+    full: bool = False
+    id: int = field(default_factory=count(1).__next__)
+    created_at: datetime = field(default_factory=lambda: datetime.now())
+
+
+manual_tasks: list[ManualTask] = []
+
+
+def take_manual_task(db: Session, app: App) -> Task | None:
+    for manual in list(manual_tasks):
+        if manual.client not in (None, app.name):
+            continue
+        manual_tasks.remove(manual)
+        if manual.type == TaskType.create:
+            return Task(app, TaskType.create, prefix=manual.query, manual=True)
+        targets = db.query(User).where(User.username.in_(manual.usernames)).all()
+        if not targets:
+            l.warning("manual task %s: no users %s", manual.id, manual.usernames)
+            continue
+        if manual.type == TaskType.posts:
+            targets = targets[:1]
+        return Task(app, manual.type, targets, full=manual.full, manual=True)
+    return None
 
 
 def get_targets():
@@ -103,31 +190,6 @@ def increment_prefix(prefix: str) -> str:
         chars[i] = ALPHABET[0]
     # wrapped around, start the cycle over
     return ALPHABET[0] * len(prefix)
-
-
-def flatten_comments(
-    comments: list[CommentBody], post_id: UUID, parent_id: UUID | None = None
-) -> Iterator[dict]:
-    # parents always go before their replies so the parent_id fk is satisfied
-    for comment in comments:
-        yield {
-            **comment.model_dump(exclude={"replies"}),
-            "post_id": post_id,
-            "parent_id": parent_id
-        }
-        yield from flatten_comments(comment.replies, post_id, comment.comment_id)
-
-
-def upsert(db: Session, model: type[Post] | type[Comment], key: str, rows: list[dict]):
-    # chunks keep a single statement below the postgres bind parameters limit
-    for i in range(0, len(rows), 1000):
-        stmt = insert(model).values(rows[i : i + 1000])
-        db.execute(
-            stmt.on_conflict_do_update(
-                index_elements=[key],
-                set_={c: stmt.excluded[c] for c in rows[0] if c != key}
-            )
-        )
 
 
 def refresh_interval():
@@ -167,56 +229,91 @@ def refresh_interval():
     )
 
 
+def update_task(db: Session, app: App) -> Task | None:
+    priority = func.extract("epoch", func.now() - User.updated_at) / refresh_interval()
+    targets = (
+        db.query(User)
+        .where(priority >= 0.8)
+        .where(User.id.not_in(get_targets()))
+        .where(User.followers_count >= 1)
+        .order_by(desc(priority))
+        .limit(20)
+        .all()
+    )
+    return Task(app, TaskType.update, targets) if targets else None
+
+
+def posts_new_task(db: Session, app: App) -> Task | None:
+    """First pass over a user whose posts were never fetched (or were reset)"""
+    target = (
+        db.query(User)
+        .where(User.exists.is_(True))
+        .where(User.posts_count > 0)
+        .where(User.posts_updated_at.is_(None))
+        .where(User.id.not_in(get_targets()))
+        # users with the most posts first, one or two posts can wait
+        .order_by(User.posts_count.desc())
+        .first()
+    )
+    return Task(app, TaskType.posts, [target]) if target is not None else None
+
+
+def posts_recheck_task(db: Session, app: App) -> Task | None:
+    """Recent posts of a known user, the most overdue one first"""
+    interval = case(
+        *[
+            (User.last_seen == value, int(interval.total_seconds()))
+            for value, interval in POSTS_INTERVALS.items()
+        ],
+        else_=int(POSTS_INTERVAL_DEFAULT.total_seconds())
+    )
+    overdue = func.extract("epoch", func.now() - User.posts_updated_at) / interval
+    target = (
+        db.query(User)
+        .where(User.exists.is_(True))
+        .where(User.posts_count > 0)
+        # long inactive users are fetched once and not rechecked
+        .where(User.last_seen.is_distinct_from("long_ago"))
+        .where(User.posts_updated_at.is_not(None))
+        .where(overdue >= 1)
+        .where(User.id.not_in(get_targets()))
+        .order_by(desc(overdue))
+        .first()
+    )
+    return Task(app, TaskType.posts, [target]) if target is not None else None
+
+
+def create_task(db: Session, app: App) -> Task | None:
+    settings = get_settings(db)
+    prefix = settings.search_cursor
+    settings.search_cursor = increment_prefix(prefix)
+    db.commit()
+    return Task(app, TaskType.create, prefix=prefix)
+
+
+TASK_BUILDERS = {
+    "update": update_task,
+    "posts_new": posts_new_task,
+    "posts_recheck": posts_recheck_task,
+    "create": create_task
+}
+
+
 def new_task(db: Session, app: App) -> Task | None:
-    if UPDATE:
-        priority = (
-            func.extract("epoch", func.now() - User.updated_at) / refresh_interval()
-        )
-        update_query = (
-            db.query(User)
-            .where(priority >= 0.8)
-            .where(User.id.not_in(get_targets()))
-            .where(User.followers_count >= 1)
-            .order_by(desc(priority))
-            .limit(20)
-            .all()
-        )
-        if update_query:
-            return Task(app, TaskType.update, update_query)
+    manual = take_manual_task(db, app)
+    if manual is not None:
+        return manual
 
-    if POSTS and (not CREATE or randint(0, 1) == 0):
-        interval = case(
-            *[
-                (User.last_seen == value, int(interval.total_seconds()))
-                for value, interval in POSTS_INTERVALS.items()
-            ],
-            else_=int(POSTS_INTERVAL_DEFAULT.total_seconds())
-        )
-        posts_query = (
-            db.query(User)
-            .where(User.exists.is_(True))
-            .where(User.posts_count > 0)
-            .where(User.last_seen.is_distinct_from("long_ago"))
-            .where(
-                or_(
-                    User.posts_updated_at.is_(None),
-                    func.extract("epoch", func.now() - User.posts_updated_at)
-                    >= interval
-                )
-            )
-            .where(User.id.not_in(get_targets()))
-            .order_by(User.posts_updated_at.asc().nulls_first())
-            .first()
-        )
-        if posts_query is not None:
-            return Task(app, TaskType.posts, [posts_query])
-
-    if CREATE:
-        settings = get_settings(db)
-        prefix = settings.search_cursor
-        settings.search_cursor = increment_prefix(prefix)
-        db.commit()
-        return Task(app, TaskType.create, prefix=prefix)
+    # a type is drawn by its weight, a type without work passes the turn on
+    weights = get_task_weights()
+    kinds = [kind for kind in TASK_BUILDERS if weights[kind] > 0]
+    while kinds:
+        kind = choices(kinds, [weights[k] for k in kinds])[0]
+        task = TASK_BUILDERS[kind](db, app)
+        if task is not None:
+            return task
+        kinds.remove(kind)
+    return None
 
 
 def task_response(db: Session, task: Task) -> BaseModel:
@@ -231,22 +328,22 @@ def task_response(db: Session, task: Task) -> BaseModel:
         case TaskType.posts:
             user = task.targets[0]
             since = None
-            known_comments = {}
-            if user.posts_updated_at is not None:
+            known = db.query(Post.post_id, Post.comments_count).where(
+                or_(
+                    Post.author_id == user.user_id,
+                    Post.wall_recipient_id == user.user_id
+                )
+            )
+            # a reset posts_updated_at brings the posts back as if just found
+            task.renew_found_at = user.posts_updated_at is None
+            if user.posts_updated_at is not None and not task.full:
                 since_local = user.posts_updated_at - POSTS_OVERLAP
-                known_comments = {
-                    post_id: count
-                    for post_id, count in db.query(Post.post_id, Post.comments_count)
-                    .where(
-                        or_(
-                            Post.author_id == user.user_id,
-                            Post.wall_recipient_id == user.user_id
-                        )
-                    )
-                    .where(Post.created_at > since_local)
-                }
+                known = known.where(Post.created_at > since_local)
+                task.since = since_local
                 # naive local time -> aware utc, client compares it with post dates
                 since = since_local.astimezone(timezone.utc)
+            # a full rescan also refetches comments only where the count changed
+            known_comments = dict(known.all())
             return PostsTaskResponse(
                 target=PostsTarget(
                     id=user.user_id,
@@ -263,6 +360,11 @@ class Connection:
     db: Session
     app: App
     task: Task | None = None
+    name: str = ""  # app.name, the admin panel reads it from another thread
+    connected_at: datetime = field(default_factory=lambda: datetime.now())
+    last_message_at: datetime = field(default_factory=lambda: datetime.now())
+    # what the client did since it connected: updated, created, posts, posts_done
+    stats: Counter = field(default_factory=Counter)
 
     async def send(self, message: BaseModel) -> None:
         await self.websocket.send_text(message.model_dump_json())
@@ -282,6 +384,10 @@ class Connection:
         return user
 
 
+# connected clients by app name, read by the admin panel
+connections: dict[str, Connection] = {}
+
+
 async def handle_task(connection: Connection, request: TaskRequest):
     if connection.task is not None and connection.task in tasks:
         tasks.remove(connection.task)
@@ -292,6 +398,8 @@ async def handle_task(connection: Connection, request: TaskRequest):
         await connection.error("no tasks")
         return
     tasks.append(connection.task)
+    connection.task.usernames = [target.username for target in connection.task.targets]
+    connection.task.target_posts = sum(t.posts_count for t in connection.task.targets)
     l.debug(
         "(%s) new task type=%s targets=%s",
         connection.app.name,
@@ -313,14 +421,17 @@ async def handle_update(conn: Connection, request: UpdateRequest):
             if i == "avatar":
                 continue
             setattr(user, i, getattr(request.target, i))
-        user.exists = True
+        set_user_exists(conn.db, user, True)
     else:
         l.debug("(%s) < not exists", conn.app.name)
-        user.exists = False
+        set_user_exists(conn.db, user, False)
     now = datetime.now()
     user.updated_at = now
     record_changes(conn.db, user, before, now)
 
+    assert conn.task is not None
+    conn.task.done += 1
+    conn.stats["updated"] += 1
     conn.app.refreshed += 1
     conn.db.commit()
     await conn.send(UpdatedResponse())
@@ -346,6 +457,8 @@ async def handle_create(conn: Connection, request: CreateRequest):
         db.add(db_user)
         record_changes(db, db_user, None, now)
         conn.app.added += 1
+        conn.task.done += 1
+        conn.stats["created"] += 1
         db.commit()
 
     await conn.send(CreatedResponse())
@@ -370,15 +483,56 @@ async def handle_post(conn: Connection, request: PostRequest):
         return
 
     l.debug("(%s) < post %s", conn.app.name, post.post_id)
-    upsert(conn.db, Post, "post_id", [post.model_dump(exclude={"comments"})])
-    # same comment can come twice (pagination shifts), one insert
-    # with duplicate keys fails, so keep the first occurrence
-    comments: dict[UUID, dict] = {}
-    for row in flatten_comments(post.comments, post.post_id):
-        comments.setdefault(row["comment_id"], row)
-    upsert(conn.db, Comment, "comment_id", list(comments.values()))
+    assert conn.task is not None
+    conn.task.seen_posts.add(post.post_id)
+    row = {
+        **post.model_dump(exclude={"comments", "comments_complete"}),
+        "exists": True,
+        "deleted_at": None,
+        "updated_at": func.now()
+    }
+    if row["reposts_count"] is None:
+        del row["reposts_count"]
+    if conn.task.renew_found_at:
+        # regular passes and manual full rescans keep the first found_at
+        row["found_at"] = func.now()
+    upsert(conn.db, Post, "post_id", [row])
+    deleted = save_comments(
+        conn.db, post.post_id, post.comments, post.comments_complete
+    )
+    if deleted:
+        l.debug(
+            "(%s) post %s: %s comments deleted", conn.app.name, post.post_id, deleted
+        )
+    conn.task.done += 1
+    conn.stats["posts"] += 1
     conn.db.commit()
     await conn.send(PostSavedResponse())
+
+
+def mark_deleted_posts(db: Session, task: Task | None, user: User) -> None:
+    assert task is not None
+    # posts shown on the user's profile: own ones and the ones others left on it;
+    # own posts on other walls do not show up there, so they are left alone
+    query = (
+        db.query(Post)
+        .where(Post.exists.is_(True))
+        .where(
+            or_(
+                Post.wall_recipient_id == user.user_id,
+                and_(Post.author_id == user.user_id, Post.wall_recipient_id.is_(None))
+            )
+        )
+        .where(Post.post_id.not_in(task.seen_posts))
+    )
+    if task.since is not None:
+        # margin covers a timezone mismatch between the app and the database
+        query = query.where(Post.created_at > task.since + POSTS_DELETE_MARGIN)
+    deleted = query.update(
+        {Post.exists: False, Post.deleted_at: func.now()}, synchronize_session=False
+    )
+    if deleted:
+        l.debug("(%s) %s posts deleted", user.username, deleted)
 
 
 async def handle_posts_done(conn: Connection, request: PostsDoneRequest):
@@ -389,7 +543,10 @@ async def handle_posts_done(conn: Connection, request: PostsDoneRequest):
     l.debug("(%s) < posts done %s", conn.app.name, user.username)
     user.posts_updated_at = datetime.now()
     if not request.target_exists:
-        user.exists = False
+        set_user_exists(conn.db, user, False)
+    else:
+        mark_deleted_posts(conn.db, conn.task, user)
+    conn.stats["posts_done"] += 1
     conn.app.refreshed += 1
     conn.db.commit()
     await conn.send(PostsUpdatedResponse())
@@ -419,13 +576,14 @@ async def api_websocket_ebdi(
             f"client version {version} is not supported, update to {PROTOCOL_VERSION}"
         )
         return
-    if app.name in [task.app.name for task in tasks]:
+    if app.name in connections or app.name in [task.app.name for task in tasks]:
         l.info("decline reason=already exists")
         await websocket.close(CloseCode.task_exists, "task already exists")
         return
 
     await websocket.accept()
-    conn = Connection(websocket, db, app)
+    conn = Connection(websocket, db, app, name=app.name)
+    connections[app.name] = conn
     try:
         while True:
             timeout = 60
@@ -438,6 +596,7 @@ async def api_websocket_ebdi(
                 await websocket.close(CloseCode.timeout, "timeout")
                 return
 
+            conn.last_message_at = datetime.now()
             try:
                 request = client_message.validate_json(data)
             except ValidationError as e:
@@ -461,5 +620,7 @@ async def api_websocket_ebdi(
     except (WebSocketDisconnect, ConnectionClosedError):
         l.warning("(%s) disconnect", app.name)
     finally:
+        if connections.get(app.name) is conn:
+            del connections[app.name]
         if conn.task is not None and conn.task in tasks:
             tasks.remove(conn.task)

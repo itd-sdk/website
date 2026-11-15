@@ -12,8 +12,13 @@ const LINK_DIM = [0.3, 0.28, 0.26, 0.12];
 const LINK_ACTIVE = [0.93, 0.42, 0.18, 1];
 const LINK_FAR = [0.22, 0.2, 0.18, 1];
 const DEPTH_FALLOFF = 0.45;
-const MAX_DEPTH = 3;
+const MAX_DEPTH = 5;
+// next depth level is shown only while the total stays within this many links,
+// big accounts end up with their direct links only, small ones go deeper
+const LINK_BUDGET = 1500;
 const HUB_DEGREE = 50;
+// layout is settled enough below this alpha, further ticks only burn the gpu
+const STOP_ALPHA = 0.1;
 
 function get_el(id) {
     return document.getElementById(id);
@@ -43,8 +48,10 @@ function escape_html(value) {
     );
 }
 
+// the layout already fills most of the space (it can't grow past gpu texture
+// limits), so gaps between users come from smaller points, not stronger repulsion
 function point_size(followers) {
-    return Math.max(4, Math.min(16, 4 + Math.log10(1 + followers) * 2.6));
+    return Math.max(2, Math.min(8, 2 + Math.log10(1 + followers) * 1.3));
 }
 
 (async () => {
@@ -108,19 +115,29 @@ function point_size(followers) {
         link_count++;
     }
 
-    function collect_depths(index) {
-        const depths = new Map([[index, 0]]);
+    // breadth-first walk from the point, one depth level at a time;
+    // returns [link, depth] pairs, the direct links are always included
+    function collect_links(index) {
+        const reached = new Set([index]);
+        const seen = new Set();
+        const result = [];
         let frontier = [index];
-        for (let depth = 1; depth <= MAX_DEPTH; depth++) {
+        for (let depth = 1; depth <= MAX_DEPTH && frontier.length; depth++) {
+            const level = [];
             const next = [];
             for (const point of frontier) {
                 for (const link of point_links[point]) {
+                    if (seen.has(link)) {
+                        continue;
+                    }
+                    seen.add(link);
+                    level.push(link);
                     for (const side of [0, 1]) {
                         const neighbour = link_pairs[link * 2 + side];
-                        if (depths.has(neighbour)) {
+                        if (reached.has(neighbour)) {
                             continue;
                         }
-                        depths.set(neighbour, depth);
+                        reached.add(neighbour);
                         // hubs are reachable but not traversable, they connect everything
                         if (point_links[neighbour].length < HUB_DEGREE) {
                             next.push(neighbour);
@@ -128,9 +145,15 @@ function point_size(followers) {
                     }
                 }
             }
+            if (depth > 1 && result.length + level.length > LINK_BUDGET) {
+                break;
+            }
+            for (const link of level) {
+                result.push([link, depth]);
+            }
             frontier = next;
         }
-        return depths;
+        return result;
     }
 
     let visible_links = null;
@@ -176,27 +199,20 @@ function point_size(followers) {
             return;
         }
 
-        const depths = collect_depths(index);
+        const collected = collect_links(index);
+        const max_depth = collected.length ? collected.at(-1)[1] : 1;
         const visible = [];
-        for (const [point, depth] of depths) {
-            if (depth >= MAX_DEPTH) {
-                continue;
-            }
-            for (const link of point_links[point]) {
-                const link_depth = Math.max(
-                    depths.get(link_pairs[link * 2]) ?? Infinity,
-                    depths.get(link_pairs[link * 2 + 1]) ?? Infinity,
-                );
-                if (link_depth > MAX_DEPTH) {
-                    continue;
-                }
-                const t = Math.pow(
-                    MAX_DEPTH > 1 ? (link_depth - 1) / (MAX_DEPTH - 1) : 0,
-                    DEPTH_FALLOFF,
-                );
-                link_colors.set(mix_color(LINK_ACTIVE, LINK_FAR, t), link * 4);
-                visible.push(link);
-            }
+        const points = new Set([index]);
+        for (const [link, depth] of collected) {
+            // fade over the depth actually shown, not over MAX_DEPTH
+            const t = Math.pow(
+                max_depth > 1 ? (depth - 1) / (max_depth - 1) : 0,
+                DEPTH_FALLOFF,
+            );
+            link_colors.set(mix_color(LINK_ACTIVE, LINK_FAR, t), link * 4);
+            visible.push(link);
+            points.add(link_pairs[link * 2]);
+            points.add(link_pairs[link * 2 + 1]);
         }
 
         if (show_edges) {
@@ -211,6 +227,7 @@ function point_size(followers) {
 
         graph.setConfigPartial({ renderLinks: true });
         apply_links(visible);
+        return points;
     }
 
     function update_links() {
@@ -262,13 +279,10 @@ function point_size(followers) {
             update_links();
             return;
         }
-        paint_links(index);
+        const points = paint_links(index);
         graph.setConfigPartial({
-            // points: direct neighbours only, links still fade out over MAX_DEPTH
-            highlightedPointIndices: [
-                index,
-                ...graph.getNeighboringPointIndices(index),
-            ],
+            // every user reached by the highlighted links
+            highlightedPointIndices: [...points],
             outlinedPointIndices: [index],
             renderLinks: true,
         });
@@ -298,9 +312,12 @@ function point_size(followers) {
     }
 
     function on_tick(alpha) {
-        progress.style.width = 20 + Math.round((1 - alpha) * 75) + "%";
-        if (alpha < 0.15) {
-            hide_loading();
+        const done = Math.min(1, (1 - alpha) / (1 - STOP_ALPHA));
+        progress.style.width = 20 + Math.round(done * 75) + "%";
+        if (alpha < STOP_ALPHA) {
+            // freeze the layout, cosmos stops scheduling frames once nothing moves
+            // (fires onSimulationEnd, which hides the loading screen)
+            graph.stop();
         }
     }
 
@@ -342,6 +359,9 @@ function point_size(followers) {
         simulationLinkDistance: 80,
         simulationFriction: 0.9,
         simulationDecay: 1000,
+        // pushes overlapping points apart, with a small gap between their edges
+        simulationCollision: 1,
+        simulationCollisionPadding: 1,
         fitViewOnInit: true,
         fitViewDelay: 1500,
         fitViewPadding: 0.2,
