@@ -374,8 +374,9 @@ function comment_url(comment) {
     return `${post}?comment=${comment.comment_id}`;
 }
 
-// avatar, name, @username, the date and a button opening the item in итд
-function render_header(author, author_id, date, url) {
+// avatar, name, @username, the date and a button opening the item in итд,
+// without url the button is left out (a dialog has it in its own header)
+function render_header(author, author_id, date, url = null) {
     const header = create("div", "post-header");
     const avatar = create(
         "div",
@@ -405,22 +406,24 @@ function render_header(author, author_id, date, url) {
     header.append(names);
 
     header.append(create("span", "post-date", format_date(date)));
-    const open = create("a", "post-open");
-    open.href = url;
-    open.target = "_blank";
-    open.title = "Открыть в ИТД";
-    open.setAttribute("aria-label", "Открыть в ИТД");
-    open.append(icon_image("open-in-new"));
-    header.append(open);
+    if (url) {
+        const open = create("a", "post-open");
+        open.href = url;
+        open.target = "_blank";
+        open.title = "Открыть в ИТД";
+        open.setAttribute("aria-label", "Открыть в ИТД");
+        open.append(icon_image("open-in-new"));
+        header.append(open);
+    }
     return header;
 }
 
-function render_author(post) {
+function render_author(post, with_open = true) {
     return render_header(
         post.author,
         post.author_id,
         post.created_at || post.found_at,
-        post_url(post.post_id, post.author, post.author_id),
+        with_open ? post_url(post.post_id, post.author, post.author_id) : null,
     );
 }
 
@@ -883,7 +886,8 @@ function render_post(post, nested = false, in_dialog = false) {
     // if (post.author && !post.author.exists) {
     //     card.classList.add("post-deleted-author");
     // }
-    card.append(render_author(post));
+    // the dialog has the open button in its own header
+    card.append(render_author(post, !(in_dialog && !nested)));
 
     const badges = render_badges(post);
     if (badges.children.length) {
@@ -1113,7 +1117,7 @@ function render_comment(comment, in_thread = false, in_dialog = false) {
             comment.author,
             comment.author_id,
             comment.created_at || comment.found_at,
-            comment_url(comment),
+            in_dialog ? null : comment_url(comment),
         ),
     );
 
@@ -1171,6 +1175,13 @@ function build_dialog() {
     close.setAttribute("aria-label", "Закрыть");
     close.append(icon_image("close"));
     close.addEventListener("click", close_dialog);
+    const open = create("a", "dialog-action");
+    open.id = "post-dialog-open";
+    open.target = "_blank";
+    open.rel = "noopener noreferrer";
+    open.title = "Открыть в ИТД";
+    open.setAttribute("aria-label", "Открыть в ИТД");
+    open.append(icon_image("open-in-new"));
     const refresh = create("button", "dialog-action");
     refresh.type = "button";
     refresh.id = "post-dialog-refresh";
@@ -1181,7 +1192,7 @@ function build_dialog() {
     status.id = "post-dialog-status";
     status.hidden = true;
     const header = create("div", "post-dialog-header");
-    header.append(refresh, close);
+    header.append(open, refresh, close);
     const scroll = create("div");
     scroll.id = "post-dialog-scroll";
     // the modal focuses the scroll area like the user dialog, not the first button
@@ -1204,7 +1215,7 @@ function build_dialog() {
 }
 
 // empties the dialog, drops loaders of the previous content and shows it
-function open_dialog(on_refresh = null) {
+function open_dialog(on_refresh = null, url = null) {
     const dialog = get_el("post-dialog") || build_dialog();
     const token = ++dialog_token;
     for (const observer of dialog_observers) {
@@ -1218,6 +1229,13 @@ function open_dialog(on_refresh = null) {
     refresh.hidden = !on_refresh;
     refresh.disabled = false;
     refresh.onclick = on_refresh;
+    const open = get_el("post-dialog-open");
+    open.hidden = !url;
+    if (url) {
+        open.href = url;
+    } else {
+        open.removeAttribute("href");
+    }
     get_el("post-dialog-status").hidden = true;
     if (!dialog.open) {
         lock_scroll();
@@ -1227,7 +1245,7 @@ function open_dialog(on_refresh = null) {
 }
 
 function open_comment_dialog(comment) {
-    const { scroll } = open_dialog();
+    const { scroll } = open_dialog(null, comment_url(comment));
     scroll.append(render_comment(comment, false, true));
     scroll.append(
         create(
@@ -1331,7 +1349,10 @@ function render_thread_sort(on_change) {
 }
 
 function open_post_dialog(post, { card = null, focus = null } = {}) {
-    const { scroll, token } = open_dialog(() => refresh_post(post, card));
+    const { scroll, token } = open_dialog(
+        () => refresh_post(post, card),
+        post_url(post.post_id, post.author, post.author_id),
+    );
     scroll.append(render_post(post, false, true));
     scroll.append(
         create(
