@@ -465,9 +465,14 @@ function audio_peaks(data, buckets = 600) {
     return peaks;
 }
 
+// through the server the file is repacked for firefox and readable for the
+// waveform; without it the player takes the file straight from итд
 function readable_url(url) {
     const match = url.match(ITD_AUDIO_RE);
-    return match ? "/api/ebdi/media/audio/" + match[2] : url;
+    if (!match || !ebdi_settings.values.audio_proxy) {
+        return url;
+    }
+    return "/api/ebdi/media/audio/" + match[2];
 }
 
 async function decode_audio(url) {
@@ -1838,7 +1843,8 @@ function observe_controls_stick() {
 
 // marks, number format and theme colors are drawn into the items
 window.addEventListener("ebdi-settings", (event) => {
-    if (["marks", "compact_numbers", "theme"].includes(event.detail.key)) {
+    const redrawn = ["marks", "compact_numbers", "theme", "audio_proxy"];
+    if (redrawn.includes(event.detail.key)) {
         // the loaded items are drawn anew in place, the scroll position stays
         stop_playing();
         for (const node of [...get_el("feed").children]) {

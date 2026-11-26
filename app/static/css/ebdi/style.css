@@ -610,9 +610,14 @@ emoji-picker {
     font-size: 13px;
 }
 
+/* a segmented button: the options share one frame, the chosen one is filled */
 .settings-theme {
     display: flex;
-    gap: 4px;
+    padding: 3px;
+    gap: 3px;
+    background-color: var(--surface);
+    border: var(--border) 1px solid;
+    border-radius: var(--radius);
 }
 
 .settings-theme label {
@@ -627,28 +632,28 @@ emoji-picker {
 
 .settings-theme span {
     display: block;
-    padding: 6px 10px;
+    padding: 5px 10px;
     text-align: center;
     cursor: pointer;
     color: var(--text-muted);
-    border-bottom: transparent 2px solid;
+    border-radius: max(0px, calc(var(--radius) - 2px));
     transition:
         background-color 0.2s,
         color 0.2s;
 }
 
 .settings-theme span:hover {
-    background-color: var(--surface);
+    color: var(--text-strong);
 }
 
 .settings-theme input:checked + span {
-    background-color: var(--surface);
-    color: var(--text-warm);
-    border-bottom-color: #eb5e1b;
+    background-color: #ed6a2d;
+    color: #fff;
 }
 
 .settings-theme input:focus-visible + span {
     outline: #ed6a2d 1px solid;
+    outline-offset: 1px;
 }
 
 .settings-option {
@@ -665,7 +670,7 @@ emoji-picker {
 
 /* rounded corners, a setting */
 html[data-rounded] {
-    --radius: 10px;
+    --radius: 5px;
 }
 
 html[data-rounded]
@@ -674,7 +679,6 @@ html[data-rounded]
         input[type="search"],
         dialog,
         .feedback,
-        .tab,
         .row,
         .post-card,
         .post-original,
@@ -688,7 +692,6 @@ html[data-rounded]
         .comment-replies-more,
         .rank-card,
         .chart-card,
-        .chart-tab,
         .dialog-action,
         .feed-search,
         .feed-candidates,
@@ -710,8 +713,17 @@ html[data-rounded] dialog {
     overflow: hidden;
 }
 
-html[data-rounded] input[type="checkbox"] {
-    border-radius: 4px;
+/* a tab stands on the line under it, only its top corners are rounded */
+html[data-rounded] :is(.tab, .chart-tab, .history-range-tab) {
+    border-radius: var(--radius) var(--radius) 0 0;
+}
+
+html[data-rounded] :is(input[type="checkbox"], input[type="radio"]) {
+    border-radius: 3px;
+}
+
+html[data-rounded] input[type="radio"]::before {
+    border-radius: 2px;
 }
 
 /* white icons would vanish on the light background */
@@ -729,7 +741,7 @@ html[data-theme="light"]
     filter: brightness(0.25);
 }
 
-/* the pixel logo is drawn on black, inverting keeps its orange and lightens the rest */
+/* the logo is drawn on a dark background, the light theme has its own */
 html[data-theme="light"] #banner {
-    filter: invert(1) hue-rotate(180deg);
+    content: url("/static/images/ebdi-light.png");
 }

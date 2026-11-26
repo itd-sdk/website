@@ -8,6 +8,7 @@ const ebdi_settings = (() => {
         marks: true,
         user_styles: true,
         compact_numbers: false,
+        audio_proxy: true,
     };
     let values = { ...DEFAULTS };
     try {

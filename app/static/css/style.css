@@ -291,7 +291,6 @@ input[type="radio"]::before {
 
 input[type="radio"]:checked {
     border: 1px solid #ec5e1c;
-    background: var(--text);
 }
 
 input[type="radio"]:checked::before {
