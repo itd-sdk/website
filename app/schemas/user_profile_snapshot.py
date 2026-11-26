@@ -9,7 +9,7 @@ from app.services.db import Base
 
 
 class UserProfileSnapshot(Base):
-    """Username, name, clan, bio and banner at a point in time, written on change"""
+    """Username, name, bio and banner at a point in time, written on change"""
 
     __tablename__ = "user_profile_snapshots"
     __table_args__ = (UniqueConstraint("user_id", "recorded_at"),)

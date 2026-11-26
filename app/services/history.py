@@ -9,7 +9,8 @@ Counters = tuple[int, int, int, bool]
 Profile = dict[str, str | None]
 State = tuple[Counters, Profile, datetime]
 
-PROFILE_FIELDS = ("username", "display_name", "avatar", "bio", "banner")
+# the clan is not here: it is chosen once and never changes
+PROFILE_FIELDS = ("username", "display_name", "bio", "banner")
 
 
 def counters_state(user: User) -> Counters:

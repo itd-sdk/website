@@ -17,7 +17,7 @@ compared to the previous backup, so the result is the same set of points that
 live tracking would have produced. Running the script again does not
 duplicate anything.
 
-The username, name, clan, bio and banner are tracked the same way into
+The username, name, bio and banner are tracked the same way into
 user_profile_snapshots; a field the backup has no column for (old schemas have
 no bio and banner) is not a change.
 
@@ -428,7 +428,7 @@ def main(args: list[str]) -> None:
                         }
                     )
                 profile = {
-                    field: profile_value(field, row[field]) for field in profile_fields
+                    field: profile_value(row[field]) for field in profile_fields
                 }
                 hashes = {field: hash(value) for field, value in profile.items()}
                 known = last_profile.get(user_id, {})
@@ -464,14 +464,8 @@ def main(args: list[str]) -> None:
     )
 
 
-def profile_value(field: str, value) -> str | None:
-    if value is None:
-        return None
-    value = str(value)
-    if field == "avatar":
-        # older backups kept the emoji variation selectors
-        value = value.replace("\ufe0e", "").replace("\ufe0f", "")
-    return value
+def profile_value(value) -> str | None:
+    return None if value is None else str(value)
 
 
 def insert_batch(db: Session, model, rows: list[dict]) -> None:

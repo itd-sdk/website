@@ -1124,7 +1124,6 @@ function render_dialog_history(history, user) {
 const PROFILE_CHANGED = {
     username: "Изменён ник",
     display_name: "Изменено имя",
-    avatar: "Изменён клан",
     bio: "Изменено био",
     banner: "Изменён баннер",
 };
@@ -1167,12 +1166,7 @@ function render_profile_change({ field, old, new: value }) {
         }
         return line;
     }
-    const shown = (text) =>
-        field == "username"
-            ? "@" + text
-            : field == "avatar"
-              ? text + "\uFE0F"
-              : text;
+    const shown = (text) => (field == "username" ? "@" + text : text);
     line.append(`${PROFILE_CHANGED[field]}: `);
     if (old) {
         line.append(create("span", "profile-change-old", shown(old)), " -> ");

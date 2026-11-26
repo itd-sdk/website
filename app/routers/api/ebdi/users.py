@@ -313,7 +313,7 @@ def api_get_ebdi_user_history(request: Request, id: int, db: Session = Depends(g
 
 
 class ProfileChange(BaseModel):
-    field: str  # username, display_name, avatar, bio or banner
+    field: str  # username, display_name, bio or banner
     old: str | None
     new: str | None
 
@@ -327,7 +327,7 @@ class ProfileState(BaseModel):
     t: LocalDatetime
     username: str | None = None
     display_name: str | None = None
-    avatar: str | None = None
+    avatar: str | None = None  # the clan never changes, it is the current one
     bio: str | None = None
     banner: str | None = None
 
@@ -337,11 +337,7 @@ class ProfileHistoryResponse(BaseModel):
     initial: ProfileState  # the earliest known value of every field
 
 
-def same_value(field: str, old: str | None, new: str | None) -> bool:
-    if field == "avatar":
-        # older backups kept the emoji variation selector
-        old = (old or "").replace("\ufe0f", "")
-        new = (new or "").replace("\ufe0f", "")
+def same_value(old: str | None, new: str | None) -> bool:
     return (old or "") == (new or "")
 
 
@@ -362,7 +358,7 @@ def api_get_ebdi_user_profile_history(
     )
     if not snapshots:
         current = {field: getattr(user, field) for field in PROFILE_FIELDS}
-        initial = ProfileState(t=user.updated_at, **current)
+        initial = ProfileState(t=user.updated_at, avatar=user.avatar, **current)
         return ProfileHistoryResponse(events=[], initial=initial)
 
     known: dict[str, str | None] = {}
@@ -377,13 +373,13 @@ def api_get_ebdi_user_profile_history(
             value = snapshot.data[field]
             if field not in known:
                 first[field] = value
-            elif not same_value(field, known[field], value):
+            elif not same_value(known[field], value):
                 changes.append(ProfileChange(field=field, old=known[field], new=value))
             known[field] = value
         if changes:
             events.append(ProfileEvent(t=snapshot.recorded_at, changes=changes))
     events.reverse()
-    initial = ProfileState(t=snapshots[0].recorded_at, **first)
+    initial = ProfileState(t=snapshots[0].recorded_at, avatar=user.avatar, **first)
     return ProfileHistoryResponse(events=events, initial=initial)
 
 
