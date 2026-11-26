@@ -108,12 +108,31 @@
 
 {% block ebdi_after %}
 
+<dialog id="profile-dialog">
+    <div class="profile-dialog-header">
+        <div class="profile-dialog-title">История профиля</div>
+        <button class="dialog-action" id="profile-dialog-close" title="Закрыть" aria-label="Закрыть">
+            <img src="/static/icons/close.svg">
+        </button>
+    </div>
+    <div id="profile-dialog-scroll" tabindex="-1" autofocus>
+        <div id="profile-dialog-loader" class="loader-spinner"></div>
+        <div id="profile-timeline"></div>
+        <div id="profile-dialog-empty" hidden>Изменений ника, имени, био и баннера не было</div>
+        <div class="dialog-section-title">Первая запись <span id="profile-initial-date"></span></div>
+        <div id="profile-initial"></div>
+    </div>
+</dialog>
+
 <dialog id="user-dialog">
     <div id="dialog-status" hidden>Обновление...</div>
     <div id="dialog-actions">
         <!--<button class="dialog-action" id="dialog-download" title="Скачать карточку" aria-label="Скачать карточку">
             <img src="/static/icons/download.svg">
         </button>-->
+        <button class="dialog-action" id="dialog-profile-history" title="История профиля" aria-label="История профиля">
+            <img src="/static/icons/history.svg">
+        </button>
         <button class="dialog-action" id="dialog-refresh" title="Обновить данные" aria-label="Обновить данные">
             <img src="/static/icons/refresh.svg">
         </button>
