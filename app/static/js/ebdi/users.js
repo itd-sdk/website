@@ -155,12 +155,12 @@ async function load_share(kind) {
             return;
         }
         const node = get_el("total-share");
-        node.textContent = `≈${Math.round(share.share * 100)}% от ИТД`;
+        node.textContent = `~${Math.round(share.share * 100)}% от ИТД`;
         const where =
             kind == "users"
-                ? `${share.sample} крупнейшим кланам ИТД: в них ${format_number(share.official)} пользователей`
-                : `${share.sample} трендовым хэштегам ИТД: с ними ${format_number(share.official)} постов`;
-        node.title = `Оценка по ${where}, у нас ${format_number(share.ours)}`;
+                ? `${share.sample} крупнейшим кланам: в ИТД ${format_number(share.official)} пользователей`
+                : `${share.sample} трендовым хэштегам: в ИТД ${format_number(share.official)} постов`;
+        node.title = `Оценка по ${where} / В ЕБДИ ${format_number(share.ours)}`;
         node.hidden = false;
     } catch (error) {
         console.warn("coverage request failed", error);
@@ -1032,14 +1032,6 @@ function render_dialog_history(history, user) {
     if (chart_box.hidden) {
         return;
     }
-    const has_gap = points.some((_, i) => gap_before(points, i));
-    if (has_gap) {
-        notes.push(
-            "Пунктир — период без данных, линия только соединяет соседние точки",
-        );
-        note.textContent = notes.join(". ");
-        note.hidden = false;
-    }
     Chart.defaults.font.family = "Jost";
     history_chart = new Chart(get_el("dialog-history-canvas"), {
         type: "line",
@@ -1185,7 +1177,7 @@ function render_profile_change({ field, old, new: value }) {
               : text;
     line.append(`${PROFILE_CHANGED[field]}: `);
     if (old) {
-        line.append(create("span", "profile-change-old", shown(old)), " → ");
+        line.append(create("span", "profile-change-old", shown(old)), " -> ");
     }
     line.append(create("b", null, shown(value ?? "")));
     return line;
