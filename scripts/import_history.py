@@ -5,7 +5,8 @@ Usage (from the repo root, after `alembic upgrade head`):
 
 Supported backups:
     *.dump / *.backup     pg_dump custom format (needs pg_restore in PATH)
-    *.sql                 pg_dump plain format with COPY data
+    *.sql                 plain SQL: pg_dump COPY data or INSERT statements
+                          (pg_dump --inserts, Neon and other exports)
     *.db / *.sqlite(3)    SQLite database
 
 Backups are processed in chronological order (date from the file name like
@@ -67,15 +68,38 @@ class Problems:
         return f" ({'; '.join(notes)})" if notes else ""
 
 
+USERS_TABLE = r'(?:"?\w+"?\.)?"?users"?'
+COPY_RE = re.compile(rf"COPY {USERS_TABLE} \((.+)\) FROM stdin;", re.IGNORECASE)
+INSERT_RE = re.compile(
+    rf"INSERT INTO {USERS_TABLE}\s*(?:\(([^)]*)\))?\s*VALUES\s*", re.IGNORECASE
+)
+CREATE_RE = re.compile(
+    rf"CREATE TABLE (?:IF NOT EXISTS )?{USERS_TABLE}\s*\(", re.IGNORECASE
+)
+E_STRING_RE = re.compile(r"'((?:[^'\\]|\\.|'')*)'", re.DOTALL)
+CONSTRAINTS = ("CONSTRAINT", "PRIMARY", "UNIQUE", "CHECK", "FOREIGN", "EXCLUDE")
+
+
+def column_names(text: str) -> list[str]:
+    return [c.strip().strip('"') for c in text.split(",")]
+
+
 def parse_copy(lines: Iterator[str], problems: Problems) -> Iterator[Row]:
     """Rows of the users table from pg_dump COPY text"""
-    columns = None
+    found = False
     for line in lines:
-        if columns is None:
-            match = re.match(r"COPY (?:\w+\.)?\"?users\"? \((.+)\) FROM stdin;", line)
-            if match:
-                columns = [c.strip().strip('"') for c in match.group(1).split(",")]
-            continue
+        match = COPY_RE.match(line)
+        if match:
+            found = True
+            yield from copy_rows(column_names(match.group(1)), lines, problems)
+    if not found:
+        raise ValueError("no COPY data for the users table")
+
+
+def copy_rows(
+    columns: list[str], lines: Iterator[str], problems: Problems
+) -> Iterator[Row]:
+    for line in lines:
         line = line.rstrip("\n")
         if line == "\\.":
             return
@@ -85,8 +109,142 @@ def parse_copy(lines: Iterator[str], problems: Problems) -> Iterator[Row]:
             problems.broken += 1
             continue
         yield dict(zip(columns, values))
-    if columns is None:
-        raise ValueError("no COPY data for the users table (dumped with --inserts?)")
+
+
+def create_columns(lines: Iterator[str]) -> list[str]:
+    """Columns of CREATE TABLE users, for INSERTs written without a column list"""
+    columns = []
+    for line in lines:
+        line = line.strip()
+        if line.startswith(")"):
+            break
+        if line and not line.upper().startswith(CONSTRAINTS):
+            columns.append(line.split()[0].strip('"'))
+    return columns
+
+
+def read_statement(first: str, lines: Iterator[str]) -> str:
+    """The whole statement starting at `first`, text values may span lines"""
+    parts = [first]
+    # standard strings double their quotes, an odd count opens or closes one
+    in_string = first.count("'") % 2 == 1
+    line = first
+    while in_string or not line.rstrip().endswith(";"):
+        line = next(lines, None)
+        if line is None:
+            break
+        parts.append(line)
+        if line.count("'") % 2:
+            in_string = not in_string
+    return "".join(parts)
+
+
+def read_string(text: str, pos: int) -> tuple[str, int]:
+    """A quoted literal at pos, returns its value and the position after it"""
+    if text[pos] in "eE":
+        # backslash escapes are left as they are, the fields we read never have them
+        match = E_STRING_RE.match(text, pos + 1)
+        if not match:
+            raise ValueError("unterminated string")
+        return match.group(1), match.end()
+    end = pos + 1
+    while True:
+        end = text.find("'", end)
+        if end == -1:
+            raise ValueError("unterminated string")
+        if text.startswith("''", end):
+            end += 2
+            continue
+        return text[pos + 1 : end].replace("''", "'"), end + 1
+
+
+def read_value(text: str, pos: int) -> tuple[str | None, int]:
+    """One value of a VALUES tuple: a string literal (casts are ignored) or a token"""
+    literal = None
+    token = []
+    depth = 0
+    while pos < len(text):
+        char = text[pos]
+        e_string = char in "eE" and text.startswith("'", pos + 1) and not token
+        if char == "'" or e_string:
+            value, pos = read_string(text, pos)
+            if depth == 0 and literal is None:
+                literal = value
+            continue
+        if char in "([":
+            depth += 1
+        elif char in ")]":
+            if depth == 0:
+                break
+            depth -= 1
+        elif char == "," and depth == 0:
+            break
+        if not char.isspace():
+            token.append(char)
+        pos += 1
+    if literal is not None:
+        return literal, pos
+    word = "".join(token)
+    return (None if word.upper() == "NULL" else word), pos
+
+
+def insert_rows(text: str, pos: int) -> Iterator[list[str | None]]:
+    """Tuples of an INSERT ... VALUES (...), (...); statement"""
+    while True:
+        while pos < len(text) and text[pos] in " \t\r\n,":
+            pos += 1
+        if pos >= len(text) or text[pos] == ";":
+            return
+        if text[pos] != "(":
+            raise ValueError(f"unexpected {text[pos:pos + 20]!r}")
+        pos += 1
+        values = []
+        while True:
+            value, pos = read_value(text, pos)
+            values.append(value)
+            if pos >= len(text):
+                raise ValueError("statement cut short")
+            pos += 1
+            if text[pos - 1] == ")":
+                break
+        yield values
+
+
+def parse_sql(lines: Iterator[str], problems: Problems) -> Iterator[Row]:
+    """Rows of the users table from plain SQL, COPY blocks or INSERT statements"""
+    lines = iter(lines)
+    table_columns = None
+    found = False
+    for line in lines:
+        if CREATE_RE.match(line):
+            table_columns = create_columns(lines)
+            continue
+        match = COPY_RE.match(line)
+        if match:
+            found = True
+            yield from copy_rows(column_names(match.group(1)), lines, problems)
+            continue
+        match = INSERT_RE.match(line)
+        if not match:
+            continue
+        found = True
+        columns = column_names(match.group(1)) if match.group(1) else table_columns
+        if not columns:
+            raise ValueError("INSERT without columns and no CREATE TABLE users")
+        statement = read_statement(line, lines)
+        try:
+            for values in insert_rows(statement, match.end()):
+                if len(values) != len(columns):
+                    problems.broken += 1
+                    continue
+                yield dict(zip(columns, values))
+        except ValueError:
+            # a statement cut by the end of the file or written in a way not handled
+            problems.broken += 1
+            if not statement.rstrip().endswith(";"):
+                problems.truncated = True
+    if not found:
+        raise ValueError("no data for the users table (neither COPY nor INSERT)")
 
 
 def read_pg_custom(path: Path, problems: Problems) -> Iterator[Row]:
@@ -112,7 +270,7 @@ def read_pg_custom(path: Path, problems: Problems) -> Iterator[Row]:
 
 def read_pg_plain(path: Path, problems: Problems) -> Iterator[Row]:
     with open(path, encoding="utf-8") as file:
-        yield from parse_copy(file, problems)
+        yield from parse_sql(file, problems)
 
 
 def read_sqlite(path: Path, problems: Problems) -> Iterator[Row]:
