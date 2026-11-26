@@ -294,6 +294,19 @@ emoji-picker {
     color: #fff;
 }
 
+/* an inline block keeps the underline of the share off the separator */
+#total-share::before {
+    content: "·";
+    display: inline-block;
+    margin: 0 6px;
+}
+
+#total-share {
+    cursor: help;
+    text-decoration: underline dotted #6a645e;
+    text-underline-offset: 3px;
+}
+
 #rows {
     display: flex;
     align-items: center;

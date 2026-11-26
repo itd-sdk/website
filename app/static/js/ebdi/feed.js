@@ -1619,6 +1619,31 @@ function apply() {
     reload();
 }
 
+// share of итд, estimated by the server from its biggest clans and trending
+// hashtags: итд does not publish its totals
+async function load_share(kind) {
+    try {
+        const res = await fetch("/api/ebdi/coverage");
+        if (!res.ok) {
+            return;
+        }
+        const share = (await res.json())[kind];
+        if (!share) {
+            return;
+        }
+        const node = get_el("total-share");
+        node.textContent = `≈${Math.round(share.share * 100)}% от ИТД`;
+        const where =
+            kind == "users"
+                ? `${share.sample} крупнейшим кланам ИТД: в них ${format_number(share.official)} пользователей`
+                : `${share.sample} трендовым хэштегам ИТД: с ними ${format_number(share.official)} постов`;
+        node.title = `Оценка по ${where}, у нас ${format_number(share.ours)}`;
+        node.hidden = false;
+    } catch (error) {
+        console.warn("coverage request failed", error);
+    }
+}
+
 async function load_count() {
     try {
         const res = await fetch(`${FEED.api}/count`);
@@ -1876,6 +1901,9 @@ document.addEventListener("DOMContentLoaded", () => {
     ).observe(get_el("sentinel-bottom"));
 
     load_count();
+    if (KIND == "posts") {
+        load_share("posts");
+    }
     load_page();
     observe_controls_stick();
 });

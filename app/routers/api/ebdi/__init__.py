@@ -4,6 +4,7 @@ from app.routers.api.ebdi import (
     admin,
     clans,
     comments,
+    coverage,
     hashtags,
     media,
     posts,
@@ -21,4 +22,5 @@ router.include_router(posts.router)
 router.include_router(comments.router)
 router.include_router(media.router)
 router.include_router(hashtags.router)
+router.include_router(coverage.router)
 router.include_router(admin.router)
