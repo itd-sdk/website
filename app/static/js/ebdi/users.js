@@ -142,6 +142,31 @@ function show_error(offset, message) {
     get_el("rows").appendChild(error);
 }
 
+// share of итд, estimated by the server from its biggest clans and trending
+// hashtags: итд does not publish its totals
+async function load_share(kind) {
+    try {
+        const res = await fetch("/api/ebdi/coverage");
+        if (!res.ok) {
+            return;
+        }
+        const share = (await res.json())[kind];
+        if (!share) {
+            return;
+        }
+        const node = get_el("total-share");
+        node.textContent = `≈${Math.round(share.share * 100)}% от ИТД`;
+        const where =
+            kind == "users"
+                ? `${share.sample} крупнейшим кланам ИТД: в них ${format_number(share.official)} пользователей`
+                : `${share.sample} трендовым хэштегам ИТД: с ними ${format_number(share.official)} постов`;
+        node.title = `Оценка по ${where}, у нас ${format_number(share.ours)}`;
+        node.hidden = false;
+    } catch (error) {
+        console.warn("coverage request failed", error);
+    }
+}
+
 async function fetch_count() {
     const res = await fetch("/api/ebdi/users/count");
 
@@ -856,6 +881,39 @@ const HISTORY_SERIES = [
 ];
 let chart_scripts = null;
 let history_chart = null;
+// backups were rare before, a longer gap between points has no data behind it
+const HISTORY_GAP = 14 * 24 * 3600 * 1000;
+const MONTH = 30 * 24 * 3600 * 1000;
+const DEFAULT_HISTORY_MONTHS = 3;
+
+function is_gap(context) {
+    return context.p1.parsed.x - context.p0.parsed.x > HISTORY_GAP;
+}
+
+// the time before the point back to the previous one, when there was no data
+function gap_before(points, index) {
+    if (index == 0) {
+        return null;
+    }
+    const previous = new Date(points[index - 1].t).getTime();
+    const current = new Date(points[index].t).getTime();
+    return current - previous > HISTORY_GAP ? points[index - 1].t : null;
+}
+
+function set_history_range(months) {
+    if (!history_chart) {
+        return;
+    }
+    const x = history_chart.options.scales.x;
+    x.min = months ? Date.now() - months * MONTH : undefined;
+    history_chart.update();
+    for (const tab of document.querySelectorAll(".history-range-tab")) {
+        tab.classList.toggle(
+            "history-range-active",
+            Number(tab.dataset.months) == months,
+        );
+    }
+}
 
 function load_script(src) {
     return new Promise((resolve, reject) => {
@@ -896,8 +954,16 @@ function render_dialog_history(history) {
 
     const chart_box = get_el("dialog-history-chart");
     chart_box.hidden = points.length < 2;
+    const range = get_el("dialog-history-range");
+    range.hidden = true;
     if (chart_box.hidden) {
         return;
+    }
+    const has_gap = points.some((_, i) => gap_before(points, i));
+    if (has_gap) {
+        notes.push("Пунктир — период без данных, линия только соединяет соседние точки");
+        note.textContent = notes.join(". ");
+        note.hidden = false;
     }
     Chart.defaults.font.family = "Jost";
     history_chart = new Chart(get_el("dialog-history-canvas"), {
@@ -914,6 +980,11 @@ function render_dialog_history(history) {
                 hidden: series.hidden,
                 borderWidth: 2,
                 pointRadius: 2,
+                segment: {
+                    borderDash: (context) => (is_gap(context) ? [5, 5] : undefined),
+                    borderColor: (context) =>
+                        is_gap(context) ? series.color + "77" : undefined,
+                },
             })),
         },
         options: {
@@ -926,12 +997,21 @@ function render_dialog_history(history) {
                     labels: { color: "#bbb", usePointStyle: true, pointStyle: "dash" },
                 },
                 tooltip: {
-                    callbacks: { title: (items) => format_date(items[0].parsed.x) },
+                    callbacks: {
+                        title: (items) => format_date(items[0].parsed.x),
+                        footer: (items) => {
+                            const since = gap_before(points, items[0].dataIndex);
+                            return since
+                                ? `Перед этим данных нет с ${format_date(since)}`
+                                : "";
+                        },
+                    },
                 },
             },
             scales: {
                 x: {
                     type: "time",
+                    max: Date.now(),
                     adapters: { date: { locale: "ru" } },
                     grid: { color: "#3a3532" },
                     ticks: { color: "#bbb", maxRotation: 0, autoSkipPadding: 20 },
@@ -943,6 +1023,12 @@ function render_dialog_history(history) {
             },
         },
     });
+    // the dense recent data is shown first when the history reaches further back
+    const span = Date.now() - new Date(points[0].t).getTime();
+    if (span > DEFAULT_HISTORY_MONTHS * MONTH) {
+        range.hidden = false;
+        set_history_range(DEFAULT_HISTORY_MONTHS);
+    }
 }
 
 async function load_dialog_history(user, token) {
@@ -1132,6 +1218,11 @@ function init_user_dialog() {
     get_el("dialog-close").addEventListener("click", close_user_dialog);
     get_el("dialog-refresh").addEventListener("click", refresh_dialog_user);
     // get_el("dialog-download").addEventListener("click", download_dialog_card);
+    for (const tab of document.querySelectorAll(".history-range-tab")) {
+        tab.addEventListener("click", () =>
+            set_history_range(Number(tab.dataset.months)),
+        );
+    }
     dialog.addEventListener("click", (event) => {
         if (event.target == dialog) {
             close_user_dialog();
@@ -1243,4 +1334,5 @@ document.addEventListener("DOMContentLoaded", async () => {
     observe_controls_stick();
     await load_batch(0);
     await fetch_count();
+    load_share("users");
 });
