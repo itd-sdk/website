@@ -11,11 +11,33 @@
 ] %}
 
 {% block head %}
+<script src="{{ static('js/ebdi/settings.js') }}"></script>
 <link rel="stylesheet" href="{{ static('css/ebdi/style.css') }}">
 {% block ebdi_head %}{% endblock %}
 {% endblock %}
 
 {% block content %}
+<div id="settings">
+    <button type="button" id="settings-button" title="Настройки" aria-label="Настройки" aria-haspopup="dialog" aria-expanded="false">
+        <img src="/static/icons/settings.svg" alt="">
+    </button>
+    <div id="settings-panel" role="dialog" aria-label="Настройки" hidden>
+        <div class="settings-title">Настройки</div>
+        <div class="settings-group">
+            <span class="settings-label">Тема</span>
+            <div class="settings-theme">
+                <label><input type="radio" name="theme" value="dark"><span>Тёмная</span></label>
+                <label><input type="radio" name="theme" value="light"><span>Светлая</span></label>
+            </div>
+        </div>
+        <label class="settings-option"><input type="checkbox" data-setting="rounded"> Скруглённые углы</label>
+        <label class="settings-option"><input type="checkbox" data-setting="marks"> Правки из ивента (красные ручки и замазки)</label>
+        <label class="settings-option"><input type="checkbox" data-setting="user_styles"> Рамки и арты пользователей</label>
+        <label class="settings-option"><input type="checkbox" data-setting="compact_numbers"> Сокращать числа (12,3 тыс.)</label>
+        <label class="settings-option" title="Сервер переупаковывает файлы, без этого Firefox не играет часть голосовых, а волна не строится"><input type="checkbox" data-setting="audio_proxy"> Голосовые через сервер ЕБДИ</label>
+    </div>
+</div>
+
 <div id="landing">
     <img id="banner" src="/static/images/ebdi.png">
     <div id="landing-description">Единая База Данных ИТД</div>

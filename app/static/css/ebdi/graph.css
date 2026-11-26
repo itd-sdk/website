@@ -3,7 +3,7 @@
     height: 100vh;
     position: relative;
     overflow: hidden;
-    background: #1e1c1a;
+    background: var(--bg);
 }
 
 #graph-canvas {
@@ -23,20 +23,20 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: #1e1c1ac3;
+    background: color-mix(in srgb, var(--bg) 76%, transparent);
     z-index: 10;
     transition: background 0.4s ease;
 }
 
 #graph-loading.fade {
-    background: #1e1c1a00;
+    background: color-mix(in srgb, var(--bg) 0%, transparent);
     pointer-events: none;
 }
 
 #graph-progress-bar {
     width: 180px;
     height: 2px;
-    background: #3e3b37;
+    background: var(--control);
     border-radius: 2px;
     overflow: hidden;
 }
@@ -45,7 +45,7 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    background: #1e1c1a;
+    background: var(--bg);
     padding: 16px;
     border-radius: 16px;
     gap: 14px;
@@ -64,8 +64,8 @@
 
 #graph-tooltip {
     position: absolute;
-    background: #242220;
-    border: 1px solid #3e3b37;
+    background: var(--surface-sunken);
+    border: 1px solid var(--control);
     border-radius: 8px;
     padding: 10px 14px;
     pointer-events: none;
@@ -76,14 +76,14 @@
 
 .tt-name {
     font-weight: 500;
-    color: #fbeadb;
+    color: var(--text-warm);
     display: flex;
     align-items: center;
     gap: 5px;
 }
 
 .tt-username {
-    color: #666;
+    color: var(--text-faint);
     font-size: 12px;
     margin-top: 2px;
 }
@@ -98,7 +98,7 @@
     flex-direction: column;
     gap: 3px;
     font-size: 12px;
-    color: #888;
+    color: var(--text-dim);
 }
 .tt-stats.edge {
     flex-direction: row;
@@ -111,7 +111,7 @@
     display: flex;
     flex-direction: column;
     background: rgba(26, 24, 22, 0.85);
-    border: 1px solid #2e2c2a;
+    border: 1px solid var(--surface);
     border-radius: 8px;
     padding: 7px 13px;
 }
@@ -123,7 +123,7 @@
 }
 #graph-stats {
     font-size: 12px;
-    color: #555;
+    color: var(--text-faint);
 }
 
 #graph-logo {
@@ -137,7 +137,7 @@
 }
 
 #graph-back:hover {
-    color: #fbeadb !important;
+    color: var(--text-warm) !important;
 }
 
 #graph-search {
@@ -151,28 +151,28 @@
 #graph-search-input {
     width: 100%;
     background: rgba(26, 24, 22, 0.9);
-    border: 1px solid #3e3b37;
+    border: 1px solid var(--control);
     border-radius: 8px;
     padding: 8px 12px;
     font-size: 13px;
-    color: #fbeadb;
+    color: var(--text-warm);
     outline: none;
     box-sizing: border-box;
     transition: border-color 0.2s ease;
 }
 
 #graph-search-input::placeholder {
-    color: #555;
+    color: var(--text-faint);
 }
 
 #graph-search-input:focus {
-    border-color: #666;
+    border-color: var(--text-faint);
 }
 
 #graph-search-results {
     margin-top: 4px;
-    background: #242220;
-    border: 1px solid #3e3b37;
+    background: var(--surface-sunken);
+    border: 1px solid var(--control);
     border-radius: 8px;
     overflow: hidden;
 }
@@ -188,7 +188,7 @@
 }
 
 .search-result:hover {
-    background: #2e2c2a;
+    background: var(--surface);
 }
 
 .search-result-avatar {
@@ -197,7 +197,7 @@
 }
 
 .search-result-name {
-    color: #fbeadb;
+    color: var(--text-warm);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -208,7 +208,7 @@
 }
 
 .search-result-username {
-    color: #555;
+    color: var(--text-faint);
     font-size: 11px;
     white-space: nowrap;
     overflow: hidden;
@@ -218,7 +218,7 @@
 .search-result-text {
     padding: 8px 12px;
     font-size: 13px;
-    color: #555;
+    color: var(--text-faint);
 }
 
 * {
@@ -250,7 +250,7 @@
     --sidebar-width: 180px;
     --sidebar-gap: 10px;
     --poll-selected-progress-color: #f5c2e7;
-    --poll-progress-color: #85827e1a;
+    --poll-progress-color: color-mix(in srgb, var(--text-dim) 10%, transparent);
     /*--border-color: transparent;*/
 }
 strong,

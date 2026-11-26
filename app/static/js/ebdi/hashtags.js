@@ -17,7 +17,7 @@ function create(tag, class_name, text) {
 }
 
 function format_number(value) {
-    return new Intl.NumberFormat("ru-RU").format(value);
+    return ebdi_settings.format_count(value);
 }
 
 function render_hashtag(row, place) {
@@ -81,6 +81,12 @@ async function load_hashtags() {
         }
     }
 }
+
+window.addEventListener("ebdi-settings", (event) => {
+    if (event.detail.key == "compact_numbers") {
+        load_hashtags();
+    }
+});
 
 document.addEventListener("DOMContentLoaded", () => {
     comments = new URLSearchParams(location.search).get("comments") == "true";

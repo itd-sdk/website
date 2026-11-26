@@ -14,7 +14,6 @@ const FEEDS = {
         error: "постов",
         defaults: {
             deleted: false,
-            marks: false,
             text: true,
             photo: true,
             video: true,
@@ -122,6 +121,11 @@ function render_text(
     { red_pens = [], correctors = [], corrector_authors = [] } = {},
 ) {
     text = text || "";
+    // the event marks can be turned off in the settings
+    if (!ebdi_settings.values.marks) {
+        red_pens = [];
+        correctors = [];
+    }
     const authors = new Map(
         corrector_authors.map((author) => [author.user_id, author]),
     );
@@ -246,7 +250,7 @@ function render_text(
 }
 
 function format_number(value) {
-    return new Intl.NumberFormat("ru-RU").format(value);
+    return ebdi_settings.format_count(value);
 }
 
 const MONTHS = [
@@ -464,9 +468,14 @@ function audio_peaks(data, buckets = 600) {
     return peaks;
 }
 
+// through the server the file is repacked for firefox and readable for the
+// waveform; without it the player takes the file straight from итд
 function readable_url(url) {
     const match = url.match(ITD_AUDIO_RE);
-    return match ? "/api/ebdi/media/audio/" + match[2] : url;
+    if (!match || !ebdi_settings.values.audio_proxy) {
+        return url;
+    }
+    return "/api/ebdi/media/audio/" + match[2];
 }
 
 async function decode_audio(url) {
@@ -522,7 +531,7 @@ async function init_waveform(tile) {
     const player = WaveSurfer.create({
         container: wave,
         height: 44,
-        waveColor: "#6a5e50",
+        waveColor: ebdi_settings.css_var("--border-strong"),
         progressColor: "#ed6a2d",
         cursorWidth: 0,
         barWidth: 2,
@@ -898,7 +907,7 @@ function render_post(post, nested = false, in_dialog = false) {
         content.append(render_text(post.content, post));
         card.append(content);
     }
-    const marks = render_mark_authors(post);
+    const marks = ebdi_settings.values.marks ? render_mark_authors(post) : null;
     if (marks) {
         card.append(marks);
     }
@@ -1611,7 +1620,10 @@ async function load_page() {
         }
         const list = get_el("feed");
         for (const item of items) {
-            list.append(FEED.render(item));
+            const node = FEED.render(item);
+            // kept on the node to draw it anew when the settings change
+            node.feed_item = item;
+            list.append(node);
         }
         offset += items.length;
         has_more = items.length == PAGE_SIZE;
@@ -1921,6 +1933,23 @@ function observe_controls_stick() {
 
     observer.observe(get_el("controls-box"));
 }
+
+// marks, number format and theme colors are drawn into the items
+window.addEventListener("ebdi-settings", (event) => {
+    const redrawn = ["marks", "compact_numbers", "theme", "audio_proxy"];
+    if (redrawn.includes(event.detail.key)) {
+        // the loaded items are drawn anew in place, the scroll position stays
+        stop_playing();
+        for (const node of [...get_el("feed").children]) {
+            if (node.feed_item) {
+                const fresh = FEED.render(node.feed_item);
+                fresh.feed_item = node.feed_item;
+                node.replaceWith(fresh);
+            }
+        }
+        load_count();
+    }
+});
 
 document.addEventListener("DOMContentLoaded", () => {
     read_url_state();

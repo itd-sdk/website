@@ -11,7 +11,7 @@
 }
 
 .clan-name {
-    color: #fbeadb;
+    color: var(--text-warm);
     cursor: pointer;
 }
 

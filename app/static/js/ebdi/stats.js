@@ -1,6 +1,8 @@
+// theme colors are read once: a theme change reloads the page
+const theme = (name) => ebdi_settings.css_var(name);
 const COLORS = [
     "#ed6a2d",
-    "#fbeadb",
+    theme("--text-warm"),
     // "#565350",
     "#E05340",
     "#88B369",
@@ -10,8 +12,8 @@ const COLORS = [
     "#65b8c9",
 ];
 
-const GRID = "#3a3532";
-const TEXT = "#bbb";
+const GRID = theme("--chart-grid");
+const TEXT = theme("--text-muted");
 const ACCENT = "#ed6a2d";
 
 Chart.defaults.font.family = "Jost";
@@ -83,7 +85,7 @@ function clan_label(clan) {
 }
 
 function format_number(value) {
-    return new Intl.NumberFormat("ru-RU").format(value);
+    return ebdi_settings.format_count(value);
 }
 
 function format_month(timestamp) {
@@ -127,10 +129,10 @@ const base_options = {
             labels: { color: TEXT, boxWidth: 12, font: { size: 12 } },
         },
         tooltip: {
-            backgroundColor: "#2c2a27",
+            backgroundColor: theme("--surface"),
             borderColor: GRID,
             borderWidth: 1,
-            titleColor: "#fff",
+            titleColor: theme("--text-strong"),
             bodyColor: TEXT,
             padding: 10,
             position: "cursor",
@@ -504,7 +506,7 @@ function render_last_seen(data) {
                     backgroundColor: data.map(
                         (_, i) => COLORS[i % COLORS.length],
                     ),
-                    borderColor: "#1e1c1a",
+                    borderColor: theme("--bg"),
                     borderWidth: 2,
                 },
             ],
@@ -588,6 +590,13 @@ async function load_stats() {
         get_el("list-loader").hidden = true;
     }
 }
+
+// the charts take their colors and numbers when drawn, so they are drawn anew
+window.addEventListener("ebdi-settings", (event) => {
+    if (["compact_numbers", "theme"].includes(event.detail.key)) {
+        location.reload();
+    }
+});
 
 document.addEventListener("DOMContentLoaded", async () => {
     get_el("retry-button").addEventListener("click", load_stats);
