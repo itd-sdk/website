@@ -875,7 +875,12 @@ const CHART_SCRIPTS = [
     "https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1",
 ];
 const HISTORY_SERIES = [
-    { field: "followers", label: "Подписчики", color: "#ed6a2d", hidden: false },
+    {
+        field: "followers",
+        label: "Подписчики",
+        color: "#ed6a2d",
+        hidden: false,
+    },
     { field: "following", label: "Подписки", color: "#fbeadb", hidden: true },
     { field: "posts", label: "Посты", color: "#88B369", hidden: true },
 ];
@@ -904,7 +909,12 @@ const gap_labels = {
         const { ctx, chartArea } = chart;
         ctx.save();
         ctx.beginPath();
-        ctx.rect(chartArea.left, chartArea.top, chartArea.width, chartArea.height);
+        ctx.rect(
+            chartArea.left,
+            chartArea.top,
+            chartArea.width,
+            chartArea.height,
+        );
         ctx.clip();
         ctx.font = "12px Jost";
         ctx.textAlign = "center";
@@ -922,7 +932,10 @@ const gap_labels = {
                 const x = (elements[i - 1].x + elements[i].x) / 2;
                 const middle = (elements[i - 1].y + elements[i].y) / 2;
                 // above the line, below it when the top of the chart is too close
-                const y = middle - 12 < chartArea.top + 10 ? middle + 12 : middle - 12;
+                const y =
+                    middle - 12 < chartArea.top + 10
+                        ? middle + 12
+                        : middle - 12;
                 if (x < chartArea.left || x > chartArea.right) {
                     continue;
                 }
@@ -1021,7 +1034,9 @@ function render_dialog_history(history, user) {
     }
     const has_gap = points.some((_, i) => gap_before(points, i));
     if (has_gap) {
-        notes.push("Пунктир — период без данных, линия только соединяет соседние точки");
+        notes.push(
+            "Пунктир — период без данных, линия только соединяет соседние точки",
+        );
         note.textContent = notes.join(". ");
         note.hidden = false;
     }
@@ -1042,7 +1057,8 @@ function render_dialog_history(history, user) {
                 borderWidth: 2,
                 pointRadius: 2,
                 segment: {
-                    borderDash: (context) => (is_gap(context) ? [5, 5] : undefined),
+                    borderDash: (context) =>
+                        is_gap(context) ? [5, 5] : undefined,
                     borderColor: (context) =>
                         is_gap(context) ? GAP_COLOR : undefined,
                 },
@@ -1055,7 +1071,11 @@ function render_dialog_history(history, user) {
             interaction: { mode: "nearest", axis: "x", intersect: false },
             plugins: {
                 legend: {
-                    labels: { color: "#bbb", usePointStyle: true, pointStyle: "dash" },
+                    labels: {
+                        color: "#bbb",
+                        usePointStyle: true,
+                        pointStyle: "dash",
+                    },
                     // the series toggle on click, the cursor says so
                     onHover: (event) => {
                         event.native.target.style.cursor = "pointer";
@@ -1073,7 +1093,10 @@ function render_dialog_history(history, user) {
                                 : date;
                         },
                         footer: (items) => {
-                            const since = gap_before(points, items[0].dataIndex);
+                            const since = gap_before(
+                                points,
+                                items[0].dataIndex,
+                            );
                             return since
                                 ? `Перед этим данных нет с ${format_date(since)}`
                                 : "";
@@ -1087,7 +1110,11 @@ function render_dialog_history(history, user) {
                     max: Date.now(),
                     adapters: { date: { locale: "ru" } },
                     grid: { color: "#3a3532" },
-                    ticks: { color: "#bbb", maxRotation: 0, autoSkipPadding: 20 },
+                    ticks: {
+                        color: "#bbb",
+                        maxRotation: 0,
+                        autoSkipPadding: 20,
+                    },
                 },
                 y: {
                     grid: { color: "#3a3532" },
@@ -1132,7 +1159,8 @@ function clean_bio(bio) {
 function render_profile_change({ field, old, new: value }) {
     const line = create("div", "profile-change");
     if (field == "bio" || field == "banner") {
-        const empty = field == "bio" ? !clean_bio(value) : !banner_background(value);
+        const empty =
+            field == "bio" ? !clean_bio(value) : !banner_background(value);
         if (empty) {
             line.append(PROFILE_REMOVED[field]);
             return line;
@@ -1150,7 +1178,11 @@ function render_profile_change({ field, old, new: value }) {
         return line;
     }
     const shown = (text) =>
-        field == "username" ? "@" + text : field == "avatar" ? text + "\uFE0F" : text;
+        field == "username"
+            ? "@" + text
+            : field == "avatar"
+              ? text + "\uFE0F"
+              : text;
     line.append(`${PROFILE_CHANGED[field]}: `);
     if (old) {
         line.append(create("span", "profile-change-old", shown(old)), " → ");
@@ -1166,17 +1198,31 @@ function render_profile_initial(initial) {
     banner.style.backgroundImage = banner_background(initial.banner);
     const identity = create("div", "profile-initial-identity");
     identity.append(
-        create("div", "profile-initial-avatar", (initial.avatar ?? "?") + "\uFE0F"),
+        create(
+            "div",
+            "profile-initial-avatar",
+            (initial.avatar ?? "?") + "\uFE0F",
+        ),
     );
     const names = create("div", "profile-initial-names");
     names.append(
-        create("div", "profile-initial-display-name", initial.display_name ?? ""),
-        create("div", "profile-initial-username", "@" + (initial.username ?? "")),
+        create(
+            "div",
+            "profile-initial-display-name",
+            initial.display_name ?? "",
+        ),
+        create(
+            "div",
+            "profile-initial-username",
+            "@" + (initial.username ?? ""),
+        ),
     );
     identity.append(names);
     box.append(banner, identity);
     if (clean_bio(initial.bio)) {
-        box.append(create("div", "profile-initial-bio", clean_bio(initial.bio)));
+        box.append(
+            create("div", "profile-initial-bio", clean_bio(initial.bio)),
+        );
     }
     return box;
 }
@@ -1215,7 +1261,8 @@ async function open_profile_dialog() {
             timeline.append(item);
         }
         get_el("profile-dialog-empty").hidden = json.events.length > 0;
-        get_el("profile-initial-date").textContent = `[${short_date(json.initial.t)}]`;
+        get_el("profile-initial-date").textContent =
+            `[${short_date(json.initial.t)}]`;
         initial.append(render_profile_initial(json.initial));
     } catch (error) {
         console.warn("profile history request failed", error);
@@ -1413,7 +1460,10 @@ function init_user_dialog() {
     get_el("dialog-close").addEventListener("click", close_user_dialog);
     get_el("dialog-refresh").addEventListener("click", refresh_dialog_user);
     // get_el("dialog-download").addEventListener("click", download_dialog_card);
-    get_el("dialog-profile-history").addEventListener("click", open_profile_dialog);
+    get_el("dialog-profile-history").addEventListener(
+        "click",
+        open_profile_dialog,
+    );
     const profile_dialog = get_el("profile-dialog");
     get_el("profile-dialog-close").addEventListener("click", () =>
         profile_dialog.close(),

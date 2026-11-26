@@ -265,9 +265,7 @@ class HistoryResponse(BaseModel):
 
 @router.get("/{id}/history", response_model=HistoryResponse)
 @get_limiter().limit("20/minute")
-def api_get_ebdi_user_history(
-    request: Request, id: int, db: Session = Depends(get_db)
-):
+def api_get_ebdi_user_history(request: Request, id: int, db: Session = Depends(get_db)):
     user = db.query(User).where(User.id == id).first()
     if not user:
         return JSONResponse({"detail": "user not found"}, 404)

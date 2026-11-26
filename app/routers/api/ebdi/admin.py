@@ -305,9 +305,7 @@ def api_delete_ebdi_admin_task(request: Request, task_id: int):
 
 
 @router.put(
-    "/weights",
-    response_model=dict[str, int],
-    dependencies=[Depends(require_admin)]
+    "/weights", response_model=dict[str, int], dependencies=[Depends(require_admin)]
 )
 @get_limiter().exempt
 def api_put_ebdi_admin_weights(

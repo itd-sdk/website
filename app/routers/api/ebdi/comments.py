@@ -133,9 +133,7 @@ def api_get_ebdi_comments(
         query = query.where(Post.exists.is_(True))
     if not replies:
         query = query.where(Comment.parent_id.is_(None))
-    for condition in attachment_filter(
-        Comment.attachments, text, photo, video, audio
-    ):
+    for condition in attachment_filter(Comment.attachments, text, photo, video, audio):
         query = query.where(condition)
     if q.strip():
         query = query.where(
@@ -234,9 +232,7 @@ def placed_before(sort: ThreadSort, comment: Comment):
     column = THREAD_COLUMNS[sort]
     value = getattr(comment, column.key)
     if value is None:
-        return or_(
-            column.is_not(None), and_(column.is_(None), Comment.id > comment.id)
-        )
+        return or_(column.is_not(None), and_(column.is_(None), Comment.id > comment.id))
     return or_(column > value, and_(column == value, Comment.id > comment.id))
 
 
