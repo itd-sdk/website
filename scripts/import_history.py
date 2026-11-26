@@ -89,8 +89,11 @@ class Problems:
 
 USERS_TABLE = r'(?:"?\w+"?\.)?"?users"?'
 COPY_RE = re.compile(rf"COPY {USERS_TABLE} \((.+)\) FROM stdin;", re.IGNORECASE)
+# Neon writes "overriding system value" between the columns and VALUES
 INSERT_RE = re.compile(
-    rf"INSERT INTO {USERS_TABLE}\s*(?:\(([^)]*)\))?\s*VALUES\s*", re.IGNORECASE
+    rf"\s*INSERT INTO {USERS_TABLE}\s*(?:\(([^)]*)\))?\s*"
+    r"(?:OVERRIDING (?:SYSTEM|USER) VALUE\s*)?VALUES\s*",
+    re.IGNORECASE
 )
 CREATE_RE = re.compile(
     rf"CREATE TABLE (?:IF NOT EXISTS )?{USERS_TABLE}\s*\(", re.IGNORECASE
