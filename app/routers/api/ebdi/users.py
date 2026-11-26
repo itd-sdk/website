@@ -330,6 +330,10 @@ class ProfileState(BaseModel):
     avatar: str | None = None  # the clan never changes, it is the current one
     bio: str | None = None
     banner: str | None = None
+    # from the earliest counter snapshot
+    followers: int | None = None
+    following: int | None = None
+    posts: int | None = None
 
 
 class ProfileHistoryResponse(BaseModel):
@@ -350,6 +354,17 @@ def api_get_ebdi_user_profile_history(
     if not user:
         return JSONResponse({"detail": "user not found"}, 404)
 
+    first_counters = (
+        db.query(UserSnapshot)
+        .where(UserSnapshot.user_id == user.user_id)
+        .order_by(UserSnapshot.recorded_at)
+        .first()
+    )
+    counters = {
+        "followers": (first_counters or user).followers_count,
+        "following": (first_counters or user).following_count,
+        "posts": (first_counters or user).posts_count
+    }
     snapshots = (
         db.query(UserProfileSnapshot)
         .where(UserProfileSnapshot.user_id == user.user_id)
@@ -358,7 +373,9 @@ def api_get_ebdi_user_profile_history(
     )
     if not snapshots:
         current = {field: getattr(user, field) for field in PROFILE_FIELDS}
-        initial = ProfileState(t=user.updated_at, avatar=user.avatar, **current)
+        initial = ProfileState(
+            t=user.updated_at, avatar=user.avatar, **current, **counters
+        )
         return ProfileHistoryResponse(events=[], initial=initial)
 
     known: dict[str, str | None] = {}
@@ -379,7 +396,9 @@ def api_get_ebdi_user_profile_history(
         if changes:
             events.append(ProfileEvent(t=snapshot.recorded_at, changes=changes))
     events.reverse()
-    initial = ProfileState(t=snapshots[0].recorded_at, avatar=user.avatar, **first)
+    initial = ProfileState(
+        t=snapshots[0].recorded_at, avatar=user.avatar, **first, **counters
+    )
     return ProfileHistoryResponse(events=events, initial=initial)
 
 

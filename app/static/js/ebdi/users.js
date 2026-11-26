@@ -1208,6 +1208,25 @@ function render_profile_initial(initial) {
             create("div", "profile-initial-bio", clean_bio(initial.bio)),
         );
     }
+    const counters = create("div", "profile-initial-counters");
+    for (const [field, label] of [
+        ["followers", "Подписчики"],
+        ["following", "Подписки"],
+        ["posts", "Посты"],
+    ]) {
+        if (initial[field] == null) {
+            continue;
+        }
+        const item = create("div", "profile-initial-counter");
+        item.append(
+            create("b", null, format_number(initial[field])),
+            create("span", null, label),
+        );
+        counters.append(item);
+    }
+    if (counters.children.length) {
+        box.append(counters);
+    }
     return box;
 }
 
