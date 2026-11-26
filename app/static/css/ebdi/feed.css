@@ -183,6 +183,11 @@
     display: none;
 }
 
+#post-dialog-open img {
+    width: 16px;
+    height: 16px;
+}
+
 .feed-search-clear {
     width: 36px;
     height: 36px;

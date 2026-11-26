@@ -1175,7 +1175,7 @@ function build_dialog() {
     close.setAttribute("aria-label", "Закрыть");
     close.append(icon_image("close"));
     close.addEventListener("click", close_dialog);
-    const open = create("a", "dialog-action");
+    const open = create("button", "dialog-action");
     open.id = "post-dialog-open";
     open.target = "_blank";
     open.rel = "noopener noreferrer";
