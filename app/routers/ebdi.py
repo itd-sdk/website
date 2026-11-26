@@ -1,14 +1,14 @@
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.schemas import Epepuy
 from app.services.db import get_db
+from app.services.templates import get_templates
 
 router = APIRouter(prefix="/ebdi")
-templates = Jinja2Templates(directory="app/templates/")
+templates = get_templates()
 
 
 @router.get("/")

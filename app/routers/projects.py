@@ -1,9 +1,10 @@
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.templating import Jinja2Templates
 from jinja2.exceptions import TemplateNotFound
 
+from app.services.templates import get_templates
+
 router = APIRouter(prefix="/projects")
-templates = Jinja2Templates(directory="app/templates/")
+templates = get_templates()
 
 
 @router.get("")

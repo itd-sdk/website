@@ -2,9 +2,9 @@
 {% set active_tab = "posts" %}
 
 {% block ebdi_head %}
-<link rel="stylesheet" href="/static/css/ebdi/feed.css">
+<link rel="stylesheet" href="{{ static('css/ebdi/feed.css') }}">
 <script src="https://unpkg.com/wavesurfer.js@8"></script>
-<script src="/static/js/ebdi/feed.js" data-kind="posts"></script>
+<script src="{{ static('js/ebdi/feed.js') }}" data-kind="posts"></script>
 <meta name="description" content="Единая База Данных ИТД: лента постов, самые популярные посты по лайкам, репостам, комментариям и просмотрам">
 {% endblock %}
 

@@ -2,9 +2,9 @@
 {% set active_tab = "comments" %}
 
 {% block ebdi_head %}
-<link rel="stylesheet" href="/static/css/ebdi/feed.css">
+<link rel="stylesheet" href="{{ static('css/ebdi/feed.css') }}">
 <script src="https://unpkg.com/wavesurfer.js@8"></script>
-<script src="/static/js/ebdi/feed.js" data-kind="comments"></script>
+<script src="{{ static('js/ebdi/feed.js') }}" data-kind="comments"></script>
 <meta name="description" content="Единая База Данных ИТД: комментарии, поиск по комментариям и пользователям">
 {% endblock %}
 

@@ -2,11 +2,11 @@
 {% set active_tab = "stats" %}
 
 {% block ebdi_head %}
-<link rel="stylesheet" href="/static/css/ebdi/stats.css">
+<link rel="stylesheet" href="{{ static('css/ebdi/stats.css') }}">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <script src="https://cdn.jsdelivr.net/npm/luxon@3"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1"></script>
-<script src="/static/js/ebdi/stats.js"></script>
+<script src="{{ static('js/ebdi/stats.js') }}"></script>
 <meta name="description" content="Единая База Данных ИТД: статистика пользователей, графики роста, распределение подписчиков">
 {% endblock %}
 
