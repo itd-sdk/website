@@ -200,7 +200,7 @@ def get_last_seen(db: Session) -> list[LastSeenShare]:
     )
     rows = {value: count for value, count in rows}
     return [
-        LastSeenShare(last_seen=None, count=rows[None]),
+        LastSeenShare(last_seen=None, count=rows.get(None, 0)),
         LastSeenShare(
             last_seen="На этой неделе",
             count=rows.get("recently", 0)
