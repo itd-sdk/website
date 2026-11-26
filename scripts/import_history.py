@@ -14,6 +14,10 @@ path@YYYY-MM-DD). A snapshot is written only when a user's counters or
 existence changed compared to the previous backup, so the result is the same
 set of points that live tracking would have produced. Running the script
 again does not duplicate anything.
+
+A truncated dump (pg_restore fails with "end of file") is read up to where it
+breaks, its last, possibly cut row is dropped; broken rows are skipped and
+counted in the summary.
 """
 
 import re
@@ -47,7 +51,23 @@ def backup_date(path: Path, override: str | None) -> datetime:
     return datetime.fromtimestamp(path.stat().st_mtime)
 
 
-def parse_copy(lines: Iterator[str]) -> Iterator[Row]:
+class Problems:
+    """What went wrong while reading one backup, reported in its summary line"""
+
+    def __init__(self) -> None:
+        self.broken = 0
+        self.truncated = False
+
+    def __str__(self) -> str:
+        notes = []
+        if self.truncated:
+            notes.append("file is truncated, read up to the break")
+        if self.broken:
+            notes.append(f"{self.broken} broken rows skipped")
+        return f" ({'; '.join(notes)})" if notes else ""
+
+
+def parse_copy(lines: Iterator[str], problems: Problems) -> Iterator[Row]:
     """Rows of the users table from pg_dump COPY text"""
     columns = None
     for line in lines:
@@ -61,30 +81,41 @@ def parse_copy(lines: Iterator[str]) -> Iterator[Row]:
             return
         # the fields we read never contain escaped characters, a plain split is enough
         values = [None if v == "\\N" else v for v in line.split("\t")]
+        if len(values) != len(columns):
+            problems.broken += 1
+            continue
         yield dict(zip(columns, values))
     if columns is None:
         raise ValueError("no COPY data for the users table (dumped with --inserts?)")
 
 
-def read_pg_custom(path: Path) -> Iterator[Row]:
+def read_pg_custom(path: Path, problems: Problems) -> Iterator[Row]:
     process = subprocess.Popen(
         ["pg_restore", "--data-only", "--table=users", "--file=-", str(path)],
         stdout=subprocess.PIPE,
         text=True
     )
     assert process.stdout
-    yield from parse_copy(process.stdout)
+    # one row is held back: if pg_restore fails, the last row may be cut short
+    last = None
+    for row in parse_copy(process.stdout, problems):
+        if last is not None:
+            yield last
+        last = row
     process.stdout.close()
     if process.wait() != 0:
-        raise RuntimeError(f"pg_restore failed for {path}")
+        problems.truncated = True
+        return
+    if last is not None:
+        yield last
 
 
-def read_pg_plain(path: Path) -> Iterator[Row]:
+def read_pg_plain(path: Path, problems: Problems) -> Iterator[Row]:
     with open(path, encoding="utf-8") as file:
-        yield from parse_copy(file)
+        yield from parse_copy(file, problems)
 
 
-def read_sqlite(path: Path) -> Iterator[Row]:
+def read_sqlite(path: Path, problems: Problems) -> Iterator[Row]:
     connection = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
     try:
         cursor = connection.execute("SELECT * FROM users")
@@ -95,14 +126,14 @@ def read_sqlite(path: Path) -> Iterator[Row]:
         connection.close()
 
 
-def read_rows(path: Path) -> Iterator[Row]:
+def read_rows(path: Path, problems: Problems) -> Iterator[Row]:
     suffix = path.suffix.lower()
     if suffix in (".dump", ".backup"):
-        return read_pg_custom(path)
+        return read_pg_custom(path, problems)
     if suffix == ".sql":
-        return read_pg_plain(path)
+        return read_pg_plain(path, problems)
     if suffix in (".db", ".sqlite", ".sqlite3"):
-        return read_sqlite(path)
+        return read_sqlite(path, problems)
     raise ValueError(f"unknown backup type: {path}")
 
 
@@ -158,7 +189,8 @@ def main(args: list[str]) -> None:
     with Session(engine) as db:
         before = db.scalar(select(func.count()).select_from(UserSnapshot))
         for date, path in backups:
-            rows = read_rows(path)
+            problems = Problems()
+            rows = read_rows(path, problems)
             pending = []
             read = changed = 0
             columns = None
@@ -174,17 +206,21 @@ def main(args: list[str]) -> None:
                 read += 1
                 if not row.get("user_id"):
                     continue
-                user_id = UUID(str(row["user_id"]))
-                recorded_at = to_local(row.get("updated_at"), date)
+                try:
+                    user_id = UUID(str(row["user_id"]))
+                    recorded_at = to_local(row.get("updated_at"), date)
+                    state = (
+                        int(row[names["followers"]] or 0),
+                        int(row[names["following"]] or 0),
+                        int(row[names["posts"]] or 0),
+                        to_bool(row.get("exists"))
+                    )
+                except ValueError:
+                    problems.broken += 1
+                    continue
                 # rows older than what an earlier backup already had add nothing
                 if user_id in last_time and recorded_at <= last_time[user_id]:
                     continue
-                state = (
-                    int(row[names["followers"]] or 0),
-                    int(row[names["following"]] or 0),
-                    int(row[names["posts"]] or 0),
-                    to_bool(row.get("exists"))
-                )
                 last_time[user_id] = recorded_at
                 if last_state.get(user_id) == state:
                     continue
@@ -206,7 +242,10 @@ def main(args: list[str]) -> None:
             insert_batch(db, pending)
             db.commit()
             total += changed
-            print(f"{path.name} ({date:%Y-%m-%d}): {read} users, {changed} changes")
+            print(
+                f"{path.name} ({date:%Y-%m-%d}): {read} users, {changed} changes"
+                f"{problems}"
+            )
         after = db.scalar(select(func.count()).select_from(UserSnapshot))
     print(f"done: {total} changes found, {after - before} new snapshots written")
 
