@@ -1331,20 +1331,65 @@ const THREAD_SORTS = {
 };
 let thread_sort = "new";
 
+// a compact dropdown in the look of the feed sort
 function render_thread_sort(on_change) {
     const box = create("div", "thread-sort");
+    const button = create("button", "thread-sort-button");
+    button.type = "button";
+    button.setAttribute("aria-haspopup", "listbox");
+    button.setAttribute("aria-expanded", "false");
+    button.append(create("span", null, THREAD_SORTS[thread_sort]));
+    button.append(icon_image("arrow"));
+    const list = create("div", "thread-sort-options");
+    list.setAttribute("role", "listbox");
+    list.hidden = true;
+    const toggle = (open) => {
+        list.hidden = !open;
+        button.setAttribute("aria-expanded", open);
+        if (open) {
+            list.querySelector("[aria-selected=true]")?.focus();
+        }
+    };
     for (const [value, label] of Object.entries(THREAD_SORTS)) {
-        const tab = create("button", "thread-sort-tab", label);
-        tab.type = "button";
-        tab.classList.toggle("thread-sort-active", value == thread_sort);
-        tab.addEventListener("click", () => {
+        const option = create("div", null, label);
+        option.setAttribute("role", "option");
+        option.setAttribute("aria-selected", value == thread_sort);
+        option.tabIndex = -1;
+        option.addEventListener("click", () => {
+            toggle(false);
             if (value != thread_sort) {
                 thread_sort = value;
                 on_change();
             }
         });
-        box.append(tab);
+        list.append(option);
     }
+    button.addEventListener("click", () => toggle(list.hidden));
+    list.addEventListener("keydown", (event) => {
+        const options = [...list.children];
+        const index = options.indexOf(document.activeElement);
+        if (event.key == "ArrowDown" || event.key == "ArrowUp") {
+            event.preventDefault();
+            const step = event.key == "ArrowDown" ? 1 : -1;
+            options[(index + step + options.length) % options.length].focus();
+        } else if (event.key == "Enter" || event.key == " ") {
+            event.preventDefault();
+            document.activeElement.click();
+        } else if (event.key == "Escape") {
+            // the dialog itself would close on Escape
+            event.preventDefault();
+            event.stopPropagation();
+            toggle(false);
+            button.focus();
+        }
+    });
+    // closes when the focus leaves it, a click elsewhere in the dialog included
+    box.addEventListener("focusout", (event) => {
+        if (!box.contains(event.relatedTarget)) {
+            toggle(false);
+        }
+    });
+    box.append(button, list);
     return box;
 }
 
@@ -1354,15 +1399,17 @@ function open_post_dialog(post, { card = null, focus = null } = {}) {
         post_url(post.post_id, post.author, post.author_id),
     );
     scroll.append(render_post(post, false, true));
-    scroll.append(
+    const head = create("div", "post-dialog-comments-head");
+    head.append(
         create(
             "div",
             "dialog-section-title",
             `Комментарии (${format_number(post.comments_count)})`,
         ),
+        // another order starts the thread over from its top
+        render_thread_sort(() => open_post_dialog(post, { card })),
     );
-    // another order starts the thread over from its top
-    scroll.append(render_thread_sort(() => open_post_dialog(post, { card })));
+    scroll.append(head);
     const top_sentinel = create("div", "sentinel");
     const list = create("div", "post-dialog-comments");
     const empty = create("div", "post-dialog-empty", "Комментариев в базе нет");
