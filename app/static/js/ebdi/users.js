@@ -1089,9 +1089,7 @@ function render_dialog_history(history, user) {
                                 points,
                                 items[0].dataIndex,
                             );
-                            return since
-                                ? `Перед этим данных нет с ${format_date(since)}`
-                                : "";
+                            return "";
                         },
                     },
                 },

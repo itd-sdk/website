@@ -160,13 +160,15 @@
         </div>
         <div id="dialog-ranks"></div>
 
-        <div class="dialog-section-title">История</div>
-        <div id="dialog-history">
+        <div class="dialog-section-title" id="dialog-history-title">
+            <span>История</span>
             <div id="dialog-history-range" hidden>
                 <button type="button" class="history-range-tab" data-months="3">3 мес</button>
                 <button type="button" class="history-range-tab" data-months="6">6 мес</button>
                 <button type="button" class="history-range-tab" data-months="0">Все</button>
             </div>
+        </div>
+        <div id="dialog-history">
             <div id="dialog-history-chart"><canvas id="dialog-history-canvas"></canvas></div>
             <div id="dialog-history-note" hidden></div>
         </div>
