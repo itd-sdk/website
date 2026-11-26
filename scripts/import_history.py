@@ -17,6 +17,10 @@ compared to the previous backup, so the result is the same set of points that
 live tracking would have produced. Running the script again does not
 duplicate anything.
 
+The username, name, clan, bio and banner are tracked the same way into
+user_profile_snapshots; a field the backup has no column for (old schemas have
+no bio and banner) is not a change.
+
 A truncated dump (pg_restore fails with "end of file") is read up to where it
 breaks, its last, possibly cut row is dropped; broken rows are skipped and
 counted in the summary.
@@ -37,7 +41,8 @@ from sqlalchemy import create_engine, func, inspect, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from app.schemas import UserSnapshot
+from app.schemas import UserProfileSnapshot, UserSnapshot
+from app.services.history import PROFILE_FIELDS
 
 BATCH = 5000
 State = tuple[int, int, int, bool]
@@ -362,19 +367,23 @@ def main(args: list[str]) -> None:
     backups.sort()
 
     engine = create_engine(getenv("DATABASE_URL", ""))
-    if not inspect(engine).has_table("user_snapshots"):
-        sys.exit("user_snapshots table is missing, run `alembic upgrade head` first")
+    for table in ("user_snapshots", "user_profile_snapshots"):
+        if not inspect(engine).has_table(table):
+            sys.exit(f"{table} table is missing, run `alembic upgrade head` first")
 
     last_state: dict[UUID, State] = {}
     last_time: dict[UUID, datetime] = {}
-    total = 0
+    # hashes of the last known profile fields keep the memory small: bios are long
+    last_profile: dict[UUID, dict[str, int]] = {}
+    total = profile_total = 0
     with Session(engine) as db:
         before = db.scalar(select(func.count()).select_from(UserSnapshot))
         for date, path in backups:
             problems = Problems()
             rows = read_rows(path, problems)
             pending = []
-            read = changed = 0
+            pending_profiles = []
+            read = changed = profile_changed = 0
             columns = None
             for row in rows:
                 if columns is None:
@@ -385,6 +394,7 @@ def main(args: list[str]) -> None:
                     }
                     if None in names.values():
                         raise ValueError(f"{path}: no counters in {sorted(columns)}")
+                    profile_fields = [f for f in PROFILE_FIELDS if f in columns]
                 read += 1
                 if not row.get("user_id"):
                     continue
@@ -404,38 +414,70 @@ def main(args: list[str]) -> None:
                 if user_id in last_time and recorded_at <= last_time[user_id]:
                     continue
                 last_time[user_id] = recorded_at
-                if last_state.get(user_id) == state:
-                    continue
-                last_state[user_id] = state
-                changed += 1
-                pending.append(
-                    {
-                        "user_id": user_id,
-                        "recorded_at": recorded_at,
-                        "followers_count": state[0],
-                        "following_count": state[1],
-                        "posts_count": state[2],
-                        "exists": state[3]
-                    }
-                )
+                if last_state.get(user_id) != state:
+                    last_state[user_id] = state
+                    changed += 1
+                    pending.append(
+                        {
+                            "user_id": user_id,
+                            "recorded_at": recorded_at,
+                            "followers_count": state[0],
+                            "following_count": state[1],
+                            "posts_count": state[2],
+                            "exists": state[3]
+                        }
+                    )
+                profile = {
+                    field: profile_value(field, row[field]) for field in profile_fields
+                }
+                hashes = {field: hash(value) for field, value in profile.items()}
+                known = last_profile.get(user_id, {})
+                if any(known.get(field) != value for field, value in hashes.items()):
+                    last_profile[user_id] = known | hashes
+                    profile_changed += 1
+                    pending_profiles.append(
+                        {
+                            "user_id": user_id,
+                            "recorded_at": recorded_at,
+                            "data": profile
+                        }
+                    )
                 if len(pending) >= BATCH:
-                    insert_batch(db, pending)
+                    insert_batch(db, UserSnapshot, pending)
                     pending.clear()
-            insert_batch(db, pending)
+                if len(pending_profiles) >= BATCH:
+                    insert_batch(db, UserProfileSnapshot, pending_profiles)
+                    pending_profiles.clear()
+            insert_batch(db, UserSnapshot, pending)
+            insert_batch(db, UserProfileSnapshot, pending_profiles)
             db.commit()
             total += changed
+            profile_total += profile_changed
             print(
-                f"{path.name} ({date:%Y-%m-%d}): {read} users, {changed} changes"
-                f"{problems}"
+                f"{path.name} ({date:%Y-%m-%d}): {read} users, {changed} changes, "
+                f"{profile_changed} profile changes{problems}"
             )
         after = db.scalar(select(func.count()).select_from(UserSnapshot))
-    print(f"done: {total} changes found, {after - before} new snapshots written")
+    print(
+        f"done: {total} changes and {profile_total} profile changes found, "
+        f"{after - before} new counter snapshots written"
+    )
 
 
-def insert_batch(db: Session, rows: list[dict]) -> None:
+def profile_value(field: str, value) -> str | None:
+    if value is None:
+        return None
+    value = str(value)
+    if field == "avatar":
+        # older backups kept the emoji variation selectors
+        value = value.replace("\ufe0e", "").replace("\ufe0f", "")
+    return value
+
+
+def insert_batch(db: Session, model, rows: list[dict]) -> None:
     if rows:
         db.execute(
-            insert(UserSnapshot)
+            insert(model)
             .values(rows)
             .on_conflict_do_nothing(index_elements=["user_id", "recorded_at"])
         )
