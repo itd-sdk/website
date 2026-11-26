@@ -226,12 +226,15 @@ function render_user(user) {
         display_name.appendChild(icon);
     }
     node.querySelector(".user-username").textContent = "@" + user.username;
-    node.querySelector(".user-followers").textContent =
-        new Intl.NumberFormat().format(user.followers_count);
-    node.querySelector(".user-following").textContent =
-        new Intl.NumberFormat().format(user.following_count);
-    node.querySelector(".user-posts").textContent =
-        new Intl.NumberFormat().format(user.posts_count);
+    node.querySelector(".user-followers").textContent = format_number(
+        user.followers_count,
+    );
+    node.querySelector(".user-following").textContent = format_number(
+        user.following_count,
+    );
+    node.querySelector(".user-posts").textContent = format_number(
+        user.posts_count,
+    );
     node.querySelector(".user-created-at").textContent = user.created_at
         ? new Date(user.created_at)
               .toLocaleString("ru-RU", {
@@ -270,7 +273,8 @@ const STYLE_RE = /ebdi:(border|art):([a-z0-9-]{1,16})/gi;
 const STYLE_STRIP_RE = /\s*ebdi:(?:border|art):[a-z0-9-]{1,16}/gi;
 
 function apply_style(node, bio) {
-    if (!bio) return;
+    // borders and arts of the users can be turned off in the settings
+    if (!bio || !ebdi_settings.values.user_styles) return;
     for (const [, slot, raw] of bio.matchAll(STYLE_RE)) {
         const value = raw.toLowerCase();
         if (slot == "border" && BORDERS.has(value)) node.dataset.border = value;
@@ -628,7 +632,7 @@ async function jump_to_user(user) {
 }
 
 function format_number(value) {
-    return new Intl.NumberFormat("ru-RU").format(value);
+    return ebdi_settings.format_count(value);
 }
 
 function format_date(value) {
@@ -674,7 +678,7 @@ function render_dialog_header(user) {
     const has_banner =
         typeof user.banner == "string" && /^https?:\/\//.test(user.banner);
     banner.style.backgroundImage = has_banner
-        ? `linear-gradient(to bottom, #1e1c1a00, #1e1c1a88), url("${encodeURI(user.banner)}")`
+        ? `linear-gradient(to bottom, transparent, color-mix(in srgb, var(--bg) 53%, transparent)), url("${encodeURI(user.banner)}")`
         : "";
 
     const avatar = get_el("dialog-avatar");
@@ -851,11 +855,16 @@ const CHART_SCRIPTS = [
 ];
 const HISTORY_SERIES = [
     { field: "followers", label: "Подписчики", color: "#ed6a2d", hidden: false },
-    { field: "following", label: "Подписки", color: "#fbeadb", hidden: true },
+    { field: "following", label: "Подписки", color: "--text-warm", hidden: true },
     { field: "posts", label: "Посты", color: "#88B369", hidden: true },
 ];
 let chart_scripts = null;
 let history_chart = null;
+
+// a color or the name of a theme variable, the chart is drawn on a canvas
+function chart_color(color) {
+    return color.startsWith("--") ? ebdi_settings.css_var(color) : color;
+}
 
 function load_script(src) {
     return new Promise((resolve, reject) => {
@@ -909,8 +918,8 @@ function render_dialog_history(history) {
                     x: new Date(point.t).getTime(),
                     y: point[series.field],
                 })),
-                borderColor: series.color,
-                backgroundColor: series.color,
+                borderColor: chart_color(series.color),
+                backgroundColor: chart_color(series.color),
                 hidden: series.hidden,
                 borderWidth: 2,
                 pointRadius: 2,
@@ -923,7 +932,11 @@ function render_dialog_history(history) {
             interaction: { mode: "nearest", axis: "x", intersect: false },
             plugins: {
                 legend: {
-                    labels: { color: "#bbb", usePointStyle: true, pointStyle: "dash" },
+                    labels: {
+                        color: chart_color("--text-muted"),
+                        usePointStyle: true,
+                        pointStyle: "dash",
+                    },
                 },
                 tooltip: {
                     callbacks: { title: (items) => format_date(items[0].parsed.x) },
@@ -933,12 +946,16 @@ function render_dialog_history(history) {
                 x: {
                     type: "time",
                     adapters: { date: { locale: "ru" } },
-                    grid: { color: "#3a3532" },
-                    ticks: { color: "#bbb", maxRotation: 0, autoSkipPadding: 20 },
+                    grid: { color: chart_color("--chart-grid") },
+                    ticks: {
+                        color: chart_color("--text-muted"),
+                        maxRotation: 0,
+                        autoSkipPadding: 20,
+                    },
                 },
                 y: {
-                    grid: { color: "#3a3532" },
-                    ticks: { color: "#bbb", precision: 0 },
+                    grid: { color: chart_color("--chart-grid") },
+                    ticks: { color: chart_color("--text-muted"), precision: 0 },
                 },
             },
         },
@@ -1231,6 +1248,20 @@ function observe_controls_stick() {
 
     observer.observe(get_el("controls-box"));
 }
+
+// numbers, borders and the chart colors are drawn into the rows and the dialog
+window.addEventListener("ebdi-settings", (event) => {
+    if (["compact_numbers", "user_styles", "theme"].includes(event.detail.key)) {
+        // the loaded rows are drawn anew in place, the scroll position stays
+        for (const user of users_by_id.values()) {
+            update_row(user);
+        }
+        fetch_count();
+        if (dialog_user && get_el("user-dialog").open) {
+            open_user_dialog(dialog_user);
+        }
+    }
+});
 
 document.addEventListener("DOMContentLoaded", async () => {
     user_template = get_el("user-template");

@@ -6,7 +6,7 @@
 }
 
 .chart-card {
-    background-color: #2c2a27;
+    background-color: var(--surface);
     padding: 20px;
     display: flex;
     flex-direction: column;
@@ -16,12 +16,12 @@
 .chart-title {
     font-size: 18px;
     font-weight: 700;
-    color: #fbeadb;
+    color: var(--text-warm);
 }
 
 .chart-description {
     font-size: 13px;
-    color: #999;
+    color: var(--text-dim);
     margin-bottom: 12px;
 }
 
@@ -51,7 +51,7 @@
 .chart-tab {
     padding: 6px 14px;
     font-size: 14px;
-    color: #bbb;
+    color: var(--text-muted);
     text-decoration: none;
     white-space: nowrap;
     transition:
@@ -60,12 +60,12 @@
 }
 
 .chart-tab:hover {
-    background-color: #3e3b37;
+    background-color: var(--control);
 }
 
 .chart-tab-active {
-    background-color: #3e3b37;
-    color: #fbeadb;
+    background-color: var(--control);
+    color: var(--text-warm);
     border-bottom: #eb5e1b solid 2px;
 }
 
@@ -89,7 +89,7 @@
 }
 
 .word:hover {
-    color: #fbeadb !important;
+    color: var(--text-warm) !important;
 }
 
 canvas {

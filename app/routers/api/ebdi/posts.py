@@ -7,8 +7,7 @@ from itd import Post as ItdPost
 from itd.enums import ALL
 from itd.exceptions import NotFoundError, TargetUserBannedError
 from pydantic import BaseModel
-from sqlalchemy import cast, desc, exists, false, func, or_, select
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import desc, exists, false, func, or_, select
 from sqlalchemy.orm import aliased
 
 from app.logger import get_logger
@@ -242,7 +241,6 @@ def api_get_ebdi_posts(
     q: str = Query("", max_length=200),  # text in the content
     user: str = Query("", max_length=100),  # author's username
     deleted: bool = False,
-    marks: bool = False,  # only posts with red pens or correctors
     text: bool = True,  # posts without attachments
     photo: bool = True,  # posts with attachments of these kinds
     video: bool = True,
@@ -255,10 +253,6 @@ def api_get_ebdi_posts(
     query = posts_with_users(db)
     if not deleted:
         query = query.where(Post.exists.is_(True))
-    if marks:
-        query = query.where(
-            or_(Post.red_pens != cast([], JSONB), Post.correctors != cast([], JSONB))
-        )
     for condition in attachment_filter(Post.attachments, text, photo, video, audio):
         query = query.where(condition)
     if q.strip():

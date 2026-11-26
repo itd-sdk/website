@@ -10,7 +10,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    color: #fbeadb;
+    color: var(--text-warm);
 }
 
 .hashtag-count {
@@ -28,12 +28,12 @@
     align-items: center;
     gap: 6px;
     font-size: 14px;
-    color: #bbb;
+    color: var(--text-muted);
     cursor: pointer;
 }
 
 .hashtags-toggle:hover {
-    color: #fff;
+    color: var(--text-strong);
 }
 
 @media (max-width: 1000px) {

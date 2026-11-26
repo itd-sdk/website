@@ -28,8 +28,9 @@ function render_clan(clan) {
     node.querySelector(".row-avatar").textContent = clan.clan + "\uFE0F";
     node.querySelector(".clan-name").textContent =
         clan_names.get(strip_skin_tone(normalize_emoji(clan.clan))) || "-";
-    node.querySelector(".clan-count").textContent =
-        new Intl.NumberFormat().format(clan.users_count);
+    node.querySelector(".clan-count").textContent = ebdi_settings.format_count(
+        clan.users_count,
+    );
     return node;
 }
 
@@ -99,9 +100,9 @@ async function load_clans() {
         clans = await res.json();
         render_clans();
         get_el("total-objects").hidden = false;
-        get_el("total-objects-value").textContent = new Intl.NumberFormat(
-            "ru-RU",
-        ).format(clans.length);
+        get_el("total-objects-value").textContent = ebdi_settings.format_count(
+            clans.length,
+        );
     } catch (error) {
         console.warn("clans request failed", error);
         show_error("Не удалось связаться с сервером");
@@ -139,6 +140,12 @@ function init_clan_picker() {
         }
     });
 }
+
+window.addEventListener("ebdi-settings", (event) => {
+    if (event.detail.key == "compact_numbers") {
+        render_clans();
+    }
+});
 
 document.addEventListener("DOMContentLoaded", async () => {
     clan_template = get_el("clan-template");
