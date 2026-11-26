@@ -10,11 +10,12 @@ Supported backups:
     *.db / *.sqlite(3)    SQLite database
 
 Backups are processed in chronological order (date from the file name like
-ebdi_2026-09-30.dump, otherwise the file modification time; override with
-path@YYYY-MM-DD). A snapshot is written only when a user's counters or
-existence changed compared to the previous backup, so the result is the same
-set of points that live tracking would have produced. Running the script
-again does not duplicate anything.
+ebdi_2026-09-30.dump, otherwise the newest updated_at in the backup, the file
+modification time only when it has none; override with path@YYYY-MM-DD).
+A snapshot is written only when a user's counters or existence changed
+compared to the previous backup, so the result is the same set of points that
+live tracking would have produced. Running the script again does not
+duplicate anything.
 
 A truncated dump (pg_restore fails with "end of file") is read up to where it
 breaks, its last, possibly cut row is dropped; broken rows are skipped and
@@ -49,7 +50,25 @@ def backup_date(path: Path, override: str | None) -> datetime:
     match = re.search(r"\d{4}-\d{2}-\d{2}", path.name)
     if match:
         return datetime.fromisoformat(match.group())
+    # an export made long after the data (Neon and the like) has the date of
+    # its last scrape inside, the file time would put it after newer backups
+    newest = newest_update(path)
+    if newest is not None:
+        return newest
     return datetime.fromtimestamp(path.stat().st_mtime)
+
+
+def newest_update(path: Path) -> datetime | None:
+    newest = None
+    for row in read_rows(path, Problems()):
+        try:
+            value = row.get("updated_at")
+            if value is not None:
+                moment = to_local(value, datetime.min)
+                newest = moment if newest is None else max(newest, moment)
+        except ValueError:
+            continue
+    return newest
 
 
 class Problems:
@@ -334,7 +353,9 @@ def main(args: list[str]) -> None:
     backups = []
     for arg in args:
         path, _, override = arg.partition("@")
-        backups.append((backup_date(Path(path), override or None), Path(path)))
+        date = backup_date(Path(path), override or None)
+        print(f"{Path(path).name}: dated {date:%Y-%m-%d %H:%M}")
+        backups.append((date, Path(path)))
     backups.sort()
 
     engine = create_engine(getenv("DATABASE_URL", ""))
