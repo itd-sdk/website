@@ -11,8 +11,8 @@
 ] %}
 
 {% block head %}
-<script src="/static/js/ebdi/settings.js"></script>
-<link rel="stylesheet" href="/static/css/ebdi/style.css">
+<script src="{{ static('js/ebdi/settings.js') }}"></script>
+<link rel="stylesheet" href="{{ static('css/ebdi/style.css') }}">
 {% block ebdi_head %}{% endblock %}
 {% endblock %}
 

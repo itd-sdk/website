@@ -294,6 +294,19 @@ emoji-picker {
     color: var(--text-strong);
 }
 
+/* an inline block keeps the underline of the share off the separator */
+#total-share::before {
+    content: "·";
+    display: inline-block;
+    margin: 0 6px;
+}
+
+#total-share {
+    cursor: help;
+    text-decoration: underline dotted #6a645e;
+    text-underline-offset: 3px;
+}
+
 #rows {
     display: flex;
     align-items: center;
@@ -428,6 +441,8 @@ emoji-picker {
 }
 
 .loader-spinner {
+    /* an empty box has no minimum size, a full flex column would flatten it */
+    flex-shrink: 0;
     width: 24px;
     height: 24px;
     border: 3px solid var(--border);
@@ -700,6 +715,9 @@ html[data-rounded]
         #sort-options,
         #clan-picker,
         #settings-panel,
+        .thread-sort-options,
+        .profile-initial-card,
+        .profile-change-banner,
         #graph-wrap,
         #graph-tooltip,
         #graph-search-results,
@@ -708,9 +726,14 @@ html[data-rounded]
     border-radius: var(--radius);
 }
 
-/* the scrolling area keeps the corners of its dialog */
-html[data-rounded] dialog {
+/* the scrolling area keeps the corners of its dialog, a banner of its card */
+html[data-rounded] :is(dialog, .profile-initial-card) {
     overflow: hidden;
+}
+
+/* the hover fill of a button follows its corners */
+html[data-rounded] button::after {
+    border-radius: inherit;
 }
 
 /* a tab stands on the line under it, only its top corners are rounded */

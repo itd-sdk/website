@@ -142,6 +142,31 @@ function show_error(offset, message) {
     get_el("rows").appendChild(error);
 }
 
+// share of итд, estimated by the server from its biggest clans and trending
+// hashtags: итд does not publish its totals
+async function load_share(kind) {
+    try {
+        const res = await fetch("/api/ebdi/coverage");
+        if (!res.ok) {
+            return;
+        }
+        const share = (await res.json())[kind];
+        if (!share) {
+            return;
+        }
+        const node = get_el("total-share");
+        node.textContent = `~${Math.round(share.share * 100)}% от ИТД`;
+        const where =
+            kind == "users"
+                ? `${share.sample} крупнейшим кланам: в ИТД ${format_number(share.official)} пользователей`
+                : `${share.sample} трендовым хэштегам: в ИТД ${format_number(share.official)} постов`;
+        node.title = `Оценка по ${where} / В ЕБДИ ${format_number(share.ours)}`;
+        node.hidden = false;
+    } catch (error) {
+        console.warn("coverage request failed", error);
+    }
+}
+
 async function fetch_count() {
     const res = await fetch("/api/ebdi/users/count");
 
@@ -854,12 +879,106 @@ const CHART_SCRIPTS = [
     "https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1",
 ];
 const HISTORY_SERIES = [
-    { field: "followers", label: "Подписчики", color: "#ed6a2d", hidden: false },
+    {
+        field: "followers",
+        label: "Подписчики",
+        color: "#ed6a2d",
+        hidden: false,
+    },
     { field: "following", label: "Подписки", color: "--text-warm", hidden: true },
     { field: "posts", label: "Посты", color: "#88B369", hidden: true },
 ];
 let chart_scripts = null;
 let history_chart = null;
+// backups were rare before, a longer gap between points has no data behind it
+const HISTORY_GAP = 14 * 24 * 3600 * 1000;
+const MONTH = 30 * 24 * 3600 * 1000;
+const DEFAULT_HISTORY_MONTHS = 3;
+
+const GAP_COLOR = "--text-faint";
+
+function is_gap(context) {
+    return context.p1.parsed.x - context.p0.parsed.x > HISTORY_GAP;
+}
+
+function signed_number(value) {
+    const sign = value > 0 ? "+" : value < 0 ? "−" : "±";
+    return sign + format_number(Math.abs(value));
+}
+
+// a gap has no points to hover, the change across it is written over its middle
+const gap_labels = {
+    id: "gap_labels",
+    afterDatasetsDraw(chart) {
+        const { ctx, chartArea } = chart;
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(
+            chartArea.left,
+            chartArea.top,
+            chartArea.width,
+            chartArea.height,
+        );
+        ctx.clip();
+        ctx.font = "12px Jost";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        chart.data.datasets.forEach((dataset, index) => {
+            if (!chart.isDatasetVisible(index)) {
+                return;
+            }
+            const elements = chart.getDatasetMeta(index).data;
+            for (let i = 1; i < dataset.data.length; i++) {
+                const [from, to] = [dataset.data[i - 1], dataset.data[i]];
+                if (to.x - from.x <= HISTORY_GAP) {
+                    continue;
+                }
+                const x = (elements[i - 1].x + elements[i].x) / 2;
+                const middle = (elements[i - 1].y + elements[i].y) / 2;
+                // above the line, below it when the top of the chart is too close
+                const y =
+                    middle - 12 < chartArea.top + 10
+                        ? middle + 12
+                        : middle - 12;
+                if (x < chartArea.left || x > chartArea.right) {
+                    continue;
+                }
+                const text = signed_number(to.y - from.y);
+                const width = ctx.measureText(text).width + 10;
+                ctx.fillStyle = chart_color("--bg");
+                ctx.fillRect(x - width / 2, y - 9, width, 18);
+                ctx.fillStyle = dataset.borderColor;
+                ctx.fillText(text, x, y);
+            }
+        });
+        ctx.restore();
+    },
+};
+
+// the time before the point back to the previous one, when there was no data
+function gap_before(points, index) {
+    if (index == 0) {
+        return null;
+    }
+    const previous = new Date(points[index - 1].t).getTime();
+    const current = new Date(points[index].t).getTime();
+    return current - previous > HISTORY_GAP ? points[index - 1].t : null;
+}
+
+function set_history_range(months) {
+    if (!history_chart) {
+        return;
+    }
+    const x = history_chart.options.scales.x;
+    x.min = months ? Date.now() - months * MONTH : undefined;
+    history_chart.update();
+    for (const tab of document.querySelectorAll(".history-range-tab")) {
+        tab.classList.toggle(
+            "history-range-active",
+            Number(tab.dataset.months) == months,
+        );
+    }
+}
 
 // a color or the name of a theme variable, the chart is drawn on a canvas
 function chart_color(color) {
@@ -885,7 +1004,7 @@ function load_chart_scripts() {
     return chart_scripts;
 }
 
-function render_dialog_history(history) {
+function render_dialog_history(history, user) {
     const notes = [];
     if (history.deleted_between) {
         const [after, before] = history.deleted_between;
@@ -895,7 +1014,19 @@ function render_dialog_history(history) {
                 : `Удален из ИТД до ${format_date(before)}`,
         );
     }
-    const points = history.points;
+    const points = [...history.points];
+    // an account starts empty: registration is the first point of every line
+    const registered = Date.parse(user.created_at);
+    if (registered && points.length && registered < Date.parse(points[0].t)) {
+        points.unshift({
+            t: user.created_at,
+            followers: 0,
+            following: 0,
+            posts: 0,
+            exists: true,
+            registration: true,
+        });
+    }
     if (points.length < 2) {
         notes.push("Изменений пока не было");
     }
@@ -905,12 +1036,15 @@ function render_dialog_history(history) {
 
     const chart_box = get_el("dialog-history-chart");
     chart_box.hidden = points.length < 2;
+    const range = get_el("dialog-history-range");
+    range.hidden = true;
     if (chart_box.hidden) {
         return;
     }
     Chart.defaults.font.family = "Jost";
     history_chart = new Chart(get_el("dialog-history-canvas"), {
         type: "line",
+        plugins: [gap_labels],
         data: {
             datasets: HISTORY_SERIES.map((series) => ({
                 label: series.label,
@@ -923,6 +1057,12 @@ function render_dialog_history(history) {
                 hidden: series.hidden,
                 borderWidth: 2,
                 pointRadius: 2,
+                segment: {
+                    borderDash: (context) =>
+                        is_gap(context) ? [5, 5] : undefined,
+                    borderColor: (context) =>
+                        is_gap(context) ? chart_color(GAP_COLOR) : undefined,
+                },
             })),
         },
         options: {
@@ -937,14 +1077,36 @@ function render_dialog_history(history) {
                         usePointStyle: true,
                         pointStyle: "dash",
                     },
+                    // the series toggle on click, the cursor says so
+                    onHover: (event) => {
+                        event.native.target.style.cursor = "pointer";
+                    },
+                    onLeave: (event) => {
+                        event.native.target.style.cursor = "";
+                    },
                 },
                 tooltip: {
-                    callbacks: { title: (items) => format_date(items[0].parsed.x) },
+                    callbacks: {
+                        title: (items) => {
+                            const date = format_date(items[0].parsed.x);
+                            return points[items[0].dataIndex].registration
+                                ? `Регистрация, ${date}`
+                                : date;
+                        },
+                        footer: (items) => {
+                            const since = gap_before(
+                                points,
+                                items[0].dataIndex,
+                            );
+                            return "";
+                        },
+                    },
                 },
             },
             scales: {
                 x: {
                     type: "time",
+                    max: Date.now(),
                     adapters: { date: { locale: "ru" } },
                     grid: { color: chart_color("--chart-grid") },
                     ticks: {
@@ -960,6 +1122,167 @@ function render_dialog_history(history) {
             },
         },
     });
+    // the dense recent data is shown first when the history reaches further back
+    const span = Date.now() - new Date(points[0].t).getTime();
+    if (span > DEFAULT_HISTORY_MONTHS * MONTH) {
+        range.hidden = false;
+        set_history_range(DEFAULT_HISTORY_MONTHS);
+    }
+}
+
+const PROFILE_CHANGED = {
+    username: "Изменён ник",
+    display_name: "Изменено имя",
+    bio: "Изменено био",
+    banner: "Изменён баннер",
+};
+const PROFILE_REMOVED = { bio: "Удалено био", banner: "Удалён баннер" };
+
+function banner_background(url) {
+    return typeof url == "string" && /^https?:\/\//.test(url)
+        ? `linear-gradient(to bottom, #1e1c1a00, #1e1c1a88), url("${encodeURI(url)}")`
+        : "";
+}
+
+function short_date(value) {
+    const date = new Date(value);
+    const pad = (number) => String(number).padStart(2, "0");
+    return `${pad(date.getDate())}.${pad(date.getMonth() + 1)}.${date.getFullYear()}`;
+}
+
+function clean_bio(bio) {
+    return bio?.replace(STYLE_STRIP_RE, "").trim() ?? "";
+}
+
+function render_profile_change({ field, old, new: value }) {
+    const line = create("div", "profile-change");
+    if (field == "bio" || field == "banner") {
+        const empty =
+            field == "bio" ? !clean_bio(value) : !banner_background(value);
+        if (empty) {
+            line.append(PROFILE_REMOVED[field]);
+            return line;
+        }
+        line.append(`${PROFILE_CHANGED[field]}:`);
+        if (field == "bio") {
+            line.append(create("div", "profile-change-bio", clean_bio(value)));
+        } else {
+            const image = create("img", "profile-change-banner");
+            image.src = value;
+            image.loading = "lazy";
+            image.alt = "Баннер";
+            line.append(image);
+        }
+        return line;
+    }
+    const shown = (text) => (field == "username" ? "@" + text : text);
+    line.append(`${PROFILE_CHANGED[field]}: `);
+    if (old) {
+        line.append(create("span", "profile-change-old", shown(old)), " -> ");
+    }
+    line.append(create("b", null, shown(value ?? "")));
+    return line;
+}
+
+// the same layout as the head of the user dialog, from the first record
+function render_profile_initial(initial) {
+    const box = create("div", "profile-initial-card");
+    const banner = create("div", "profile-initial-banner");
+    banner.style.backgroundImage = banner_background(initial.banner);
+    const identity = create("div", "profile-initial-identity");
+    identity.append(
+        create(
+            "div",
+            "profile-initial-avatar",
+            (initial.avatar ?? "?") + "\uFE0F",
+        ),
+    );
+    const names = create("div", "profile-initial-names");
+    names.append(
+        create(
+            "div",
+            "profile-initial-display-name",
+            initial.display_name ?? "",
+        ),
+        create(
+            "div",
+            "profile-initial-username",
+            "@" + (initial.username ?? ""),
+        ),
+    );
+    identity.append(names);
+    box.append(banner, identity);
+    if (clean_bio(initial.bio)) {
+        box.append(
+            create("div", "profile-initial-bio", clean_bio(initial.bio)),
+        );
+    }
+    const counters = create("div", "profile-initial-counters");
+    for (const [field, label] of [
+        ["followers", "Подписчики"],
+        ["following", "Подписки"],
+        ["posts", "Посты"],
+    ]) {
+        if (initial[field] == null) {
+            continue;
+        }
+        const item = create("div", "profile-initial-counter");
+        item.append(
+            create("b", null, format_number(initial[field])),
+            create("span", null, label),
+        );
+        counters.append(item);
+    }
+    if (counters.children.length) {
+        box.append(counters);
+    }
+    return box;
+}
+
+async function open_profile_dialog() {
+    const user = dialog_user;
+    if (!user) {
+        return;
+    }
+    const dialog = get_el("profile-dialog");
+    const timeline = get_el("profile-timeline");
+    const initial = get_el("profile-initial");
+    timeline.replaceChildren();
+    initial.replaceChildren();
+    get_el("profile-initial-date").textContent = "";
+    get_el("profile-dialog-empty").hidden = true;
+    get_el("profile-dialog-loader").hidden = false;
+    dialog.showModal();
+    get_el("profile-dialog-scroll").scrollTop = 0;
+    try {
+        const res = await fetch(`/api/ebdi/users/${user.id}/profile-history`);
+        if (!res.ok) {
+            throw new Error(`status ${res.status}`);
+        }
+        const json = await res.json();
+        if (dialog_user != user) {
+            return;
+        }
+        for (const event of json.events) {
+            const item = create("div", "profile-event");
+            item.append(
+                create("div", "profile-event-circle"),
+                create("div", "profile-event-date", `[${short_date(event.t)}]`),
+                ...event.changes.map(render_profile_change),
+            );
+            timeline.append(item);
+        }
+        get_el("profile-dialog-empty").hidden = json.events.length > 0;
+        get_el("profile-initial-date").textContent =
+            `[${short_date(json.initial.t)}]`;
+        initial.append(render_profile_initial(json.initial));
+    } catch (error) {
+        console.warn("profile history request failed", error);
+        alert("Не удалось загрузить историю профиля");
+        dialog.close();
+    } finally {
+        get_el("profile-dialog-loader").hidden = true;
+    }
 }
 
 async function load_dialog_history(user, token) {
@@ -979,7 +1302,7 @@ async function load_dialog_history(user, token) {
         if (token != dialog_token) {
             return;
         }
-        render_dialog_history(json);
+        render_dialog_history(json, user);
     } catch (error) {
         console.warn("history request failed", error);
         if (token == dialog_token) {
@@ -1149,6 +1472,24 @@ function init_user_dialog() {
     get_el("dialog-close").addEventListener("click", close_user_dialog);
     get_el("dialog-refresh").addEventListener("click", refresh_dialog_user);
     // get_el("dialog-download").addEventListener("click", download_dialog_card);
+    get_el("dialog-profile-history").addEventListener(
+        "click",
+        open_profile_dialog,
+    );
+    const profile_dialog = get_el("profile-dialog");
+    get_el("profile-dialog-close").addEventListener("click", () =>
+        profile_dialog.close(),
+    );
+    profile_dialog.addEventListener("click", (event) => {
+        if (event.target == profile_dialog) {
+            profile_dialog.close();
+        }
+    });
+    for (const tab of document.querySelectorAll(".history-range-tab")) {
+        tab.addEventListener("click", () =>
+            set_history_range(Number(tab.dataset.months)),
+        );
+    }
     dialog.addEventListener("click", (event) => {
         if (event.target == dialog) {
             close_user_dialog();
@@ -1274,4 +1615,5 @@ document.addEventListener("DOMContentLoaded", async () => {
     observe_controls_stick();
     await load_batch(0);
     await fetch_count();
+    load_share("users");
 });
