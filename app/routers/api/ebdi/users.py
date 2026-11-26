@@ -15,9 +15,9 @@ from sqlalchemy import and_, func, or_, text
 from app.routers.api.ebdi.dates import LocalDatetime
 from app.routers.api.ebdi.protocol import NewUserBody
 from app.routers.api.ebdi.storage import set_user_exists
-from app.schemas import User, UserSnapshot
+from app.schemas import User, UserProfileSnapshot, UserSnapshot
 from app.services.db import Session, get_db, new_session
-from app.services.history import record_changes, user_state
+from app.services.history import PROFILE_FIELDS, record_changes, user_state
 from app.services.limiter import get_limiter
 
 router = APIRouter(prefix="/users")
@@ -265,9 +265,7 @@ class HistoryResponse(BaseModel):
 
 @router.get("/{id}/history", response_model=HistoryResponse)
 @get_limiter().limit("20/minute")
-def api_get_ebdi_user_history(
-    request: Request, id: int, db: Session = Depends(get_db)
-):
+def api_get_ebdi_user_history(request: Request, id: int, db: Session = Depends(get_db)):
     user = db.query(User).where(User.id == id).first()
     if not user:
         return JSONResponse({"detail": "user not found"}, 404)
@@ -312,6 +310,96 @@ def api_get_ebdi_user_history(
         )
         deleted_between = (last_alive, first_gone)
     return HistoryResponse(points=points, deleted_between=deleted_between)
+
+
+class ProfileChange(BaseModel):
+    field: str  # username, display_name, bio or banner
+    old: str | None
+    new: str | None
+
+
+class ProfileEvent(BaseModel):
+    t: LocalDatetime
+    changes: list[ProfileChange]
+
+
+class ProfileState(BaseModel):
+    t: LocalDatetime
+    username: str | None = None
+    display_name: str | None = None
+    avatar: str | None = None  # the clan never changes, it is the current one
+    bio: str | None = None
+    banner: str | None = None
+    # from the earliest counter snapshot
+    followers: int | None = None
+    following: int | None = None
+    posts: int | None = None
+
+
+class ProfileHistoryResponse(BaseModel):
+    events: list[ProfileEvent]  # newest first
+    initial: ProfileState  # the earliest known value of every field
+
+
+def same_value(old: str | None, new: str | None) -> bool:
+    return (old or "") == (new or "")
+
+
+@router.get("/{id}/profile-history", response_model=ProfileHistoryResponse)
+@get_limiter().limit("20/minute")
+def api_get_ebdi_user_profile_history(
+    request: Request, id: int, db: Session = Depends(get_db)
+):
+    user = db.query(User).where(User.id == id).first()
+    if not user:
+        return JSONResponse({"detail": "user not found"}, 404)
+
+    first_counters = (
+        db.query(UserSnapshot)
+        .where(UserSnapshot.user_id == user.user_id)
+        .order_by(UserSnapshot.recorded_at)
+        .first()
+    )
+    counters = {
+        "followers": (first_counters or user).followers_count,
+        "following": (first_counters or user).following_count,
+        "posts": (first_counters or user).posts_count
+    }
+    snapshots = (
+        db.query(UserProfileSnapshot)
+        .where(UserProfileSnapshot.user_id == user.user_id)
+        .order_by(UserProfileSnapshot.recorded_at)
+        .all()
+    )
+    if not snapshots:
+        current = {field: getattr(user, field) for field in PROFILE_FIELDS}
+        initial = ProfileState(
+            t=user.updated_at, avatar=user.avatar, **current, **counters
+        )
+        return ProfileHistoryResponse(events=[], initial=initial)
+
+    known: dict[str, str | None] = {}
+    first: dict[str, str | None] = {}
+    events = []
+    for snapshot in snapshots:
+        changes = []
+        # a backup without a field says nothing about it, the field keeps its value
+        for field in PROFILE_FIELDS:
+            if field not in snapshot.data:
+                continue
+            value = snapshot.data[field]
+            if field not in known:
+                first[field] = value
+            elif not same_value(known[field], value):
+                changes.append(ProfileChange(field=field, old=known[field], new=value))
+            known[field] = value
+        if changes:
+            events.append(ProfileEvent(t=snapshot.recorded_at, changes=changes))
+    events.reverse()
+    initial = ProfileState(
+        t=snapshots[0].recorded_at, avatar=user.avatar, **first, **counters
+    )
+    return ProfileHistoryResponse(events=events, initial=initial)
 
 
 @router.get("/search")

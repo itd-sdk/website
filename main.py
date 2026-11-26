@@ -7,7 +7,6 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 from itd import (
     HalfRateLimiter,
     ITDConfig,
@@ -26,6 +25,7 @@ from app.routers import router
 from app.services.db import create_db
 from app.services.github_service import get_analogs, get_projects
 from app.services.limiter import set_limiter
+from app.services.templates import get_templates
 
 BASE_DIR = Path(__file__).resolve().parent / "app"
 
@@ -38,7 +38,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(docs_url=None, redoc_url=None, lifespan=lifespan)
-templates = Jinja2Templates(directory="app/templates/")
+templates = get_templates()
 limiter = Limiter(get_remote_address, default_limits=["2/second"])
 
 set_limiter(limiter)

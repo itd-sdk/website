@@ -2,8 +2,8 @@
 {% set active_tab = "users" %}
 
 {% block ebdi_head %}
-<link rel="stylesheet" href="/static/css/ebdi/users.css">
-<script src="/static/js/ebdi/users.js"></script>
+<link rel="stylesheet" href="{{ static('css/ebdi/users.css') }}">
+<script src="{{ static('js/ebdi/users.js') }}"></script>
 <script type="module" src="https://cdn.jsdelivr.net/npm/emoji-picker-element@1/index.js"></script>
 <meta name="description" content="Единая База Данных ИТД: Ранкинг, топ пользователей, поиск, сортировка">
 <meta name="keywords" content="itd, itd-sdk, итд, итд ранкинг, ебди, итд пользователи, новки, илья новки, nowkie">
@@ -13,7 +13,7 @@
 
     <h2>Пользователи ИТД</h2>
 
-    <div id="total-objects" hidden>Всего в базе данных <span id="total-objects-value">0</span> пользователей</div>
+    <div id="total-objects" hidden>Всего в базе данных <span id="total-objects-value">0</span> пользователей<span id="total-share" hidden></span></div>
 
     <div id="controls-box">
         <div id="controls">
@@ -108,12 +108,31 @@
 
 {% block ebdi_after %}
 
+<dialog id="profile-dialog">
+    <div class="profile-dialog-header">
+        <div class="profile-dialog-title">История профиля</div>
+        <button class="dialog-action" id="profile-dialog-close" title="Закрыть" aria-label="Закрыть">
+            <img src="/static/icons/close.svg">
+        </button>
+    </div>
+    <div id="profile-dialog-scroll" tabindex="-1" autofocus>
+        <div id="profile-dialog-loader" class="loader-spinner"></div>
+        <div id="profile-timeline"></div>
+        <div id="profile-dialog-empty" hidden>Изменения не зафиксированы</div>
+        <div class="dialog-section-title">Первая запись <span id="profile-initial-date"></span></div>
+        <div id="profile-initial"></div>
+    </div>
+</dialog>
+
 <dialog id="user-dialog">
     <div id="dialog-status" hidden>Обновление...</div>
     <div id="dialog-actions">
         <!--<button class="dialog-action" id="dialog-download" title="Скачать карточку" aria-label="Скачать карточку">
             <img src="/static/icons/download.svg">
         </button>-->
+        <button class="dialog-action" id="dialog-profile-history" title="История профиля" aria-label="История профиля">
+            <img src="/static/icons/history.svg">
+        </button>
         <button class="dialog-action" id="dialog-refresh" title="Обновить данные" aria-label="Обновить данные">
             <img src="/static/icons/refresh.svg">
         </button>
@@ -141,7 +160,14 @@
         </div>
         <div id="dialog-ranks"></div>
 
-        <div class="dialog-section-title">История</div>
+        <div class="dialog-section-title" id="dialog-history-title">
+            <span>История</span>
+            <div id="dialog-history-range" hidden>
+                <button type="button" class="history-range-tab" data-months="3">3 мес</button>
+                <button type="button" class="history-range-tab" data-months="6">6 мес</button>
+                <button type="button" class="history-range-tab" data-months="0">Все</button>
+            </div>
+        </div>
         <div id="dialog-history">
             <div id="dialog-history-chart"><canvas id="dialog-history-canvas"></canvas></div>
             <div id="dialog-history-note" hidden></div>

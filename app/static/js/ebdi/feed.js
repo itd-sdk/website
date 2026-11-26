@@ -374,8 +374,9 @@ function comment_url(comment) {
     return `${post}?comment=${comment.comment_id}`;
 }
 
-// avatar, name, @username, the date and a button opening the item in итд
-function render_header(author, author_id, date, url) {
+// avatar, name, @username, the date and a button opening the item in итд,
+// without url the button is left out (a dialog has it in its own header)
+function render_header(author, author_id, date, url = null) {
     const header = create("div", "post-header");
     const avatar = create(
         "div",
@@ -405,22 +406,24 @@ function render_header(author, author_id, date, url) {
     header.append(names);
 
     header.append(create("span", "post-date", format_date(date)));
-    const open = create("a", "post-open");
-    open.href = url;
-    open.target = "_blank";
-    open.title = "Открыть в ИТД";
-    open.setAttribute("aria-label", "Открыть в ИТД");
-    open.append(icon_image("open-in-new"));
-    header.append(open);
+    if (url) {
+        const open = create("a", "post-open");
+        open.href = url;
+        open.target = "_blank";
+        open.title = "Открыть в ИТД";
+        open.setAttribute("aria-label", "Открыть в ИТД");
+        open.append(icon_image("open-in-new"));
+        header.append(open);
+    }
     return header;
 }
 
-function render_author(post) {
+function render_author(post, with_open = true) {
     return render_header(
         post.author,
         post.author_id,
         post.created_at || post.found_at,
-        post_url(post.post_id, post.author, post.author_id),
+        with_open ? post_url(post.post_id, post.author, post.author_id) : null,
     );
 }
 
@@ -883,7 +886,8 @@ function render_post(post, nested = false, in_dialog = false) {
     // if (post.author && !post.author.exists) {
     //     card.classList.add("post-deleted-author");
     // }
-    card.append(render_author(post));
+    // the dialog has the open button in its own header
+    card.append(render_author(post, !(in_dialog && !nested)));
 
     const badges = render_badges(post);
     if (badges.children.length) {
@@ -1113,7 +1117,7 @@ function render_comment(comment, in_thread = false, in_dialog = false) {
             comment.author,
             comment.author_id,
             comment.created_at || comment.found_at,
-            comment_url(comment),
+            in_dialog ? null : comment_url(comment),
         ),
     );
 
@@ -1171,6 +1175,13 @@ function build_dialog() {
     close.setAttribute("aria-label", "Закрыть");
     close.append(icon_image("close"));
     close.addEventListener("click", close_dialog);
+    const open = create("button", "dialog-action");
+    open.id = "post-dialog-open";
+    open.target = "_blank";
+    open.rel = "noopener noreferrer";
+    open.title = "Открыть в ИТД";
+    open.setAttribute("aria-label", "Открыть в ИТД");
+    open.append(icon_image("open-in-new"));
     const refresh = create("button", "dialog-action");
     refresh.type = "button";
     refresh.id = "post-dialog-refresh";
@@ -1181,7 +1192,7 @@ function build_dialog() {
     status.id = "post-dialog-status";
     status.hidden = true;
     const header = create("div", "post-dialog-header");
-    header.append(refresh, close);
+    header.append(open, refresh, close);
     const scroll = create("div");
     scroll.id = "post-dialog-scroll";
     // the modal focuses the scroll area like the user dialog, not the first button
@@ -1204,7 +1215,7 @@ function build_dialog() {
 }
 
 // empties the dialog, drops loaders of the previous content and shows it
-function open_dialog(on_refresh = null) {
+function open_dialog(on_refresh = null, url = null) {
     const dialog = get_el("post-dialog") || build_dialog();
     const token = ++dialog_token;
     for (const observer of dialog_observers) {
@@ -1218,6 +1229,13 @@ function open_dialog(on_refresh = null) {
     refresh.hidden = !on_refresh;
     refresh.disabled = false;
     refresh.onclick = on_refresh;
+    const open = get_el("post-dialog-open");
+    open.hidden = !url;
+    if (url) {
+        open.href = url;
+    } else {
+        open.removeAttribute("href");
+    }
     get_el("post-dialog-status").hidden = true;
     if (!dialog.open) {
         lock_scroll();
@@ -1227,7 +1245,7 @@ function open_dialog(on_refresh = null) {
 }
 
 function open_comment_dialog(comment) {
-    const { scroll } = open_dialog();
+    const { scroll } = open_dialog(null, comment_url(comment));
     scroll.append(render_comment(comment, false, true));
     scroll.append(
         create(
@@ -1313,35 +1331,85 @@ const THREAD_SORTS = {
 };
 let thread_sort = "new";
 
+// a compact dropdown in the look of the feed sort
 function render_thread_sort(on_change) {
     const box = create("div", "thread-sort");
+    const button = create("button", "thread-sort-button");
+    button.type = "button";
+    button.setAttribute("aria-haspopup", "listbox");
+    button.setAttribute("aria-expanded", "false");
+    button.append(create("span", null, THREAD_SORTS[thread_sort]));
+    button.append(icon_image("arrow"));
+    const list = create("div", "thread-sort-options");
+    list.setAttribute("role", "listbox");
+    list.hidden = true;
+    const toggle = (open) => {
+        list.hidden = !open;
+        button.setAttribute("aria-expanded", open);
+        if (open) {
+            list.querySelector("[aria-selected=true]")?.focus();
+        }
+    };
     for (const [value, label] of Object.entries(THREAD_SORTS)) {
-        const tab = create("button", "thread-sort-tab", label);
-        tab.type = "button";
-        tab.classList.toggle("thread-sort-active", value == thread_sort);
-        tab.addEventListener("click", () => {
+        const option = create("div", null, label);
+        option.setAttribute("role", "option");
+        option.setAttribute("aria-selected", value == thread_sort);
+        option.tabIndex = -1;
+        option.addEventListener("click", () => {
+            toggle(false);
             if (value != thread_sort) {
                 thread_sort = value;
                 on_change();
             }
         });
-        box.append(tab);
+        list.append(option);
     }
+    button.addEventListener("click", () => toggle(list.hidden));
+    list.addEventListener("keydown", (event) => {
+        const options = [...list.children];
+        const index = options.indexOf(document.activeElement);
+        if (event.key == "ArrowDown" || event.key == "ArrowUp") {
+            event.preventDefault();
+            const step = event.key == "ArrowDown" ? 1 : -1;
+            options[(index + step + options.length) % options.length].focus();
+        } else if (event.key == "Enter" || event.key == " ") {
+            event.preventDefault();
+            document.activeElement.click();
+        } else if (event.key == "Escape") {
+            // the dialog itself would close on Escape
+            event.preventDefault();
+            event.stopPropagation();
+            toggle(false);
+            button.focus();
+        }
+    });
+    // closes when the focus leaves it, a click elsewhere in the dialog included
+    box.addEventListener("focusout", (event) => {
+        if (!box.contains(event.relatedTarget)) {
+            toggle(false);
+        }
+    });
+    box.append(button, list);
     return box;
 }
 
 function open_post_dialog(post, { card = null, focus = null } = {}) {
-    const { scroll, token } = open_dialog(() => refresh_post(post, card));
+    const { scroll, token } = open_dialog(
+        () => refresh_post(post, card),
+        post_url(post.post_id, post.author, post.author_id),
+    );
     scroll.append(render_post(post, false, true));
-    scroll.append(
+    const head = create("div", "post-dialog-comments-head");
+    head.append(
         create(
             "div",
             "dialog-section-title",
             `Комментарии (${format_number(post.comments_count)})`,
         ),
+        // another order starts the thread over from its top
+        render_thread_sort(() => open_post_dialog(post, { card })),
     );
-    // another order starts the thread over from its top
-    scroll.append(render_thread_sort(() => open_post_dialog(post, { card })));
+    scroll.append(head);
     const top_sentinel = create("div", "sentinel");
     const list = create("div", "post-dialog-comments");
     const empty = create("div", "post-dialog-empty", "Комментариев в базе нет");
@@ -1596,6 +1664,31 @@ function reload() {
 function apply() {
     write_url_state();
     reload();
+}
+
+// share of итд, estimated by the server from its biggest clans and trending
+// hashtags: итд does not publish its totals
+async function load_share(kind) {
+    try {
+        const res = await fetch("/api/ebdi/coverage");
+        if (!res.ok) {
+            return;
+        }
+        const share = (await res.json())[kind];
+        if (!share) {
+            return;
+        }
+        const node = get_el("total-share");
+        node.textContent = `≈${Math.round(share.share * 100)}% от ИТД`;
+        const where =
+            kind == "users"
+                ? `${share.sample} крупнейшим кланам ИТД: в них ${format_number(share.official)} пользователей`
+                : `${share.sample} трендовым хэштегам ИТД: с ними ${format_number(share.official)} постов`;
+        node.title = `Оценка по ${where}, у нас ${format_number(share.ours)}`;
+        node.hidden = false;
+    } catch (error) {
+        console.warn("coverage request failed", error);
+    }
 }
 
 async function load_count() {
@@ -1855,6 +1948,9 @@ document.addEventListener("DOMContentLoaded", () => {
     ).observe(get_el("sentinel-bottom"));
 
     load_count();
+    if (KIND == "posts") {
+        load_share("posts");
+    }
     load_page();
     observe_controls_stick();
 });
